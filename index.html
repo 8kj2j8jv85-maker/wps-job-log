@@ -142,14 +142,23 @@
 <body>
 <div id="app"></div>
 
+<script src="https://accounts.google.com/gsi/client"></script>
 <script>
 /* =========================================================================
    Wellington Property Services — Job Log (standalone offline copy)
-   No server, no account, no internet connection required to use it.
+   No server, no account required. Jobs are stored only in this browser.
+   Optional: connect Google Calendar to push each job as an event.
    ========================================================================= */
 
 const LS_JOBS = "wps_standalone_jobs_v1";
 const LS_CLIENTS = "wps_standalone_clients_v1";
+const LS_GCAL_PREF = "wps_standalone_gcal_connected_v1";
+
+// --- Google Calendar sync config ---
+const GOOGLE_CLIENT_ID = "765734122916-80dtp83u92p7nsddd3o14hjf782ov4v1.apps.googleusercontent.com";
+const GCAL_CALENDAR_ID = "info@wellingtonparker.com";
+const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+let gcalTokenClient = null;
 
 const TYPES = [
   { code:"ICI", label:"Inventory & Check-In" },
@@ -188,6 +197,9 @@ let state = {
   view: "table",             // "table" or "calendar"
   calYear: TODAY.getFullYear(),
   calMonth: TODAY.getMonth()+1,   // 1-12
+  gcalConnected: false,
+  gcalToken: null,
+  gcalTokenExpiry: 0,
 };
 
 // ---------------------------------------------------------------- storage
@@ -205,6 +217,7 @@ function load(){
     const c = localStorage.getItem(LS_CLIENTS);
     if (c){ const norm = normalizeClients(JSON.parse(c)); if (norm) state.clients = norm; }
   } catch(e){}
+  try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
 }
 function saveJobs(){ localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); }
 function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); }
@@ -430,14 +443,17 @@ function submitForm(){
     notes: g("f_notes").value,
   };
   const idx = state.jobs.findIndex(x=>x.id===job.id);
-  if (idx>=0) state.jobs[idx] = job; else state.jobs.push(job);
+  if (idx>=0){ job.gcalEventId = state.jobs[idx].gcalEventId; state.jobs[idx] = job; } else state.jobs.push(job);
   saveJobs();
   state.editing = null;
   render();
+  syncJobToCalendar(job);
 }
 
 function deleteJob(id){
   if (!confirm("Delete this job? This can't be undone.")) return;
+  const job = state.jobs.find(j=>j.id===id);
+  deleteJobCalendarEvent(job);
   state.jobs = state.jobs.filter(j=>j.id!==id);
   saveJobs();
   render();
@@ -487,6 +503,107 @@ function importData(file){
   reader.readAsText(file);
 }
 
+// ---------------------------------------------------------------- Google Calendar sync
+function initGCal(){
+  if (!window.google || !google.accounts || !google.accounts.oauth2) return;
+  gcalTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GCAL_SCOPE,
+    callback: function(){}
+  });
+}
+function connectGCal(){
+  if (!gcalTokenClient){ alert("Google sign-in hasn't loaded yet — check your connection and try again."); return; }
+  gcalTokenClient.callback = function(resp){
+    if (resp.error){ alert("Couldn't connect to Google Calendar."); return; }
+    state.gcalToken = resp.access_token;
+    state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
+    state.gcalConnected = true;
+    try{ localStorage.setItem(LS_GCAL_PREF, "1"); }catch(e){}
+    render();
+  };
+  gcalTokenClient.requestAccessToken({ prompt: "consent" });
+}
+function disconnectGCal(){
+  state.gcalConnected = false;
+  state.gcalToken = null;
+  state.gcalTokenExpiry = 0;
+  try{ localStorage.removeItem(LS_GCAL_PREF); }catch(e){}
+  render();
+}
+function ensureGCalToken(onReady){
+  if (state.gcalToken && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
+  if (!gcalTokenClient){ alert("Google sign-in hasn't loaded yet — check your connection and try again."); return; }
+  gcalTokenClient.callback = function(resp){
+    if (resp.error){ alert('Google Calendar needs reconnecting — click "Connect Google Calendar" again.'); return; }
+    state.gcalToken = resp.access_token;
+    state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
+    onReady();
+  };
+  gcalTokenClient.requestAccessToken({ prompt: "" });
+}
+function gcalEventSummary(j){
+  const tm = typeMeta(j.type);
+  return [j.jobNo, tm.code, fullAddress(j)].filter(Boolean).join(" - ");
+}
+function gcalEventBody(j){
+  const tz = "Europe/London";
+  let start, end;
+  if (j.date && j.time){
+    start = { dateTime: j.date+"T"+j.time+":00", timeZone: tz };
+    const parts = j.time.split(":").map(Number);
+    let eh = parts[0]+1, em = parts[1];
+    if (eh>23){ eh=23; em=59; }
+    end = { dateTime: j.date+"T"+pad2(eh)+":"+pad2(em)+":00", timeZone: tz };
+  } else if (j.date){
+    start = { date: j.date };
+    end = { date: j.date };
+  } else {
+    return null;
+  }
+  const descParts = [];
+  if (j.client) descParts.push("Agent: "+j.client);
+  if (j.tenants) descParts.push("Tenant/contact: "+j.tenants);
+  if (j.notes) descParts.push("Notes: "+j.notes);
+  return { summary: gcalEventSummary(j), location: fullAddress(j), description: descParts.join("\n"), start, end };
+}
+function syncJobToCalendar(job){
+  if (!state.gcalConnected || !job) return;
+  const body = gcalEventBody(job);
+  if (!body){ alert("Add a date before syncing this job to the calendar."); return; }
+  ensureGCalToken(function(){
+    const base = "https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(GCAL_CALENDAR_ID)+"/events";
+    const isUpdate = !!job.gcalEventId;
+    const url = isUpdate ? base+"/"+job.gcalEventId : base;
+    fetch(url, {
+      method: isUpdate ? "PATCH" : "POST",
+      headers: { "Authorization": "Bearer "+state.gcalToken, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function(r){
+      if (!r.ok){ throw new Error("Calendar API error "+r.status); }
+      return r.json();
+    }).then(function(data){
+      if (data.id && job.gcalEventId !== data.id){
+        job.gcalEventId = data.id;
+        saveJobs();
+        render();
+      }
+    }).catch(function(err){
+      console.error("Calendar sync failed", err);
+      alert("Couldn't sync this job to Google Calendar. Try again in a moment.");
+    });
+  });
+}
+function deleteJobCalendarEvent(job){
+  if (!state.gcalConnected || !job || !job.gcalEventId) return;
+  ensureGCalToken(function(){
+    fetch("https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(GCAL_CALENDAR_ID)+"/events/"+job.gcalEventId, {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer "+state.gcalToken }
+    }).catch(function(err){ console.error("Calendar delete failed", err); });
+  });
+}
+
 // ---------------------------------------------------------------- rendering
 function render(){
   const app = document.getElementById("app");
@@ -534,6 +651,10 @@ function renderUtilityRow(){
       Import backup
       <input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])" />
     </label>
+    <button class="btn-link" onclick="${state.gcalConnected ? 'disconnectGCal()' : 'connectGCal()'}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      ${state.gcalConnected ? "Calendar connected ✓" : "Connect Google Calendar"}
+    </button>
   </div>`;
 }
 
@@ -801,6 +922,9 @@ function renderTable(){
                 <button class="icon-btn" title="Delete" onclick="deleteJob('${j.id}')">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
+                ${state.gcalConnected ? `<button class="icon-btn" title="${j.gcalEventId ? 'Update calendar event' : 'Add to calendar'}" onclick="syncJobToCalendar(state.jobs.find(x=>x.id==='${j.id}'))">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${j.gcalEventId ? 'var(--peri)' : 'currentColor'}" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </button>` : ""}
               </div>
             </td>
           </tr>`;
@@ -813,6 +937,7 @@ function renderTable(){
 // ---------------------------------------------------------------- init
 load();
 render();
+initGCal();
 </script>
 </body>
 </html>
