@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wellington Property Services — Job Log</title>
+<style>
+  :root{
+    color-scheme: light only;
+    --paper:#F4F7FB; --paper-deep:#E7EEF6;
+    --ink:#1F2D3A; --ink-soft:#5C6B7D;
+    --brand:#1F2D3A; --brand-dark:#141E27;
+    --peri:#4A5B8A; --peri-bg:#E7EAF3;
+    --coral:#E0684B; --coral-dark:#C34F34; --coral-bg:#FBE7E1;
+    --sky:#C9D6E8;
+    --line:#D7DEE8; --line-soft:#E7ECF3;
+    --stone:#7A8493; --stone-bg:#E9ECF0;
+    --white:#FFFFFF;
+  }
+  html{ color-scheme: light only; background:#F4F7FB; background:var(--paper); width:100%; min-height:100%; }
+  * { box-sizing: border-box; }
+  html, body{ height:100%; }
+  body{
+    margin:0; min-height:100vh; width:100%;
+    background:#F4F7FB; background:var(--paper);
+    color:var(--ink);
+    font-family: 'IBM Plex Sans','Segoe UI',Arial,sans-serif;
+    color-scheme: light only;
+  }
+  #app{ background:#F4F7FB; background:var(--paper); min-height:100vh; }
+  .wrap{ max-width:1040px; margin:0 auto; padding:0 22px 60px; background:#F4F7FB; background:var(--paper); }
+  .serif{ font-family:'Zilla Slab', Georgia, serif; }
+  .mono{ font-family:'IBM Plex Mono','Consolas',monospace; }
+  a{ color:inherit; }
+
+  /* header */
+  .header-band{ background:var(--brand); padding:20px 0; }
+  .header-inner{
+    max-width:1040px; margin:0 auto; padding:0 22px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;
+  }
+  .brand-row{ display:flex; align-items:center; gap:14px; }
+  .logo-badge{
+    width:46px; height:46px; border-radius:11px; background:var(--white);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .brand-name{ display:flex; align-items:baseline; gap:9px; }
+  .brand-name .name{ font-size:22px; font-weight:600; color:var(--white); letter-spacing:-0.01em; }
+  .brand-name .sub{ font-size:10.5px; font-weight:600; color:var(--sky); letter-spacing:0.14em; }
+  .tool-tag{ font-size:12px; font-weight:500; color:var(--sky); margin-top:2px; opacity:.85; }
+
+  .utility-row{ display:flex; justify-content:flex-end; gap:20px; padding:14px 0 4px; }
+  .btn-link{ display:inline-flex; align-items:center; gap:6px; background:none; border:none; color:var(--ink-soft); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; padding:4px 2px; }
+  .btn-link:hover{ color:var(--brand); }
+
+  .btn{ display:inline-flex; align-items:center; gap:7px; border:none; border-radius:7px; padding:10px 16px; font-weight:600; font-size:14px; cursor:pointer; font-family:inherit; }
+  .btn-coral{ background:var(--coral); color:var(--white); }
+  .btn-coral:hover{ background:var(--coral-dark); }
+  .btn-ghost{ background:none; border:1px solid var(--line); color:var(--ink-soft); }
+  .btn-ghost:hover{ background:var(--line-soft); }
+  .btn-text{ background:none; border:none; color:var(--peri); cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600; padding:0; }
+  .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:6px; }
+
+  /* status strip */
+  .status-strip{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:20px 0; }
+  .status-card{ text-align:left; border:1.5px solid var(--line); background:var(--white); border-radius:9px; padding:12px 14px; cursor:pointer; font-family:inherit; }
+  .status-card .num{ font-size:24px; font-weight:700; font-family:'Zilla Slab',serif; }
+  .status-card .lbl{ font-size:12.5px; font-weight:600; color:var(--ink-soft); }
+
+  /* toolbar */
+  .toolbar{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .search-wrap{ position:relative; flex:1 1 220px; }
+  .search-wrap svg{ position:absolute; left:10px; top:11px; }
+  input[type=text], input[type=date], input[type=time], input[type=email], input[type=tel], select, textarea{
+    font-family:inherit; font-size:14.5px; color:var(--ink) !important; background:var(--white) !important;
+    border:1px solid var(--line); border-radius:6px; padding:8px 10px; outline:none; width:100%;
+    color-scheme: light only;
+  }
+  select{ background:var(--white) !important; }
+  select option{ color:var(--ink); background:var(--white); }
+  ::placeholder{ color:#8B95A3; opacity:1; }
+  .search-wrap input{ padding-left:32px; }
+  .filter-select{ width:180px; }
+  textarea{ resize:vertical; min-height:70px; }
+
+  /* form card */
+  .form-card{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:20px; }
+  .form-card h3{ margin:0 0 14px; font-family:'Zilla Slab',serif; font-size:19px; color:var(--brand); }
+  .extract-box{ background:var(--peri-bg); border:1px dashed var(--peri); border-radius:9px; padding:14px; margin-bottom:18px; }
+  .extract-box textarea{ margin-bottom:8px; }
+  .extract-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .extract-hint{ font-size:12px; color:var(--ink-soft); }
+  .field-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:14px; }
+  .field{ display:flex; flex-direction:column; gap:5px; font-size:12.5px; font-weight:600; color:var(--ink-soft); }
+  .field.wide{ grid-column:1 / -1; }
+  .field-hint{ font-size:11px; font-weight:400; color:var(--ink-soft); margin-top:-2px; }
+  .add-client-row{ display:flex; flex-direction:column; gap:8px; }
+  .add-client-row .row2{ display:flex; gap:8px; }
+  .add-client-row .row3{ display:flex; gap:8px; justify-content:flex-end; }
+  .agent-contact-box{ background:var(--paper-deep); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .agent-contact-line{ font-size:13px; color:var(--ink); margin-bottom:6px; }
+  .agent-contact-edit-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px; }
+  .agent-contact-actions{ display:flex; gap:8px; }
+  .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:6px; border-top:1px solid var(--line-soft); padding-top:16px; }
+
+  /* table */
+  .tablewrap{ border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--white); overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; }
+  thead tr{ background:var(--paper-deep); }
+  th{ text-align:left; font-size:11.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; padding:10px 12px; white-space:nowrap; }
+  td{ padding:12px; border-top:1px solid var(--line-soft); font-size:13.5px; vertical-align:top; }
+  tr:hover td{ background:var(--paper); }
+  .pill{ display:inline-block; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; cursor:pointer; border:none; font-family:inherit; }
+  .type-badge{ display:inline-block; padding:3px 8px; border-radius:5px; font-size:11.5px; font-weight:600; background:var(--peri-bg); color:var(--peri); white-space:nowrap; }
+  .row-actions{ display:flex; gap:6px; }
+  .icon-btn{ background:none; border:none; cursor:pointer; padding:5px; border-radius:5px; color:var(--ink-soft); display:flex; }
+  .icon-btn:hover{ background:var(--line-soft); color:var(--ink); }
+  .empty{ text-align:center; padding:50px 20px; color:var(--ink-soft); border:1px dashed var(--line); border-radius:10px; margin-top:16px; }
+  .footer-line{ text-align:center; font-size:12px; color:var(--ink-soft); margin-top:16px; }
+
+  /* view toggle */
+  .view-toggle{ display:flex; gap:4px; background:var(--paper-deep); border-radius:8px; padding:3px; }
+  .view-toggle button{ border:none; background:none; padding:7px 14px; border-radius:6px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer; color:var(--ink-soft); }
+  .view-toggle button.active{ background:var(--white); color:var(--brand); box-shadow:0 1px 2px rgba(31,45,58,0.12); }
+
+  /* calendar */
+  .cal-wrap{ background:var(--white); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+  .cal-title{ font-family:'Zilla Slab',serif; font-size:18px; color:var(--brand); font-weight:600; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .cal-weekdays{ margin-bottom:6px; }
+  .cal-weekday{ text-align:center; font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em; padding:4px 0; }
+  .cal-cell{ min-height:96px; border:1px solid var(--line-soft); border-radius:7px; padding:6px; cursor:pointer; display:flex; flex-direction:column; gap:4px; background:var(--paper); }
+  .cal-cell:hover{ border-color:var(--peri); }
+  .cal-cell-empty{ background:none; border:none; cursor:default; }
+  .cal-cell-today{ border-color:var(--coral); border-width:2px; }
+  .cal-daynum{ font-size:12px; font-weight:700; color:var(--ink-soft); }
+  .cal-jobs{ display:flex; flex-direction:column; gap:3px; overflow-y:auto; max-height:120px; }
+  .cal-job-pill{ border:none; border-radius:5px; padding:3px 6px; font-size:11px; font-weight:600; text-align:left; cursor:pointer; font-family:inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* =========================================================================
+   Wellington Property Services — Job Log (standalone offline copy)
+   No server, no account, no internet connection required to use it.
+   ========================================================================= */
+
+const LS_JOBS = "wps_standalone_jobs_v1";
+const LS_CLIENTS = "wps_standalone_clients_v1";
+
+const TYPES = [
+  { code:"ICI", label:"Inventory & Check-In" },
+  { code:"CO",  label:"Check-Out" },
+  { code:"MTI", label:"Mid-Term Inspection" },
+  { code:"SOC", label:"Schedule of Condition" },
+  { code:"CLN", label:"Clean Check" },
+];
+
+const STATUSES = [
+  { code:"booked",      label:"Booked",      fg:"var(--coral-dark)", bg:"var(--coral-bg)" },
+  { code:"completed",   label:"Completed",   fg:"var(--peri)",       bg:"var(--peri-bg)" },
+  { code:"report_sent", label:"Report sent", fg:"var(--brand)",      bg:"var(--sky)" },
+  { code:"archived",    label:"Archived",    fg:"var(--stone)",      bg:"var(--stone-bg)" },
+];
+
+const DEFAULT_CLIENTS = [
+  { name:"Winkworth - Bow", contactName:"", contactPhone:"", contactEmail:"" },
+  { name:"McQueens",        contactName:"", contactPhone:"", contactEmail:"" },
+  { name:"Move Lettings",   contactName:"", contactPhone:"", contactEmail:"" },
+];
+const ADD_NEW = "__add_new__";
+
+const TODAY = new Date();
+let state = {
+  jobs: [],
+  clients: DEFAULT_CLIENTS.slice(),
+  editing: null,             // job being added/edited, or null
+  addingClient: false,
+  editingAgentContact: false,
+  search: "",
+  statusFilter: "all",
+  typeFilter: "all",
+  clientFilter: "all",
+  monthFilter: "all",
+  view: "table",             // "table" or "calendar"
+  calYear: TODAY.getFullYear(),
+  calMonth: TODAY.getMonth()+1,   // 1-12
+};
+
+// ---------------------------------------------------------------- storage
+function normalizeClients(arr){
+  if (!Array.isArray(arr)) return null;
+  const out = arr.map(x => typeof x === "string"
+    ? { name:x, contactName:"", contactPhone:"", contactEmail:"" }
+    : { name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" }
+  ).filter(c=>c.name);
+  return out.length ? out : null;
+}
+function load(){
+  try { const j = localStorage.getItem(LS_JOBS); if (j) state.jobs = JSON.parse(j); } catch(e){}
+  try {
+    const c = localStorage.getItem(LS_CLIENTS);
+    if (c){ const norm = normalizeClients(JSON.parse(c)); if (norm) state.clients = norm; }
+  } catch(e){}
+}
+function saveJobs(){ localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); }
+function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); }
+
+// ---------------------------------------------------------------- helpers
+function pad2(n){ return String(n).padStart(2,"0"); }
+function uid(){ return 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2,9); }
+
+function nextJobNumber(dateStr){
+  const d = dateStr ? new Date(dateStr) : new Date();
+  const yy = pad2(d.getFullYear() % 100);
+  const mm = pad2(d.getMonth()+1);
+  const prefix = 'WPS' + yy + mm;
+  const nums = state.jobs.map(j=>j.jobNo).filter(n=>n && n.startsWith(prefix))
+    .map(n=>parseInt(n.slice(prefix.length),10)).filter(n=>!isNaN(n));
+  const next = nums.length ? Math.max(...nums)+1 : 1;
+  return prefix + pad2(next);
+}
+function emptyJob(){
+  return { id:uid(), jobNo:"", type:"ICI", client:"", date:"", time:"", address:"", town:"", postcode:"",
+           bedrooms:"", extraAreas:"", propertyType:"",
+           tenants:"", notes:"", status:"booked" };
+}
+function clientByName(name){ return state.clients.find(c=>c.name===name); }
+function formatDate(s){
+  if (!s) return "—";
+  const d = new Date(s+"T00:00:00");
+  if (isNaN(d)) return s;
+  return d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+function monthKey(s){ return s ? s.slice(0,7) : "undated"; }
+function monthLabel(key){
+  if (key==="undated") return "Undated";
+  const [y,m] = key.split("-").map(Number);
+  return new Date(y,m-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+}
+function statusMeta(c){ return STATUSES.find(s=>s.code===c) || STATUSES[0]; }
+function typeMeta(c){ return TYPES.find(t=>t.code===c) || TYPES[TYPES.length-1]; }
+function esc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function fullAddress(j){ return [j.address, j.town, j.postcode].filter(Boolean).join(", "); }
+
+function monthOptions(){
+  const years = new Set([new Date().getFullYear()]);
+  state.jobs.forEach(j=>{ if (j.date) years.add(Number(j.date.slice(0,4))); });
+  const keys = [];
+  Array.from(years).sort((a,b)=>b-a).forEach(y=>{ for(let m=12;m>=1;m--) keys.push(y+"-"+pad2(m)); });
+  return keys;
+}
+
+function baseFilteredJobs(){
+  return state.jobs
+    .filter(j=> state.statusFilter==="all" || j.status===state.statusFilter)
+    .filter(j=> state.typeFilter==="all" || j.type===state.typeFilter)
+    .filter(j=> state.clientFilter==="all" || j.client===state.clientFilter)
+    .filter(j=>{
+      if (!state.search.trim()) return true;
+      const q = state.search.toLowerCase();
+      return (j.address||"").toLowerCase().includes(q) || (j.town||"").toLowerCase().includes(q) ||
+             (j.postcode||"").toLowerCase().includes(q) || (j.client||"").toLowerCase().includes(q) ||
+             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q);
+    });
+}
+function filteredJobs(){
+  return baseFilteredJobs()
+    .filter(j=> state.monthFilter==="all" || monthKey(j.date)===state.monthFilter)
+    .sort((a,b)=> (a.date<b.date?1:a.date>b.date?-1:0));
+}
+
+// ---------------------------------------------------------------- calendar helpers
+function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
+function firstWeekdayMonIdx(y,m){ const jsDay = new Date(y, m-1, 1).getDay(); return (jsDay+6)%7; }
+function isoDate(y,m,d){ return y+"-"+pad2(m)+"-"+pad2(d); }
+function setView(v){ state.view = v; render(); }
+function calNav(delta){
+  state.calMonth += delta;
+  if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
+  if (state.calMonth<1){ state.calMonth=12; state.calYear--; }
+  render();
+}
+function calToday(){ state.calYear = TODAY.getFullYear(); state.calMonth = TODAY.getMonth()+1; render(); }
+function calCellClick(iso){ openNewOnDate(iso); }
+function openNewOnDate(dateIso){
+  state.editing = emptyJob();
+  state.editing.date = dateIso;
+  state.addingClient = false;
+  state.editingAgentContact = false;
+  render();
+  scrollToForm();
+}
+
+// ---------------------------------------------------------------- quick extract (offline, regex-based)
+const UK_POSTCODE = /([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})/i;
+
+function quickExtract(raw){
+  const postcodeLineMatch = raw.split("\n").find(l => UK_POSTCODE.test(l));
+  let street = "", town = "", postcode = "";
+  if (postcodeLineMatch){
+    const pcMatch = postcodeLineMatch.match(UK_POSTCODE);
+    postcode = (pcMatch[1] + " " + pcMatch[2]).toUpperCase();
+    const rest = postcodeLineMatch.replace(pcMatch[0], "").split(",").map(s=>s.trim()).filter(Boolean);
+    if (rest.length===1){ street = rest[0]; }
+    else if (rest.length>1){ town = rest[rest.length-1]; street = rest.slice(0,-1).join(", "); }
+  }
+  let dateIso = "";
+  const dmY = raw.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})\b/);
+  if (dmY){
+    let [,d,m,y] = dmY;
+    if (y.length===2) y = "20"+y;
+    dateIso = y+"-"+pad2(m)+"-"+pad2(d);
+  }
+  let type = "ICI";
+  const low = raw.toLowerCase();
+  if (low.includes("mid-term") || low.includes("mid term") || low.includes("interim")) type = "MTI";
+  else if (low.includes("check-out") || low.includes("check out") || low.includes("checkout")) type = "CO";
+  else if (low.includes("schedule of condition")) type = "SOC";
+  else if (low.includes("clean")) type = "CLN";
+  else if (low.includes("check-in") || low.includes("check in") || low.includes("checkin") || low.includes("inventory")) type = "ICI";
+
+  return { type, date: dateIso, address: street, town, postcode };
+}
+
+function runExtract(){
+  const raw = document.getElementById("extractRaw").value;
+  if (!raw.trim()) return;
+  captureFormValues();
+  const found = quickExtract(raw);
+  Object.assign(state.editing, {
+    type: found.type || state.editing.type,
+    date: found.date || state.editing.date,
+    address: found.address || state.editing.address,
+    town: found.town || state.editing.town,
+    postcode: found.postcode || state.editing.postcode,
+  });
+  render();
+}
+
+// ---------------------------------------------------------------- capture form (avoid clobbering unsaved fields on re-render)
+function captureFormValues(){
+  const f = state.editing;
+  if (!f) return;
+  const grab = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  const setIf = (key, id) => { const v = grab(id); if (v !== undefined) f[key] = v; };
+  setIf('jobNo','f_jobNo');
+  setIf('type','f_type');
+  setIf('status','f_status');
+  setIf('date','f_date');
+  setIf('time','f_time');
+  setIf('propertyType','f_propertyType');
+  setIf('address','f_address');
+  setIf('town','f_town');
+  setIf('postcode','f_postcode');
+  setIf('bedrooms','f_bedrooms');
+  setIf('extraAreas','f_extraAreas');
+  setIf('tenants','f_tenants');
+  setIf('notes','f_notes');
+}
+
+// ---------------------------------------------------------------- CRUD
+function openNew(){ state.editing = emptyJob(); state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm(); }
+function openEdit(id){ const j = state.jobs.find(x=>x.id===id); if (!j) return; state.editing = Object.assign({}, j); state.addingClient=false; state.editingAgentContact=false; render(); scrollToForm(); }
+function closeForm(){ state.editing = null; state.addingClient = false; state.editingAgentContact = false; render(); }
+function scrollToForm(){ setTimeout(()=>{ const el = document.querySelector(".form-card"); if (el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 0); }
+
+function onClientChange(sel){
+  captureFormValues();
+  if (sel.value === ADD_NEW){ state.addingClient = true; render(); }
+  else { state.editing.client = sel.value; state.editingAgentContact = false; render(); }
+}
+function confirmAddClient(){
+  const val = document.getElementById("newClientInput").value.trim();
+  if (!val){ captureFormValues(); state.addingClient=false; render(); return; }
+  let c = clientByName(val);
+  if (!c){ c = { name: val, contactName:"", contactPhone:"", contactEmail:"" }; state.clients.push(c); }
+  c.contactName = document.getElementById("newClientContactName").value;
+  c.contactPhone = document.getElementById("newClientPhone").value;
+  c.contactEmail = document.getElementById("newClientEmail").value;
+  saveClients();
+  captureFormValues();
+  state.editing.client = val;
+  state.addingClient = false;
+  render();
+}
+function cancelAddClient(){ captureFormValues(); state.addingClient=false; render(); }
+
+function toggleAgentContactEdit(on){
+  captureFormValues();
+  state.editingAgentContact = !!on;
+  render();
+}
+function saveAgentContact(){
+  const c = clientByName(state.editing.client);
+  if (c){
+    c.contactName = document.getElementById("ac_name").value;
+    c.contactPhone = document.getElementById("ac_phone").value;
+    c.contactEmail = document.getElementById("ac_email").value;
+    saveClients();
+  }
+  captureFormValues();
+  state.editingAgentContact = false;
+  render();
+}
+
+function submitForm(){
+  const g = id => document.getElementById(id);
+  const date = g("f_date").value;
+  const jobNoInput = g("f_jobNo").value.trim();
+  const jobNo = jobNoInput || nextJobNumber(date);
+  const job = {
+    id: state.editing.id,
+    jobNo,
+    type: g("f_type").value,
+    client: state.editing.client || "",
+    status: g("f_status").value,
+    date,
+    time: g("f_time").value,
+    address: g("f_address").value,
+    town: g("f_town").value,
+    postcode: g("f_postcode").value,
+    bedrooms: g("f_bedrooms").value,
+    extraAreas: g("f_extraAreas").value,
+    propertyType: g("f_propertyType").value,
+    tenants: g("f_tenants").value,
+    notes: g("f_notes").value,
+  };
+  const idx = state.jobs.findIndex(x=>x.id===job.id);
+  if (idx>=0) state.jobs[idx] = job; else state.jobs.push(job);
+  saveJobs();
+  state.editing = null;
+  render();
+}
+
+function deleteJob(id){
+  if (!confirm("Delete this job? This can't be undone.")) return;
+  state.jobs = state.jobs.filter(j=>j.id!==id);
+  saveJobs();
+  render();
+}
+
+function cycleStatus(id){
+  const j = state.jobs.find(x=>x.id===id);
+  if (!j) return;
+  const order = STATUSES.map(s=>s.code);
+  const next = order[(order.indexOf(j.status)+1) % order.length];
+  j.status = next;
+  saveJobs();
+  render();
+}
+
+function setStatusFilter(code){
+  state.statusFilter = (state.statusFilter===code) ? "all" : code;
+  render();
+}
+
+// ---------------------------------------------------------------- export / import
+function exportData(){
+  const payload = { exportedAt: new Date().toISOString(), jobs: state.jobs, clients: state.clients };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "WPS-Job-Log-backup-" + new Date().toISOString().slice(0,10) + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function importData(file){
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    try{
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data.jobs)) throw new Error("bad shape");
+      if (!confirm("Import " + data.jobs.length + " job(s)? This will replace your current data in this browser.")) return;
+      state.jobs = data.jobs;
+      const norm = normalizeClients(data.clients);
+      if (norm) state.clients = norm;
+      saveJobs(); saveClients();
+      render();
+    } catch(e){ alert("Couldn't read that file — is it a Job Log backup .json?"); }
+  };
+  reader.readAsText(file);
+}
+
+// ---------------------------------------------------------------- rendering
+function render(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${renderHeader()}
+    <div class="wrap">
+      ${renderUtilityRow()}
+      ${renderStatusStrip()}
+      ${state.editing ? renderForm() : ""}
+      ${renderToolbar()}
+      ${state.view === "calendar" ? renderCalendar() : renderTable()}
+      <div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along &middot; data is stored only in this browser</div>
+    </div>
+  `;
+}
+
+function renderHeader(){
+  return `
+  <div class="header-band">
+    <div class="header-inner">
+      <div class="brand-row">
+        <div class="logo-badge">
+          <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
+            <path d="M12 34V18C12 12.477 16.477 8 22 8C27.523 8 32 12.477 32 18V34" stroke="var(--brand)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name"><span class="serif name">Wellington</span><span class="sub">PROPERTY SERVICES</span></div>
+          <div class="tool-tag">WPS Automation &middot; Job Log (offline copy)</div>
+        </div>
+      </div>
+      <button class="btn btn-coral" onclick="openNew()">+ New job</button>
+    </div>
+  </div>`;
+}
+
+function renderUtilityRow(){
+  return `<div class="utility-row">
+    <button class="btn-link" onclick="exportData()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export backup
+    </button>
+    <label class="btn-link" style="cursor:pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Import backup
+      <input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])" />
+    </label>
+  </div>`;
+}
+
+function renderStatusStrip(){
+  const counts = {booked:0,completed:0,report_sent:0,archived:0};
+  state.jobs.forEach(j=>{ if (counts[j.status]!==undefined) counts[j.status]++; });
+  return `<div class="status-strip">
+    ${STATUSES.map(s=>`
+      <button class="status-card" style="border-color:${state.statusFilter===s.code?s.fg:'var(--line)'}; background:${state.statusFilter===s.code?s.bg:'var(--white)'};"
+        onclick="setStatusFilter('${s.code}')">
+        <div class="num" style="color:${s.fg}">${counts[s.code]||0}</div>
+        <div class="lbl">${s.label}</div>
+      </button>`).join("")}
+  </div>`;
+}
+
+function renderToolbar(){
+  return `<div class="toolbar">
+    <div class="view-toggle">
+      <button class="${state.view==='table'?'active':''}" onclick="setView('table')">List</button>
+      <button class="${state.view==='calendar'?'active':''}" onclick="setView('calendar')">Calendar</button>
+    </div>
+    <div class="search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="Search address, client, tenant, job no…" value="${esc(state.search)}" oninput="state.search=this.value; render();" />
+    </div>
+    <select class="filter-select" onchange="state.typeFilter=this.value; render();">
+      <option value="all">All job types</option>
+      ${TYPES.map(t=>`<option value="${t.code}" ${state.typeFilter===t.code?"selected":""}>${esc(t.label)}</option>`).join("")}
+    </select>
+    <select class="filter-select" onchange="state.clientFilter=this.value; render();">
+      <option value="all">All agents</option>
+      ${state.clients.map(c=>`<option value="${esc(c.name)}" ${state.clientFilter===c.name?"selected":""}>${esc(c.name)}</option>`).join("")}
+    </select>
+    ${state.view==="table" ? `
+      <select class="filter-select" onchange="state.monthFilter=this.value; render();">
+        <option value="all">All months</option>
+        ${monthOptions().map(k=>`<option value="${k}" ${state.monthFilter===k?"selected":""}>${monthLabel(k)}</option>`).join("")}
+      </select>
+    ` : ""}
+  </div>`;
+}
+
+function renderCalendar(){
+  const y = state.calYear, m = state.calMonth;
+  const jobsByDate = {};
+  baseFilteredJobs().forEach(j=>{ if (j.date){ (jobsByDate[j.date] = jobsByDate[j.date] || []).push(j); } });
+  const numDays = daysInMonth(y,m);
+  const leading = firstWeekdayMonIdx(y,m);
+  const cells = [];
+  for (let i=0;i<leading;i++) cells.push(null);
+  for (let d=1; d<=numDays; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const todayIso = TODAY.getFullYear()+"-"+pad2(TODAY.getMonth()+1)+"-"+pad2(TODAY.getDate());
+  const monthName = new Date(y,m-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+  const weekdayLabels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  return `<div class="cal-wrap">
+    <div class="cal-nav">
+      <button class="btn btn-ghost btn-sm" onclick="calNav(-1)">&larr; Prev</button>
+      <div class="cal-title">${monthName}</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="calToday()">Today</button>
+        <button class="btn btn-ghost btn-sm" onclick="calNav(1)">Next &rarr;</button>
+      </div>
+    </div>
+    <div class="cal-grid cal-weekdays">
+      ${weekdayLabels.map(w=>`<div class="cal-weekday">${w}</div>`).join("")}
+    </div>
+    <div class="cal-grid">
+      ${cells.map(d=>{
+        if (d===null) return `<div class="cal-cell cal-cell-empty"></div>`;
+        const iso = isoDate(y,m,d);
+        const dayJobs = (jobsByDate[iso]||[]).slice().sort((a,b)=> (a.time||"").localeCompare(b.time||""));
+        const isToday = iso === todayIso;
+        return `<div class="cal-cell ${isToday?"cal-cell-today":""}" onclick="calCellClick('${iso}')" title="Click to add a job on ${formatDate(iso)}">
+          <div class="cal-daynum">${d}</div>
+          <div class="cal-jobs">
+            ${dayJobs.map(j=>{
+              const sm = statusMeta(j.status), tm = typeMeta(j.type);
+              const label = [j.time, tm.code, j.client].filter(Boolean).map(esc).join(" &middot; ");
+              const tooltip = [tm.label, j.client, fullAddress(j)].filter(Boolean).join(" — ");
+              return `<button class="cal-job-pill" style="background:${sm.bg}; color:${sm.fg};" onclick="event.stopPropagation(); openEdit('${j.id}')" title="${esc(tooltip)}">${label}</button>`;
+            }).join("")}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+function renderAgentContactPanel(f){
+  if (!f.client) return "";
+  const c = clientByName(f.client);
+  if (!c) return "";
+  if (state.editingAgentContact){
+    return `<div class="field wide">
+      <div class="agent-contact-box">
+        <div class="agent-contact-edit-grid">
+          <label class="field">Agent contact name
+            <input type="text" id="ac_name" value="${esc(c.contactName)}" placeholder="Negotiator name" />
+          </label>
+          <label class="field">Agent contact phone
+            <input type="tel" id="ac_phone" value="${esc(c.contactPhone)}" placeholder="Office / mobile" />
+          </label>
+          <label class="field">Agent contact email
+            <input type="email" id="ac_email" value="${esc(c.contactEmail)}" placeholder="name@agency.co.uk" />
+          </label>
+        </div>
+        <div class="agent-contact-actions">
+          <button class="btn btn-coral btn-sm" onclick="saveAgentContact()">Save agent details</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleAgentContactEdit(false)">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  const hasContact = c.contactName || c.contactPhone || c.contactEmail;
+  return `<div class="field wide">
+    <div class="agent-contact-box">
+      ${hasContact ? `
+        <div class="agent-contact-line">
+          <strong>${esc(c.contactName)||"—"}</strong>${c.contactPhone?(" &middot; "+esc(c.contactPhone)):""}${c.contactEmail?(" &middot; "+esc(c.contactEmail)):""}
+        </div>
+      ` : `<div class="agent-contact-line" style="color:var(--ink-soft); font-weight:400;">No contact details saved for ${esc(f.client)} yet.</div>`}
+      <button class="btn-text" onclick="toggleAgentContactEdit(true)">${hasContact ? "Edit" : "Add"} agent contact details</button>
+    </div>
+  </div>`;
+}
+
+function renderForm(){
+  const f = state.editing;
+  const isNew = !state.jobs.some(j=>j.id===f.id);
+  return `<div class="form-card">
+    <h3>${isNew ? "New job" : "Edit job"}</h3>
+
+    <div class="extract-box">
+      <textarea id="extractRaw" placeholder="Paste a works-order email here and click Extract — it'll try to pull the date and address/postcode into the fields below."></textarea>
+      <div class="extract-row">
+        <span class="extract-hint">Offline pattern-matching — always double-check what it fills in.</span>
+        <button class="btn btn-ghost btn-sm" onclick="runExtract()">Extract job details</button>
+      </div>
+    </div>
+
+    <div class="field-grid">
+      <label class="field">Job number
+        <input type="text" id="f_jobNo" value="${esc(f.jobNo || (isNew ? nextJobNumber(f.date) : ""))}" placeholder="Auto, or type your own" />
+        <span class="field-hint">Leave the suggested number, or overwrite it — e.g. for old Parker job numbers.</span>
+      </label>
+      <label class="field">Job type
+        <select id="f_type">
+          ${TYPES.map(t=>`<option value="${t.code}" ${f.type===t.code?"selected":""}>${esc(t.label)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field">Status
+        <select id="f_status">
+          ${STATUSES.map(s=>`<option value="${s.code}" ${f.status===s.code?"selected":""}>${s.label}</option>`).join("")}
+        </select>
+      </label>
+
+      <label class="field">Agent / client
+        ${state.addingClient ? `
+          <div class="add-client-row">
+            <input type="text" id="newClientInput" placeholder="New agent name" />
+            <div class="row2">
+              <input type="text" id="newClientContactName" placeholder="Contact name (optional)" />
+            </div>
+            <div class="row2">
+              <input type="tel" id="newClientPhone" placeholder="Contact phone (optional)" />
+              <input type="email" id="newClientEmail" placeholder="Contact email (optional)" />
+            </div>
+            <div class="row3">
+              <button class="btn btn-ghost btn-sm" onclick="cancelAddClient()">Cancel</button>
+              <button class="btn btn-coral btn-sm" onclick="confirmAddClient()">Add agent</button>
+            </div>
+          </div>
+        ` : `
+          <select id="f_clientSelect" onchange="onClientChange(this)">
+            <option value="">—</option>
+            ${state.clients.map(c=>`<option value="${esc(c.name)}" ${f.client===c.name?"selected":""}>${esc(c.name)}</option>`).join("")}
+            <option value="${ADD_NEW}">+ Add new agent…</option>
+          </select>
+        `}
+      </label>
+      <label class="field">Date
+        <input type="date" id="f_date" value="${esc(f.date)}" />
+      </label>
+      <label class="field">Time
+        <input type="time" id="f_time" value="${esc(f.time)}" />
+      </label>
+
+      ${renderAgentContactPanel(f)}
+
+      <label class="field">Property type
+        <select id="f_propertyType">
+          <option value="">—</option>
+          <option value="Flat" ${f.propertyType==="Flat"?"selected":""}>Flat</option>
+          <option value="House" ${f.propertyType==="House"?"selected":""}>House</option>
+        </select>
+      </label>
+      <label class="field">Bedrooms
+        <select id="f_bedrooms">
+          <option value="">—</option>
+          ${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${String(f.bedrooms)===String(n)?"selected":""}>${n}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field">Extra areas
+        <select id="f_extraAreas">
+          <option value="">—</option>
+          ${[0,1,2,3,4,5,6].map(n=>`<option value="${n}" ${String(f.extraAreas)===String(n)?"selected":""}>${n}</option>`).join("")}
+        </select>
+      </label>
+
+      <label class="field wide">Street address
+        <input type="text" id="f_address" value="${esc(f.address)}" placeholder="Flat name/number, street" />
+      </label>
+
+      <label class="field">Town
+        <input type="text" id="f_town" value="${esc(f.town)}" placeholder="e.g. London" />
+      </label>
+      <label class="field">Postcode
+        <input type="text" id="f_postcode" value="${esc(f.postcode)}" placeholder="e.g. E3 2UE" />
+      </label>
+
+      <label class="field wide">Tenant name(s) / contact
+        <input type="text" id="f_tenants" value="${esc(f.tenants)}" placeholder="Who to liaise with for access" />
+      </label>
+
+      <label class="field wide">Notes
+        <textarea id="f_notes" placeholder="Access details, anything else worth flagging">${esc(f.notes)}</textarea>
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeForm()">Cancel</button>
+      <button class="btn btn-coral" onclick="submitForm()">${isNew ? "Save job" : "Save changes"}</button>
+    </div>
+  </div>`;
+}
+
+function renderTable(){
+  const jobs = filteredJobs();
+  if (!jobs.length){
+    return `<div class="empty">No jobs match right now. ${state.jobs.length===0 ? "Click <strong>+ New job</strong> to log your first one." : "Try clearing a filter or search term."}</div>`;
+  }
+  return `<div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Job No</th><th>Type</th><th>Agent</th><th>Address</th><th>Date</th><th>Time</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${jobs.map(j=>{
+          const sm = statusMeta(j.status), tm = typeMeta(j.type);
+          return `<tr>
+            <td class="mono">${esc(j.jobNo)}</td>
+            <td><span class="type-badge">${esc(tm.label)}</span></td>
+            <td>${esc(j.client)||"—"}</td>
+            <td style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
+            <td>${formatDate(j.date)}</td>
+            <td>${esc(j.time)||"—"}</td>
+            <td><button class="pill" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button></td>
+            <td>
+              <div class="row-actions">
+                <button class="icon-btn" title="Edit" onclick="openEdit('${j.id}')">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                </button>
+                <button class="icon-btn" title="Delete" onclick="deleteJob('${j.id}')">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- init
+load();
+render();
+</script>
+</body>
+</html>
