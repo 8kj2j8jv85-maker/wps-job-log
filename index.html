@@ -137,6 +137,26 @@
   .cal-daynum{ font-size:12px; font-weight:700; color:var(--ink-soft); }
   .cal-jobs{ display:flex; flex-direction:column; gap:3px; overflow-y:auto; max-height:120px; }
   .cal-job-pill{ border:none; border-radius:5px; padding:3px 6px; font-size:11px; font-weight:600; text-align:left; cursor:pointer; font-family:inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; }
+
+  /* ---- booking review tray ---- */
+  .tray{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:14px 0 18px; }
+  .tray-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .tray-head h3{ margin:0; font-size:16px; }
+  .tray-sub{ font-size:12.5px; color:var(--ink-soft); }
+  .qcard{ border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; }
+  .qtop{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; }
+  .qkind{ font-size:11.5px; font-weight:600; letter-spacing:.02em; padding:3px 8px; border-radius:999px; }
+  .qk-new{ background:var(--coral-bg); color:var(--coral-dark); }
+  .qk-update{ background:var(--sky); color:var(--brand); }
+  .qk-cancel{ background:var(--stone-bg); color:var(--stone); }
+  .qaddr{ margin-top:6px; font-size:14.5px; }
+  .qmeta{ margin-top:3px; font-size:13.5px; color:var(--ink-soft); }
+  .qline{ margin-top:5px; font-size:13px; }
+  .qwhy{ margin-top:6px; font-size:12.5px; color:var(--ink-soft); font-style:italic; }
+  .qwarn{ margin-top:6px; font-size:12.5px; color:var(--coral-dark); }
+  .qsrc{ margin-top:6px; font-size:12px; color:var(--ink-soft); }
+  .qactions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .qbadge{ display:inline-block; min-width:18px; padding:0 6px; margin-left:4px; border-radius:999px; background:var(--coral-dark); color:#fff; font-size:11px; line-height:18px; text-align:center; }
 </style>
 </head>
 <body>
@@ -158,6 +178,10 @@ const LS_GCAL_PREF = "wps_standalone_gcal_connected_v1";
 const GOOGLE_CLIENT_ID = "765734122916-80dtp83u92p7nsddd3o14hjf782ov4v1.apps.googleusercontent.com";
 const GCAL_CALENDAR_ID = "info@wellingtonparker.com";
 const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+// Gmail (read-only) — used only to read the "WPS Job Log Queue" drafts Claude writes
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const QUEUE_SUBJECT = "WPS Job Log Queue";
+const LS_QUEUE_DONE = "wps_standalone_queue_done_v1";
 let gcalTokenClient = null;
 
 const TYPES = [
@@ -200,6 +224,14 @@ let state = {
   gcalConnected: false,
   gcalToken: null,
   gcalTokenExpiry: 0,
+  gmailOk: false,
+  queue: [],
+  queueDone: {},
+  queueChecked: false,
+  queueBusy: false,
+  queueMsg: "",
+  queueCheckedAt: null,
+  fromQueueId: null,
 };
 
 // ---------------------------------------------------------------- storage
@@ -218,6 +250,7 @@ function load(){
     if (c){ const norm = normalizeClients(JSON.parse(c)); if (norm) state.clients = norm; }
   } catch(e){}
   try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
+  try { const q = localStorage.getItem(LS_QUEUE_DONE); if (q) state.queueDone = JSON.parse(q) || {}; } catch(e){}
 }
 function saveJobs(){ localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); }
 function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); }
@@ -378,7 +411,7 @@ function captureFormValues(){
 // ---------------------------------------------------------------- CRUD
 function openNew(){ state.editing = emptyJob(); state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm(); }
 function openEdit(id){ const j = state.jobs.find(x=>x.id===id); if (!j) return; state.editing = Object.assign({}, j); state.addingClient=false; state.editingAgentContact=false; render(); scrollToForm(); }
-function closeForm(){ state.editing = null; state.addingClient = false; state.editingAgentContact = false; render(); }
+function closeForm(){ state.fromQueueId = null; state.editing = null; state.addingClient = false; state.editingAgentContact = false; render(); }
 function scrollToForm(){ setTimeout(()=>{ const el = document.querySelector(".form-card"); if (el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 0); }
 
 function onClientChange(sel){
@@ -445,6 +478,7 @@ function submitForm(){
   const idx = state.jobs.findIndex(x=>x.id===job.id);
   if (idx>=0){ job.gcalEventId = state.jobs[idx].gcalEventId; state.jobs[idx] = job; } else state.jobs.push(job);
   saveJobs();
+  if (state.fromQueueId){ markQueueDone(state.fromQueueId, "added"); state.fromQueueId = null; }
   state.editing = null;
   render();
   syncJobToCalendar(job);
@@ -508,7 +542,7 @@ function initGCal(){
   if (!window.google || !google.accounts || !google.accounts.oauth2) return;
   gcalTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: GCAL_SCOPE,
+    scope: GCAL_SCOPE + " " + GMAIL_SCOPE,
     callback: function(){}
   });
 }
@@ -518,6 +552,7 @@ function connectGCal(){
     if (resp.error){ alert("Couldn't connect to Google Calendar."); return; }
     state.gcalToken = resp.access_token;
     state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
+    state.gmailOk = gmailGranted(resp);
     state.gcalConnected = true;
     try{ localStorage.setItem(LS_GCAL_PREF, "1"); }catch(e){}
     render();
@@ -538,6 +573,7 @@ function ensureGCalToken(onReady){
     if (resp.error){ alert('Google Calendar needs reconnecting — click "Connect Google Calendar" again.'); return; }
     state.gcalToken = resp.access_token;
     state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
+    state.gmailOk = gmailGranted(resp);
     onReady();
   };
   gcalTokenClient.requestAccessToken({ prompt: "" });
@@ -557,7 +593,9 @@ function gcalEventBody(j){
     end = { dateTime: j.date+"T"+pad2(eh)+":"+pad2(em)+":00", timeZone: tz };
   } else if (j.date){
     start = { date: j.date };
-    end = { date: j.date };
+    // all-day events: Google's end date is exclusive, so it must be the day after
+    const nd = new Date(j.date+"T00:00:00Z"); nd.setUTCDate(nd.getUTCDate()+1);
+    end = { date: nd.toISOString().slice(0,10) };
   } else {
     return null;
   }
@@ -604,6 +642,275 @@ function deleteJobCalendarEvent(job){
   });
 }
 
+// ---------------------------------------------------------------- booking review tray (reads Claude's queue drafts from Gmail)
+/*
+  Claude's scheduled inbox check writes Gmail drafts titled "WPS Job Log Queue …"
+  in info@. Each draft carries a wps-queue.json attachment:
+    { "version":1, "generatedAt":"ISO", "items":[ {id, kind:"new"|"update"|"cancel", type, client,
+      date:"YYYY-MM-DD", time:"HH:MM", address, town, postcode, tenants, notes, summary,
+      sourceFrom, sourceSubject, sourceDate, sourceUrl} ] }
+  Nothing here writes to Gmail — approving/rejecting is remembered in this browser.
+*/
+function gmailGranted(resp){
+  try { return google.accounts.oauth2.hasGrantedAllScopes(resp, GMAIL_SCOPE); } catch(e){ return false; }
+}
+function ensureGmailToken(onReady){
+  if (state.gcalToken && state.gmailOk && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
+  if (!gcalTokenClient){ initGCal(); }
+  if (!gcalTokenClient){ state.queueBusy=false; state.queueMsg="Google sign-in hasn't loaded yet — check your connection and try again."; render(); return; }
+  gcalTokenClient.callback = function(resp){
+    if (resp.error){ state.queueBusy=false; state.queueMsg="Google sign-in was cancelled."; render(); return; }
+    state.gcalToken = resp.access_token;
+    state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
+    state.gmailOk = gmailGranted(resp);
+    if (!state.gcalConnected && google.accounts.oauth2.hasGrantedAllScopes(resp, GCAL_SCOPE)){
+      state.gcalConnected = true; try{ localStorage.setItem(LS_GCAL_PREF, "1"); }catch(e){}
+    }
+    if (!state.gmailOk){
+      state.queueBusy=false;
+      state.queueMsg='Gmail access wasn\'t ticked. Click "Check for new bookings" again and allow "View your email messages" (read-only).';
+      render(); return;
+    }
+    onReady();
+  };
+  // first time (or scope missing) needs the consent screen; after that it's silent
+  gcalTokenClient.requestAccessToken({ prompt: state.gmailOk ? "" : "consent" });
+}
+function b64ToText(s){
+  s = String(s||"").replace(/\s+/g,"").replace(/-/g,"+").replace(/_/g,"/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+async function gmailGet(path){
+  const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/"+path, { headers:{ "Authorization":"Bearer "+state.gcalToken } });
+  if (!r.ok){ const e = new Error("Gmail API "+r.status); e.status = r.status; throw e; }
+  return r.json();
+}
+function walkParts(part, out){
+  if (!part) return out;
+  out.push(part);
+  (part.parts||[]).forEach(p=>walkParts(p,out));
+  return out;
+}
+async function readQueuePayload(draftId){
+  const dr = await gmailGet("drafts/"+draftId+"?format=full");
+  const msg = dr.message || {};
+  const parts = walkParts(msg.payload, []);
+  // 1) the JSON attachment
+  const att = parts.find(p => /\.json$/i.test(p.filename||"") || /application\/json/i.test(p.mimeType||""));
+  if (att){
+    let data = att.body && att.body.data;
+    if (!data && att.body && att.body.attachmentId){
+      const a = await gmailGet("messages/"+msg.id+"/attachments/"+att.body.attachmentId);
+      data = a.data;
+    }
+    if (data) return JSON.parse(b64ToText(data));
+  }
+  // 2) fallback: base64 block between markers in the plain-text body
+  const txtPart = parts.find(p => /text\/plain/i.test(p.mimeType||"") && p.body && p.body.data);
+  if (txtPart){
+    const txt = b64ToText(txtPart.body.data);
+    const m = txt.match(/===WPS-QUEUE-BEGIN===([\s\S]*?)===WPS-QUEUE-END===/);
+    if (m){
+      const block = m[1].replace(/\r/g,"").trim();
+      if (block.startsWith("{")){
+        try { return JSON.parse(block); } catch(e){}
+        // tolerate soft line-wrapping added by some mail paths
+        return JSON.parse(block.replace(/\n(?!\s*[{\]"])/g, ""));
+      }
+      return JSON.parse(b64ToText(block));
+    }
+  }
+  return null;
+}
+function checkForBookings(){
+  state.queueBusy = true; state.queueMsg = ""; render();
+  ensureGmailToken(async function(){
+    try{
+      const list = await gmailGet("drafts?maxResults=50&q="+encodeURIComponent('subject:"'+QUEUE_SUBJECT+'"'));
+      const drafts = list.drafts || [];
+      const byId = {};
+      const payloads = [];
+      for (const d of drafts){
+        try{ const p = await readQueuePayload(d.id); if (p && Array.isArray(p.items)) payloads.push(p); }
+        catch(e){ console.warn("Skipped a queue draft", d.id, e); }
+      }
+      payloads.sort((a,b)=>String(a.generatedAt||"").localeCompare(String(b.generatedAt||"")));
+      payloads.forEach(p=>p.items.forEach(it=>{ if (it && it.id) byId[it.id] = Object.assign({ generatedAt:p.generatedAt }, it); }));
+      state.queue = Object.values(byId).sort((a,b)=>String(a.date||"9999").localeCompare(String(b.date||"9999")));
+      state.queueChecked = true;
+      state.queueCheckedAt = new Date();
+      if (!drafts.length) state.queueMsg = "No queue from Claude in your drafts yet.";
+    } catch(e){
+      console.error(e);
+      state.queueMsg = (e.status===403)
+        ? "Google refused Gmail access (403). The Gmail API probably isn't switched on in the wps-job-log Google Cloud project yet."
+        : (e.status===401 ? "Google sign-in expired — click Check for new bookings again." : "Couldn't read the booking queue: "+e.message);
+      if (e.status===401){ state.gcalToken=null; }
+    } finally {
+      state.queueBusy = false; render();
+    }
+  });
+}
+function pendingQueue(){ return state.queue.filter(i=>!state.queueDone[i.id]); }
+function markQueueDone(id, how){
+  state.queueDone[id] = { how, at: new Date().toISOString() };
+  try{ localStorage.setItem(LS_QUEUE_DONE, JSON.stringify(state.queueDone)); }catch(e){}
+}
+function queueItem(id){ return state.queue.find(i=>i.id===id); }
+function emailLink(it){
+  let u = it.sourceUrl || "";
+  // Gmail wraps links saved in drafts in a google.com/url redirect — unwrap it
+  const m = u.match(/^https:\/\/www\.google\.com\/url\?q=([^&]+)/);
+  if (m){ try { u = decodeURIComponent(m[1]); } catch(e){} }
+  if (!u && it.id){ u = "https://mail.google.com/mail/?authuser=info@wellingtonparker.com#all/" + String(it.id).split("-")[0]; }
+  return u;
+}
+function normPc(s){ return String(s||"").toUpperCase().replace(/\s+/g,""); }
+function firstNum(s){ const m = String(s||"").match(/\d+[A-Za-z]?/); return m ? m[0].toLowerCase() : ""; }
+function daysApart(a,b){ if(!a||!b) return 999; return Math.abs((new Date(a)-new Date(b))/86400000); }
+function sameProperty(job, it){
+  if (!it.postcode || normPc(job.postcode)!==normPc(it.postcode)) return false;
+  const n = firstNum(it.address);
+  return !n || firstNum(job.address)===n || String(job.address||"").toLowerCase().includes(n);
+}
+function findMatch(it){
+  const cands = state.jobs.filter(j=>sameProperty(j,it) && j.status!=="archived" && (!it.type || j.type===it.type));
+  if (!cands.length) return null;
+  const ref = it.date || new Date().toISOString().slice(0,10);
+  return cands.sort((a,b)=>daysApart(a.date,ref)-daysApart(b.date,ref))[0];
+}
+function findDuplicate(it){
+  return state.jobs.find(j=>sameProperty(j,it) && j.type===it.type && daysApart(j.date,it.date)<=3) || null;
+}
+function resolveClientName(name){
+  if (!name) return "";
+  const low = name.toLowerCase().replace(/[^a-z]/g,"");
+  const hit = state.clients.find(c=>c.name.toLowerCase().replace(/[^a-z]/g,"")===low)
+           || state.clients.find(c=>{ const k=c.name.toLowerCase().replace(/[^a-z]/g,""); return k && (k.includes(low)||low.includes(k)); });
+  if (hit) return hit.name;
+  state.clients.push({ name, contactName:"", contactPhone:"", contactEmail:"" });
+  saveClients();
+  return name;
+}
+function jobFromItem(it){
+  const j = emptyJob();
+  const src = it.sourceSubject ? "From email: "+it.sourceSubject+(it.sourceDate ? " ("+it.sourceDate+")" : "") : "";
+  Object.assign(j, {
+    type: TYPES.some(t=>t.code===it.type) ? it.type : "ICI",
+    client: resolveClientName(it.client),
+    date: it.date||"", time: it.time||"",
+    address: it.address||"", town: it.town||"", postcode: it.postcode||"",
+    tenants: it.tenants||"",
+    notes: [it.notes, src].filter(Boolean).join("\n"),
+  });
+  return j;
+}
+function qAdd(id){
+  const it = queueItem(id); if (!it) return;
+  const dup = findDuplicate(it);
+  if (dup && !confirm("Looks like this is already logged as "+dup.jobNo+" ("+formatDate(dup.date)+"). Add it anyway?")) return;
+  const job = jobFromItem(it);
+  job.jobNo = nextJobNumber(job.date);
+  state.jobs.push(job); saveJobs();
+  markQueueDone(id,"added");
+  render();
+  syncJobToCalendar(job);
+}
+function qEdit(id){
+  const it = queueItem(id); if (!it) return;
+  if (it.kind!=="new"){
+    const m = findMatch(it);
+    if (m){
+      state.editing = Object.assign({}, m, {
+        date: it.date || m.date, time: it.time || m.time,
+        tenants: m.tenants || it.tenants || "",
+        notes: [m.notes, it.summary ? "Update from email: "+it.summary : ""].filter(Boolean).join("\n"),
+      });
+      state.fromQueueId = id; state.addingClient=false; state.editingAgentContact=false;
+      render(); scrollToForm(); return;
+    }
+  }
+  state.editing = jobFromItem(it);
+  state.fromQueueId = id; state.addingClient=false; state.editingAgentContact=false;
+  render(); scrollToForm();
+}
+function qApplyUpdate(id){
+  const it = queueItem(id); const m = it && findMatch(it); if (!m) return;
+  if (it.date) m.date = it.date;
+  if (it.time) m.time = it.time;
+  if (it.tenants && !m.tenants) m.tenants = it.tenants;
+  if (it.summary) m.notes = [m.notes, "Update from email: "+it.summary].filter(Boolean).join("\n");
+  saveJobs(); markQueueDone(id,"updated"); render();
+  syncJobToCalendar(m);
+}
+function qApplyCancel(id){
+  const it = queueItem(id); const m = it && findMatch(it); if (!m) return;
+  if (!confirm("Mark "+m.jobNo+" as cancelled? It'll be archived and removed from the calendar.")) return;
+  deleteJobCalendarEvent(m);
+  m.gcalEventId = null;
+  m.status = "archived";
+  m.notes = [m.notes, "CANCELLED per email"+(it.sourceDate?" ("+it.sourceDate+")":"")+(it.summary?": "+it.summary:"")].filter(Boolean).join("\n");
+  saveJobs(); markQueueDone(id,"cancelled"); render();
+}
+function qReject(id){ markQueueDone(id,"rejected"); render(); }
+function qCloseTray(){ state.queueChecked=false; state.queueMsg=""; render(); }
+
+function renderQueueTray(){
+  if (!state.queueChecked && !state.queueBusy && !state.queueMsg) return "";
+  const items = pendingQueue();
+  const when = state.queueCheckedAt ? state.queueCheckedAt.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}) : "";
+  const KIND = { new:["New booking","qk-new"], update:["Change to a booking","qk-update"], cancel:["Cancellation","qk-cancel"] };
+  const cards = items.map(it=>{
+    const k = KIND[it.kind] || KIND.new;
+    const tm = typeMeta(it.type);
+    const addr = [it.address,it.town,it.postcode].filter(Boolean).join(", ");
+    const match = it.kind!=="new" ? findMatch(it) : null;
+    const dup = it.kind==="new" ? findDuplicate(it) : null;
+    let warn = "";
+    if (it.kind!=="new" && match) warn = `<div class="qline">Matches <span class="mono">${esc(match.jobNo)}</span> — currently ${formatDate(match.date)}${match.time?" at "+esc(match.time):""}</div>`;
+    if (it.kind!=="new" && !match) warn = `<div class="qwarn">Couldn't find this job in your log — use "Edit & add" if it should be logged.</div>`;
+    if (dup) warn = `<div class="qwarn">Possible duplicate of <span class="mono">${esc(dup.jobNo)}</span> (${formatDate(dup.date)}).</div>`;
+    let actions = "";
+    if (it.kind==="new" || !match){
+      actions = `<button class="btn btn-coral btn-sm" onclick="qAdd('${esc(it.id)}')">Add to log</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')">Edit &amp; add</button>`;
+    } else if (it.kind==="update"){
+      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')">Apply change</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')">Edit first</button>`;
+    } else {
+      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')">Mark cancelled</button>`;
+    }
+    actions += `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')">Dismiss</button>`;
+    return `<div class="qcard">
+      <div class="qtop"><span class="qkind ${k[1]}">${k[0]}</span><span class="type-badge">${esc(tm.label)}</span><span>${esc(it.client)||"Client not clear"}</span></div>
+      <div class="qaddr">${esc(addr)||"Address not clear"}</div>
+      <div class="qmeta">${it.date ? formatDate(it.date) : "No date yet"}${it.time ? " · "+esc(it.time) : (it.date ? " · time TBC" : "")}</div>
+      ${it.tenants ? `<div class="qline">Contact: ${esc(it.tenants)}</div>` : ""}
+      ${it.notes ? `<div class="qline">Notes: ${esc(it.notes)}</div>` : ""}
+      ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
+      ${warn}
+      <div class="qsrc">${esc(it.sourceFrom||"")}${it.sourceSubject ? " — "+esc(it.sourceSubject) : ""}${emailLink(it) ? ` · <a href="${esc(emailLink(it))}" target="_blank" rel="noopener">Open email</a>` : ""}</div>
+      <div class="qactions">${actions}</div>
+    </div>`;
+  }).join("");
+  return `<div class="tray">
+    <div class="tray-head">
+      <div>
+        <h3>To review${items.length ? " ("+items.length+")" : ""}</h3>
+        <div class="tray-sub">${state.queueBusy ? "Checking Gmail…" : ("Bookings Claude found in your inbox"+(when ? " · checked "+when : ""))}</div>
+      </div>
+      <button class="btn btn-text btn-sm" onclick="qCloseTray()">Hide</button>
+    </div>
+    ${state.queueMsg ? `<div class="qwarn" style="margin-top:10px;">${esc(state.queueMsg)}</div>` : ""}
+    ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing new to review ✓</div>` : ""}
+    ${cards}
+  </div>`;
+}
+
 // ---------------------------------------------------------------- rendering
 function render(){
   const app = document.getElementById("app");
@@ -612,6 +919,7 @@ function render(){
     <div class="wrap">
       ${renderUtilityRow()}
       ${renderStatusStrip()}
+      ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${renderToolbar()}
       ${state.view === "calendar" ? renderCalendar() : renderTable()}
@@ -654,6 +962,10 @@ function renderUtilityRow(){
     <button class="btn-link" onclick="${state.gcalConnected ? 'disconnectGCal()' : 'connectGCal()'}">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       ${state.gcalConnected ? "Calendar connected ✓" : "Connect Google Calendar"}
+    </button>
+    <button class="btn-link" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><polyline points="4 6 12 13 20 6"/></svg>
+      ${state.queueBusy ? "Checking…" : "Check for new bookings"}${pendingQueue().length ? `<span class="qbadge">${pendingQueue().length}</span>` : ""}
     </button>
   </div>`;
 }
