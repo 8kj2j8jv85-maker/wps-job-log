@@ -81,6 +81,8 @@
   .ph{ position:relative; border-radius:7px; overflow:hidden; background:var(--paper-deep); cursor:pointer; border:2px solid transparent; aspect-ratio: 4/3; }
   .ph.sel{ border-color:var(--coral); }
   .ph.skip{ opacity:.3; }
+  .ph.msel{ border-color:var(--peri); box-shadow:0 0 0 2px var(--peri); }
+  .ph.msel::after{ content:"✓"; position:absolute; right:4px; top:24px; background:var(--peri); color:#fff; font-size:11px; font-weight:700; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; }
   .ph .imgbox{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
   .ph img{ max-width:100%; max-height:100%; display:block; transition:transform .15s; }
   .ph .tm{ position:absolute; right:4px; bottom:4px; background:rgba(20,30,39,.72); color:#fff; font-size:10.5px; padding:1px 5px; border-radius:4px; }
@@ -162,7 +164,7 @@
     </div>
     <div class="muted small" style="margin-top:8px">
       How it works: photos are split into jobs by the gaps between them, and each set is matched to the Job Log by <b>where</b> the photos were taken. Check each job, then click the <b>first photo of each room</b> and pick the area &mdash; it carries on until the next room you mark.
-      Keys in the photo panel: <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> move, <span class="kbd">R</span> rotate, <span class="kbd">S</span> skip, <span class="kbd">Esc</span> close.
+      Keys in the photo panel: <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> move, <span class="kbd">R</span> rotate, <span class="kbd">S</span> skip, <span class="kbd">Esc</span> close. <span class="kbd">Shift</span>-click selects a run of photos to rotate together.
     </div>
     <div id="groups"></div>
   </div>
@@ -174,7 +176,12 @@
       <div class="field"><label>New job after a gap of (minutes)</label><input type="number" id="s_gap" min="5" max="600" /></div>
       <div class="field"><label>Photo size (long edge, pixels)</label><input type="number" id="s_size" min="640" max="4000" step="10" /></div>
       <div class="field"><label>JPEG quality (50&ndash;95)</label><input type="number" id="s_quality" min="50" max="95" /></div>
-      <div class="field"><label>Portrait photos</label>
+      <div class="field"><label>Photos the phone marked as portrait</label>
+        <select id="s_flat">
+          <option value="1">Turn to landscape (floors, ceilings, keys shot pointing down)</option>
+          <option value="0">Treat as real portrait shots</option>
+        </select></div>
+      <div class="field"><label>Real portrait photos</label>
         <select id="s_portrait">
           <option value="canvas">Keep upright on a landscape canvas</option>
           <option value="rotate">Turn sideways to fill landscape</option>
@@ -226,18 +233,18 @@ const LS_LOGO = "wps_photo_logo_v1";
 const LS_BACKUP_JOBS = "wps_photo_backup_jobs_v1";
 
 const DEFAULT_AREAS = [
-  "Front exterior", "Entrance and Hallway", "Reception", "Living Area", "Living Room", "Dining Room",
+  "External picture", "Front exterior", "Entrance and Hallway", "Reception", "Living Area", "Living Room", "Dining Room",
   "Kitchen", "Kitchenette", "Kitchen / Diner", "Utility Room", "W.C", "Cloakroom",
   "Bedroom 1", "Bedroom 2", "Bedroom 3", "Bedroom 4", "Bedroom 5",
   "En-suite bathroom", "En-suite Shower room", "Bathroom", "Shower room",
   "Staircase and Landing", "Staircase and Mezzanine level", "Study", "Conservatory",
   "Walk-in Wardrobe", "Storage cupboard", "Balcony", "Garden", "Garage", "Loft",
-  "Meters", "Keys", "Smoke alarms", "Communal areas"
+  "Meters", "Electricity meter", "Gas meter", "Heat meter", "Keys", "Smoke alarms", "Communal areas"
 ];
 const DEFAULT_SETTINGS = {
-  gap: 30, size: 1600, quality: 82, portrait: "canvas", canvas: "#222222",
+  gap: 30, size: 1440, quality: 76, sizeVersion: 2, portrait: "canvas", canvas: "#222222",
   wmpos: "br", wmsize: 100, wmtext: "Wellington Property Services {year}",
-  base: "http://www.wellingtonparker.com/photos/", stripGps: true,
+  base: "http://www.wellingtonparker.com/photos/", stripGps: true, flatFix: true, areasVersion: 2,
   areas: DEFAULT_AREAS
 };
 
@@ -248,6 +255,7 @@ const S = {
   areaStart: {},       // photoId -> area name (room start marker)
   meta: {},            // groupFirstId -> {jobId, jobNo, postcode, date, link}
   sel: null,           // selected photo id
+  multi: new Set(),    // photos picked with Shift/Ctrl for rotating/skipping together
   jobs: [],
   jobsSource: "",
   settings: null,
@@ -273,6 +281,26 @@ function loadSettings(){
   try { s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}") || {}; } catch(e){}
   S.settings = Object.assign({}, DEFAULT_SETTINGS, s);
   if (!Array.isArray(S.settings.areas) || !S.settings.areas.length) S.settings.areas = DEFAULT_AREAS.slice();
+  // 29 Sept: smaller default photos (1440px = full height on a 1080p screen, quality 76). Move old defaults over once.
+  if ((s.sizeVersion || 1) < 2){
+    if (!s.size || s.size === 1600) S.settings.size = 1440;
+    if (!s.quality || s.quality === 82) S.settings.quality = 76;
+    S.settings.sizeVersion = 2;
+    saveSettingsLS();
+  }
+  // areas added in later versions: add them to a saved list once (29 Sept: cover photo + meters)
+  const NEW_AREAS_V2 = [["External picture", 0], ["Electricity meter", "Meters"], ["Gas meter", "Meters"], ["Heat meter", "Meters"]];
+  if (Array.isArray(s.areas) && (s.areasVersion || 1) < 2){   // s = what was saved in this browser
+    let after = "Meters";
+    for (const [a, where] of NEW_AREAS_V2){
+      if (S.settings.areas.includes(a)) continue;
+      if (where === 0){ S.settings.areas.unshift(a); continue; }
+      const i = S.settings.areas.indexOf(after);
+      if (i >= 0){ S.settings.areas.splice(i + 1, 0, a); after = a; } else S.settings.areas.push(a);
+    }
+    S.settings.areasVersion = 2;
+    saveSettingsLS();
+  }
   try {
     const d = localStorage.getItem(LS_LOGO);
     if (d){ const im = new Image(); im.onload = () => { S.logoImg = im; updateLogoState(); }; im.src = d; }
@@ -283,7 +311,7 @@ function fillSettingsForm(){
   const s = S.settings;
   $("s_gap").value = s.gap; $("s_size").value = s.size; $("s_quality").value = s.quality;
   $("s_portrait").value = s.portrait; $("s_canvas").value = s.canvas; $("s_wmpos").value = s.wmpos;
-  $("s_wmsize").value = s.wmsize; $("s_wmtext").value = s.wmtext; $("s_base").value = s.base; $("s_gps").value = s.stripGps ? "1" : "0";
+  $("s_wmsize").value = s.wmsize; $("s_wmtext").value = s.wmtext; $("s_base").value = s.base; $("s_gps").value = s.stripGps ? "1" : "0"; $("s_flat").value = s.flatFix ? "1" : "0";
   $("s_areas").value = s.areas.join("\n");
   updateLogoState();
 }
@@ -294,7 +322,7 @@ function readSettingsForm(){
   s.gap = num("s_gap",5,600,30); s.size = num("s_size",640,4000,1600); s.quality = num("s_quality",50,95,82);
   s.portrait = $("s_portrait").value; s.canvas = $("s_canvas").value; s.wmpos = $("s_wmpos").value;
   s.wmsize = num("s_wmsize",50,250,100); s.wmtext = $("s_wmtext").value || DEFAULT_SETTINGS.wmtext;
-  s.base = $("s_base").value.trim(); s.stripGps = $("s_gps").value === "1";
+  s.base = $("s_base").value.trim(); s.stripGps = $("s_gps").value === "1"; s.flatFix = $("s_flat").value === "1";
   const areas = $("s_areas").value.split("\n").map(x=>x.trim()).filter(Boolean);
   s.areas = areas.length ? areas : DEFAULT_AREAS.slice();
   saveSettingsLS();
@@ -513,7 +541,11 @@ async function addFiles(fileList){
     let t = exif ? exifTimeToMs(exif.dto) : null;
     const hasDate = !!t;
     if (!t){ t = f.lastModified || Date.now(); noDate++; }
-    const ph = { id: uid(), file, name: f.name, time: t, hasDate, exif, rot: 0, skip: false, thumb: null, portrait: false, heic: isHeic,
+    // When the phone is pointing down (floors, keys on a table) it often records "portrait" even though
+    // the shot was taken landscape. Lex shoots everything landscape, so by default undo that tag.
+    const o = exif ? exif.orientation : 1;
+    const autoRot = (S.settings.flatFix && (o === 6 || o === 8)) ? (o === 6 ? 270 : 90) : 0;
+    const ph = { id: uid(), file, name: f.name, time: t, hasDate, exif, rot: autoRot, autoTurned: !!autoRot, skip: false, thumb: null, portrait: false, heic: isHeic,
                  lat: exif && exif.lat != null ? exif.lat : null, lon: exif && exif.lon != null ? exif.lon : null };
     added.push(ph);
     done++; updateProgress(done, files.length, f.name);
@@ -591,6 +623,7 @@ function refreshFlag(p){
 function flagText(p){
   const finalPortrait = isPortraitAfterRot(p);
   if (p.skip) return "Skipped";
+  if (p.autoTurned) return "Auto-turned";
   if (finalPortrait && S.settings.portrait !== "keep") return "Portrait";
   return "";
 }
@@ -792,6 +825,17 @@ function render(){
   $("groups").innerHTML = html;
   if (S.sel) openPanel(S.sel, true);
 }
+function refreshHead(gid){
+  const box = document.querySelector(`.group[data-g="${gid}"]`); const m = S.meta[gid]; if (!box || !m) return;
+  const g = groups().find(x => x.id === gid); const amap = areaMap();
+  const pv = box.querySelector(".preview-name");
+  if (pv) pv.innerHTML = `Zip: <span class="mono">${esc(zipName(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, (g && firstArea(g, amap)) || "Kitchen", 1))}</span>`;
+  const jn = box.querySelector('input[data-act="jobNo"]'), pc = box.querySelector('input[data-act="postcode"]');
+  if (jn) jn.classList.toggle("bad", !m.jobNo);
+  if (pc){ pc.classList.toggle("bad", !propCode(m.postcode)); if (document.activeElement !== pc && pc.value.trim().toUpperCase() !== m.postcode) pc.value = m.postcode; }
+  const btn = box.querySelector('button[data-act="process"]');
+  if (btn) btn.disabled = !(m.jobNo && propCode(m.postcode));
+}
 function firstArea(g, amap){ for (const p of g.photos) if (amap[p.id]) return amap[p.id]; return ""; }
 function photoTile(p, amap){
   const isStart = S.areaStart[p.id] !== undefined;
@@ -799,7 +843,7 @@ function photoTile(p, amap){
   const label = isStart ? (a || "(no area)") : (a ? a : "No area yet");
   const cls = isStart ? "area" : (a ? "area cont" : "area none");
   const flag = flagText(p);
-  return `<div class="ph ${S.sel===p.id?"sel":""} ${p.skip?"skip":""}" data-id="${p.id}" title="${esc(p.name)}">
+  return `<div class="ph ${S.sel===p.id?"sel":""} ${S.multi.has(p.id)?"msel":""} ${p.skip?"skip":""}" data-id="${p.id}" title="${esc(p.name)}">
     <div class="imgbox"><img ${p.thumb?`src="${p.thumb}"`:""} style="transform:rotate(${p.rot}deg)${p.rot%180? ";max-width:75%;max-height:133%":""}" alt="" /></div>
     <div class="${cls}">${isStart?"▶ ":""}${esc(label)}</div>
     <div class="flag ${flag?"":"hidden"}">${esc(flag)}</div>
@@ -827,6 +871,12 @@ function openPanel(id, keep){
         <div><b>${esc(p.name)}</b> <span class="muted small">taken ${hhmm(p.time)}${p.hasDate?"":" (file date — no date in photo)"}</span></div>
         <button class="btn btn-ghost btn-sm" data-pact="close">Close &times;</button>
       </div>
+      ${S.multi.size > 1 ? `<div class="notice info" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${S.multi.size} photos selected</b> &mdash; rotate or skip them all at once:
+        <button class="btn btn-navy btn-sm" data-pact="rotL">&#8634; Left</button>
+        <button class="btn btn-navy btn-sm" data-pact="rotR">&#8635; Right</button>
+        <button class="btn btn-navy btn-sm" data-pact="rot180">&#8645; Upside down</button>
+        <button class="btn btn-ghost btn-sm" data-pact="skip">Skip / include</button>
+        <button class="btn btn-ghost btn-sm" data-pact="clearsel">Clear selection</button></div>` : `<div class="small muted" style="margin-top:6px">Tip: Shift-click another photo to select a run of photos, Ctrl-click to pick several &mdash; then rotate them all at once.</div>`}
       <div class="small muted" style="margin-top:4px">${isStart ? `This photo starts <b>${esc(cur)}</b>.` : (cur ? `Part of <b>${esc(cur)}</b>. Pick an area to start a new room here.` : "Pick the area this room starts with:")}</div>
       <div class="chips">
         ${S.settings.areas.map(a => `<button class="chip ${isStart && cur===a ? "on":""}" data-area="${esc(a)}">${esc(a)}</button>`).join("")}
@@ -839,6 +889,7 @@ function openPanel(id, keep){
       <div class="prow">
         <button class="btn btn-ghost btn-sm" data-pact="rotL">&#8634; Rotate left</button>
         <button class="btn btn-ghost btn-sm" data-pact="rotR">&#8635; Rotate right</button>
+        <button class="btn btn-ghost btn-sm" data-pact="rot180">&#8645; Upside down</button>
         <button class="btn btn-ghost btn-sm" data-pact="skip">${p.skip ? "Include photo" : "Skip photo"}</button>
         ${isFirstOfGroup ? "" : `<button class="btn btn-ghost btn-sm" data-pact="split">Start a new job from here</button>`}
         <span class="muted small">&larr; &rarr; to move</span>
@@ -881,27 +932,35 @@ function drawDoor(ctx, x, y, h, color){
   ctx.restore();
   return 20 * s; // width used
 }
-function drawWatermark(ctx, W, H, year){
+function drawWatermark(ctx, W, H, year, rect){
+  // rect = where the photo actually sits (inside any canvas bars), so the mark never runs onto the background
+  const R = rect || { x:0, y:0, w:W, h:H };
   const st = S.settings;
   const scale = st.wmsize / 100;
-  const th = Math.max(12, Math.round(H * 0.028 * scale));      // text height
-  const pad = Math.round(th * 0.9);
+  let th = Math.max(12, Math.round(R.h * 0.028 * scale));      // text height, based on the photo's own height
   const text = (st.wmtext || "").replace("{year}", year);
   ctx.save();
-  ctx.font = `600 ${th}px 'Segoe UI', Arial, sans-serif`;
-  const tw = ctx.measureText(text).width;
-  let logoW, logoH = Math.round(th * 1.9);
-  if (S.logoImg){ logoW = Math.round(logoH * S.logoImg.width / S.logoImg.height); }
-  else { logoW = Math.round(th * 1.25); logoH = Math.round(th * 1.75); }
-  const gap = Math.round(th * 0.5);
-  const boxW = logoW + gap + tw, boxH = Math.max(logoH, th);
+  let tw, logoW, logoH, gap, boxW, boxH, pad;
+  const measure = () => {
+    ctx.font = `600 ${th}px 'Segoe UI', Arial, sans-serif`;
+    tw = ctx.measureText(text).width;
+    logoH = Math.round(th * 1.9);
+    if (S.logoImg){ logoW = Math.round(logoH * S.logoImg.width / S.logoImg.height); }
+    else { logoW = Math.round(th * 1.25); logoH = Math.round(th * 1.75); }
+    gap = Math.round(th * 0.5); pad = Math.round(th * 0.9);
+    boxW = logoW + gap + tw; boxH = Math.max(logoH, th);
+  };
+  measure();
+  // shrink to fit narrow photos (e.g. a real portrait shot on a landscape canvas)
+  while (boxW + 2*pad > R.w && th > 10){ th = Math.floor(th * 0.9); measure(); }
   let x, y;
+  const L = R.x, T = R.y, Rt = R.x + R.w, B = R.y + R.h;
   switch (st.wmpos){
-    case "bl": x = pad; y = H - pad - boxH; break;
-    case "tr": x = W - pad - boxW; y = pad; break;
-    case "tl": x = pad; y = pad; break;
-    case "bc": x = (W - boxW)/2; y = H - pad - boxH; break;
-    default:   x = W - pad - boxW; y = H - pad - boxH;
+    case "bl": x = L + pad; y = B - pad - boxH; break;
+    case "tr": x = Rt - pad - boxW; y = T + pad; break;
+    case "tl": x = L + pad; y = T + pad; break;
+    case "bc": x = L + (R.w - boxW)/2; y = B - pad - boxH; break;
+    default:   x = Rt - pad - boxW; y = B - pad - boxH;
   }
   ctx.globalAlpha = 0.9;
   ctx.shadowColor = "rgba(0,0,0,0.65)"; ctx.shadowBlur = Math.round(th * 0.35); ctx.shadowOffsetY = 1;
@@ -941,7 +1000,7 @@ async function processPhoto(p){
   ctx.drawImage(bmp, -bw/2, -bh/2, bw, bh);
   ctx.restore();
   bmp.close && bmp.close();
-  drawWatermark(ctx, W, H, new Date(p.time).getFullYear());
+  drawWatermark(ctx, W, H, new Date(p.time).getFullYear(), { x:(W-dw)/2, y:(H-dh)/2, w:dw, h:dh });
   const blob = await new Promise(r => c.toBlob(r, "image/jpeg", st.quality / 100));
   let buf = await blob.arrayBuffer();
   if (p.exif){
@@ -1063,7 +1122,7 @@ function wire(){
   $("btnClear").onclick = () => {
     if (!confirm("Clear all photos from the tool? (Your original files aren't touched.)")) return;
     S.photos.forEach(p => p.thumb && URL.revokeObjectURL(p.thumb));
-    S.photos = []; S.breaks = new Set(); S.areaStart = {}; S.meta = {}; S.manualBreaks = []; S.removedBreaks = [];
+    S.photos = []; S.breaks = new Set(); S.areaStart = {}; S.multi.clear(); S.meta = {}; S.manualBreaks = []; S.removedBreaks = [];
     $("loadMsg").classList.add("hidden"); $("heicMsg").classList.add("hidden");
     closePanel(); render();
   };
@@ -1096,7 +1155,23 @@ function wire(){
 
   $("groups").addEventListener("click", e => {
     const tile = e.target.closest(".ph");
-    if (tile){ openPanel(tile.dataset.id); return; }
+    if (tile){
+      const id = tile.dataset.id;
+      if (e.shiftKey && S.sel){
+        // select the range from the current photo to this one
+        const a = S.photos.findIndex(p => p.id === S.sel), b = S.photos.findIndex(p => p.id === id);
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        for (let i = lo; i <= hi; i++) S.multi.add(S.photos[i].id);
+        render(); openPanel(id, true); return;
+      }
+      if (e.ctrlKey || e.metaKey){
+        if (S.sel && !S.multi.size) S.multi.add(S.sel);
+        S.multi.has(id) ? S.multi.delete(id) : S.multi.add(id);
+        render(); openPanel(id, true); return;
+      }
+      if (S.multi.size){ S.multi.clear(); render(); }
+      openPanel(id); return;
+    }
     const b = e.target.closest("[data-act]"); if (!b) return;
     const gid = b.dataset.g, act = b.dataset.act;
     if (act === "process") processGroup(gid);
@@ -1111,11 +1186,20 @@ function wire(){
     if (act === "jobNo"){
       m.jobNo = el.value.trim().toUpperCase(); m.how = "manual"; m.note = "";
       const j = S.jobs.find(x => (x.jobNo||"").toUpperCase() === m.jobNo);
-      if (j){ m.jobId = j.id; m.postcode = j.postcode || m.postcode; } else m.jobId = "";
-      render();
+      if (j){ m.jobId = j.id; if (!m.postcode) m.postcode = j.postcode || ""; } else m.jobId = "";
+      refreshHead(el.dataset.g);
     }
-    if (act === "postcode"){ m.postcode = el.value.trim().toUpperCase(); m.how = "manual"; m.note = ""; render(); }
-    if (act === "date"){ m.date = el.value; m.dateManual = true; render(); }
+    if (act === "postcode"){ m.postcode = el.value.trim().toUpperCase(); m.how = "manual"; m.note = ""; refreshHead(el.dataset.g); }
+    if (act === "date"){ m.date = el.value; m.dateManual = true; refreshHead(el.dataset.g); }
+  });
+  // live update while typing, without redrawing the page (so the cursor stays where you're typing)
+  $("groups").addEventListener("input", e => {
+    const el = e.target.closest("input[data-act]"); if (!el) return;
+    const m = S.meta[el.dataset.g]; if (!m) return;
+    if (el.dataset.act === "jobNo") m.jobNo = el.value.trim().toUpperCase();
+    if (el.dataset.act === "postcode") m.postcode = el.value.trim().toUpperCase();
+    if (el.dataset.act === "jobNo" || el.dataset.act === "postcode"){ m.how = "manual"; }
+    refreshHead(el.dataset.g);
   });
   $("panel").addEventListener("click", e => {
     const chip = e.target.closest("[data-area]");
@@ -1126,9 +1210,13 @@ function wire(){
     if (a === "close") closePanel();
     if (a === "custom") setArea(p.id, $("customArea").value);
     if (a === "unmark"){ delete S.areaStart[p.id]; render(); }
-    if (a === "rotL"){ p.rot = (p.rot + 270) % 360; render(); }
-    if (a === "rotR"){ p.rot = (p.rot + 90) % 360; render(); }
-    if (a === "skip"){ p.skip = !p.skip; render(); }
+    const targets = S.multi.size > 1 ? S.photos.filter(x => S.multi.has(x.id)) : [p];
+    const turn = d => { targets.forEach(x => { x.rot = (x.rot + d) % 360; x.autoTurned = false; }); render(); };
+    if (a === "rotL") turn(270);
+    if (a === "rotR") turn(90);
+    if (a === "rot180") turn(180);
+    if (a === "clearsel"){ S.multi.clear(); render(); }
+    if (a === "skip"){ const v = !targets[0].skip; targets.forEach(x => x.skip = v); render(); }
     if (a === "split"){ splitAt(p.id); }
   });
   $("panel").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "customArea"){ setArea(S.sel, e.target.value); } });
@@ -1138,7 +1226,10 @@ function wire(){
     if (e.key === "ArrowRight"){ e.preventDefault(); moveSel(1); }
     else if (e.key === "ArrowLeft"){ e.preventDefault(); moveSel(-1); }
     else if (e.key === "Escape") closePanel();
-    else if ((e.key === "r" || e.key === "R") && p){ p.rot = (p.rot + 90) % 360; render(); }
+    else if ((e.key === "r" || e.key === "R") && p){
+      const targets = S.multi.size > 1 ? S.photos.filter(x => S.multi.has(x.id)) : [p];
+      targets.forEach(x => { x.rot = (x.rot + 90) % 360; x.autoTurned = false; }); render();
+    }
     else if ((e.key === "s" || e.key === "S") && p){ p.skip = !p.skip; render(); }
   });
   window.addEventListener("storage", e => { if (e.key === LS_JOBS){ loadJobs(); refreshLocations(); } });
