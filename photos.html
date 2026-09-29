@@ -1040,7 +1040,7 @@ async function processGroup(gid, opts){
   const keep = all.flatMap(x => x.photos).filter(p => !p.skip);
   const noArea = keep.filter(p => !amap[p.id]).length;
   if (noArea && !(opts && opts.quiet)){
-    if (!confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll go in a folder called "Unsorted". Carry on?`)) return;
+    if (!confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll be named "Unsorted". Carry on?`)) return;
   }
   // folder order = order areas first appear
   const order = [];
@@ -1052,9 +1052,8 @@ async function processGroup(gid, opts){
   for (const p of keep){
     const a = amap[p.id] || "Unsorted";
     seq[a] = (seq[a] || 0) + 1;
-    const folder = `${pad2(order.indexOf(a) + 1)} ${safeName(a)}`;
     const buf = await processPhoto(p);
-    zip.file(`${folder}/${fileName(m, a, seq[a])}`, buf, { binary:true, date: new Date(p.time) });
+    zip.file(fileName(m, a, seq[a])   /* no folders — room is in the file name (Lex, 29 Sept) */, buf, { binary:true, date: new Date(p.time) });
     i++; updateProgress(i, keep.length, `${m.jobNo}: ${a} ${pad2(seq[a])}`);
     await new Promise(r => setTimeout(r, 0));
   }
@@ -1090,7 +1089,7 @@ async function processAll(){
   if (notReady.length){ alert(`${notReady.length} job${notReady.length===1?" is":"s are"} missing a job number or postcode.`); return; }
   const amap = areaMap();
   const noArea = S.photos.filter(p => !p.skip && !amap[p.id]).length;
-  if (noArea && !confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll go in "Unsorted" folders. Carry on?`)) return;
+  if (noArea && !confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll be named "Unsorted". Carry on?`)) return;
   const total = S.photos.filter(p => !p.skip).length;
   showProgress("Processing all jobs", 0, total);
   for (const g of gs){
