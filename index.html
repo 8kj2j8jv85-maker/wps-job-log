@@ -62,7 +62,10 @@
   .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:6px; }
 
   /* status strip */
-  .status-strip{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:20px 0; }
+  .status-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr)); gap:10px; margin:20px 0; }
+  .due{ display:block; margin-top:4px; font-size:11.5px; font-weight:600; white-space:nowrap; }
+  .due-ok{ color:var(--ink-soft); } .due-soon{ color:#8A5A00; } .due-late{ color:#B42318; }
+  tr.row-late td{ background:#FDF0EE; }
   .status-card{ text-align:left; border:1.5px solid var(--line); background:var(--white); border-radius:9px; padding:12px 14px; cursor:pointer; font-family:inherit; }
   .status-card .num{ font-size:24px; font-weight:700; font-family:'Zilla Slab',serif; }
   .status-card .lbl{ font-size:12.5px; font-weight:600; color:var(--ink-soft); }
@@ -193,11 +196,16 @@ const TYPES = [
 ];
 
 const STATUSES = [
-  { code:"booked",      label:"Booked",      fg:"var(--coral-dark)", bg:"var(--coral-bg)" },
-  { code:"completed",   label:"Completed",   fg:"var(--peri)",       bg:"var(--peri-bg)" },
-  { code:"report_sent", label:"Report sent", fg:"var(--brand)",      bg:"var(--sky)" },
-  { code:"archived",    label:"Archived",    fg:"var(--stone)",      bg:"var(--stone-bg)" },
+  { code:"booked",     label:"Booked",     fg:"var(--coral-dark)", bg:"var(--coral-bg)" },
+  { code:"processing", label:"Processing", fg:"#8A5A00",           bg:"#FFF1D0" },
+  { code:"completed",  label:"Completed",  fg:"var(--peri)",       bg:"var(--peri-bg)" },
+  { code:"sent",       label:"Sent",       fg:"var(--brand)",      bg:"var(--sky)" },
+  { code:"signed",     label:"Signed",     fg:"#2E6B45",           bg:"#E0F0E6" },
+  { code:"archived",   label:"Archived",   fg:"var(--stone)",      bg:"var(--stone-bg)" },
 ];
+// Report turnaround targets (hours from the visit) — change these to match what you promise agents
+const TURNAROUND_HOURS = { CO:48, MTI:72, CLN:72, ICI:72, SOC:72 };
+const DUE_STATUSES = ["booked","processing","completed"];   // report not yet sent
 
 const DEFAULT_CLIENTS = [
   { name:"Winkworth - Bow", contactName:"", contactPhone:"", contactEmail:"" },
@@ -245,6 +253,7 @@ function normalizeClients(arr){
 }
 function load(){
   try { const j = localStorage.getItem(LS_JOBS); if (j) state.jobs = JSON.parse(j); } catch(e){}
+  state.jobs.forEach(j=>{ if (j.status==="report_sent") j.status = "sent"; });
   try {
     const c = localStorage.getItem(LS_CLIENTS);
     if (c){ const norm = normalizeClients(JSON.parse(c)); if (norm) state.clients = norm; }
@@ -288,6 +297,34 @@ function monthLabel(key){
   return new Date(y,m-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
 }
 function statusMeta(c){ return STATUSES.find(s=>s.code===c) || STATUSES[0]; }
+// ---- report due / turnaround
+function visitTime(j){
+  if (!j.date) return null;
+  const t = new Date(j.date+"T"+(j.time||"17:00")+":00");
+  return isNaN(t) ? null : t;
+}
+function reportDue(j){
+  if (!DUE_STATUSES.includes(j.status)) return null;
+  const v = visitTime(j);
+  const start = j.processingAt ? new Date(j.processingAt) : v;
+  if (!start) return null;
+  if (j.status==="booked" && (!v || v > new Date())) return null;   // visit hasn't happened yet
+  const hrs = TURNAROUND_HOURS[j.type] || 48;
+  return new Date(start.getTime() + hrs*3600000);
+}
+function dueInfo(j){
+  const d = reportDue(j); if (!d) return null;
+  const mins = Math.round((d - new Date())/60000);
+  const fmt = m => { const a=Math.abs(m); return a>=1440 ? Math.round(a/1440)+"d" : a>=60 ? Math.round(a/60)+"h" : a+"m"; };
+  if (mins < 0) return { cls:"due-late", late:true, text:"Report overdue "+fmt(mins), due:d };
+  if (mins < 360) return { cls:"due-soon", late:false, text:"Report due in "+fmt(mins), due:d };
+  return { cls:"due-ok", late:false, text:"Report due "+d.toLocaleString("en-GB",{weekday:"short",hour:"2-digit",minute:"2-digit"}), due:d };
+}
+function setJobStatus(j, code){
+  j.status = code;
+  if (code==="processing" && !j.processingAt) j.processingAt = new Date().toISOString();
+  if (code==="booked") delete j.processingAt;
+}
 function typeMeta(c){ return TYPES.find(t=>t.code===c) || TYPES[TYPES.length-1]; }
 function esc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function fullAddress(j){ return [j.address, j.town, j.postcode].filter(Boolean).join(", "); }
@@ -302,7 +339,7 @@ function monthOptions(){
 
 function baseFilteredJobs(){
   return state.jobs
-    .filter(j=> state.statusFilter==="all" || j.status===state.statusFilter)
+    .filter(j=> state.statusFilter==="all" || (state.statusFilter==="overdue" ? !!(dueInfo(j)&&dueInfo(j).late) : j.status===state.statusFilter))
     .filter(j=> state.typeFilter==="all" || j.type===state.typeFilter)
     .filter(j=> state.clientFilter==="all" || j.client===state.clientFilter)
     .filter(j=>{
@@ -316,7 +353,12 @@ function baseFilteredJobs(){
 function filteredJobs(){
   return baseFilteredJobs()
     .filter(j=> state.monthFilter==="all" || monthKey(j.date)===state.monthFilter)
-    .sort((a,b)=> (a.date<b.date?1:a.date>b.date?-1:0));
+    .sort((a,b)=>{
+      const da = reportDue(a), db = reportDue(b);
+      if (da && db) return da - db;
+      if (da) return -1; if (db) return 1;
+      return (a.date<b.date?1:a.date>b.date?-1:0);
+    });
 }
 
 // ---------------------------------------------------------------- calendar helpers
@@ -476,7 +518,8 @@ function submitForm(){
     notes: g("f_notes").value,
   };
   const idx = state.jobs.findIndex(x=>x.id===job.id);
-  if (idx>=0){ job.gcalEventId = state.jobs[idx].gcalEventId; state.jobs[idx] = job; } else state.jobs.push(job);
+  if (idx>=0){ job.gcalEventId = state.jobs[idx].gcalEventId; if (state.jobs[idx].processingAt) job.processingAt = state.jobs[idx].processingAt; state.jobs[idx] = job; } else state.jobs.push(job);
+  setJobStatus(job, job.status);
   saveJobs();
   if (state.fromQueueId){ markQueueDone(state.fromQueueId, "added"); state.fromQueueId = null; }
   state.editing = null;
@@ -497,8 +540,9 @@ function cycleStatus(id){
   const j = state.jobs.find(x=>x.id===id);
   if (!j) return;
   const order = STATUSES.map(s=>s.code);
-  const next = order[(order.indexOf(j.status)+1) % order.length];
-  j.status = next;
+  const idx = order.indexOf(j.status);
+  if (idx >= order.length-1) return;               // archived is the end
+  setJobStatus(j, order[idx+1]);
   saveJobs();
   render();
 }
@@ -923,7 +967,7 @@ function render(){
       ${state.editing ? renderForm() : ""}
       ${renderToolbar()}
       ${state.view === "calendar" ? renderCalendar() : renderTable()}
-      <div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along &middot; data is stored only in this browser</div>
+      <div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed) &middot; data is stored only in this browser</div>
     </div>
   `;
 }
@@ -972,7 +1016,9 @@ function renderUtilityRow(){
 
 function renderStatusStrip(){
   const counts = {booked:0,completed:0,report_sent:0,archived:0};
+  STATUSES.forEach(s=>{ if (counts[s.code]===undefined) counts[s.code]=0; });
   state.jobs.forEach(j=>{ if (counts[j.status]!==undefined) counts[j.status]++; });
+  const overdue = state.jobs.filter(j=>{ const d=dueInfo(j); return d && d.late; }).length;
   return `<div class="status-strip">
     ${STATUSES.map(s=>`
       <button class="status-card" style="border-color:${state.statusFilter===s.code?s.fg:'var(--line)'}; background:${state.statusFilter===s.code?s.bg:'var(--white)'};"
@@ -980,6 +1026,10 @@ function renderStatusStrip(){
         <div class="num" style="color:${s.fg}">${counts[s.code]||0}</div>
         <div class="lbl">${s.label}</div>
       </button>`).join("")}
+      <button class="status-card" style="border-color:${state.statusFilter==='overdue'?'#B42318':'var(--line)'}; background:${state.statusFilter==='overdue'?'#FDF0EE':'var(--white)'};" onclick="setStatusFilter('overdue')">
+      <div class="num" style="color:${overdue?'#B42318':'var(--stone)'}">${overdue}</div>
+      <div class="lbl">Reports overdue</div>
+    </button>
   </div>`;
 }
 
@@ -1217,15 +1267,15 @@ function renderTable(){
       </tr></thead>
       <tbody>
         ${jobs.map(j=>{
-          const sm = statusMeta(j.status), tm = typeMeta(j.type);
-          return `<tr>
+          const sm = statusMeta(j.status), tm = typeMeta(j.type), di = dueInfo(j);
+          return `<tr class="${di&&di.late?'row-late':''}">
             <td class="mono">${esc(j.jobNo)}</td>
             <td><span class="type-badge">${esc(tm.label)}</span></td>
             <td>${esc(j.client)||"—"}</td>
             <td style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
             <td>${formatDate(j.date)}</td>
             <td>${esc(j.time)||"—"}</td>
-            <td><button class="pill" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button></td>
+            <td><button class="pill" title="Click to move to the next stage" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
             <td>
               <div class="row-actions">
                 <button class="icon-btn" title="Edit" onclick="openEdit('${j.id}')">
