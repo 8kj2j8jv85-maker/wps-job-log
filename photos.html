@@ -81,6 +81,10 @@
   .ph{ position:relative; border-radius:7px; overflow:hidden; background:var(--paper-deep); cursor:pointer; border:2px solid transparent; aspect-ratio: 4/3; }
   .ph.sel{ border-color:var(--coral); }
   .ph.skip{ opacity:.3; }
+  .ph.skip .rm{ opacity:1; }
+  .ph .rm{ position:absolute; right:4px; top:24px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(195,79,52,.92); color:#fff; font-size:15px; line-height:1; cursor:pointer; opacity:0; transition:opacity .1s; display:flex; align-items:center; justify-content:center; padding:0; }
+  .ph:hover .rm{ opacity:1; }
+  .ph.msel .rm{ top:46px; }
   .ph.msel{ border-color:var(--peri); box-shadow:0 0 0 2px var(--peri); }
   .ph.msel::after{ content:"✓"; position:absolute; right:4px; top:24px; background:var(--peri); color:#fff; font-size:11px; font-weight:700; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; }
   .ph .imgbox{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
@@ -164,7 +168,7 @@
     </div>
     <div class="muted small" style="margin-top:8px">
       How it works: photos are split into jobs by the gaps between them, and each set is matched to the Job Log by <b>where</b> the photos were taken. Check each job, then click the <b>first photo of each room</b> and pick the area &mdash; it carries on until the next room you mark.
-      Keys in the photo panel: <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> move, <span class="kbd">R</span> rotate, <span class="kbd">S</span> skip, <span class="kbd">Esc</span> close. <span class="kbd">Shift</span>-click selects a run of photos to rotate together.
+      Keys in the photo panel: <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> move, <span class="kbd">R</span> rotate, <span class="kbd">Del</span> remove photo, <span class="kbd">Esc</span> close. <span class="kbd">Shift</span>-click selects a run of photos to rotate together.
     </div>
     <div id="groups"></div>
   </div>
@@ -636,7 +640,7 @@ function refreshFlag(p){
 }
 function flagText(p){
   const finalPortrait = isPortraitAfterRot(p);
-  if (p.skip) return "Skipped";
+  if (p.skip) return "Removed";
   if (p.autoTurned) return "Auto-turned";
   if (finalPortrait && S.settings.portrait !== "keep") return "Portrait";
   return "";
@@ -776,7 +780,7 @@ function render(){
   const gs = groups();
   const amap = areaMap();
   const skipped = S.photos.filter(p=>p.skip).length;
-  $("summary").innerHTML = `<b>${S.photos.length}</b> photos &middot; <b>${gs.length}</b> job${gs.length===1?"":"s"}` + (skipped ? ` &middot; ${skipped} skipped` : "") +
+  $("summary").innerHTML = `<b>${S.photos.length}</b> photos &middot; <b>${gs.length}</b> job${gs.length===1?"":"s"}` + (skipped ? ` &middot; ${skipped} removed` : "") +
     (S.jobs.length ? ` &middot; <span class="pill pill-info">Linked to ${esc(S.jobsSource)}</span>` : "");
   let html = "";
   gs.forEach((g, gi) => {
@@ -862,6 +866,7 @@ function photoTile(p, amap){
     <div class="${cls}">${isStart?"▶ ":""}${esc(label)}</div>
     <div class="flag ${flag?"":"hidden"}">${esc(flag)}</div>
     <div class="tm">${hhmm(p.time)}${p.hasDate?"":"*"}</div>
+    <button class="rm" data-rm="${p.id}" title="${p.skip ? "Put back" : "Remove from the set"}">${p.skip ? "↺" : "×"}</button>
   </div>`;
 }
 
@@ -889,7 +894,7 @@ function openPanel(id, keep){
         <button class="btn btn-navy btn-sm" data-pact="rotL">&#8634; Left</button>
         <button class="btn btn-navy btn-sm" data-pact="rotR">&#8635; Right</button>
         <button class="btn btn-navy btn-sm" data-pact="rot180">&#8645; Upside down</button>
-        <button class="btn btn-ghost btn-sm" data-pact="skip">Skip / include</button>
+        <button class="btn btn-ghost btn-sm" data-pact="skip">Remove / put back</button>
         <button class="btn btn-ghost btn-sm" data-pact="clearsel">Clear selection</button></div>` : `<div class="small muted" style="margin-top:6px">Tip: Shift-click another photo to select a run of photos, Ctrl-click to pick several &mdash; then rotate them all at once.</div>`}
       <div class="small muted" style="margin-top:4px">${isStart ? `This photo starts <b>${esc(cur)}</b>.` : (cur ? `Part of <b>${esc(cur)}</b>. Pick an area to start a new room here.` : "Pick the area this room starts with:")}</div>
       <div class="chips">
@@ -904,7 +909,7 @@ function openPanel(id, keep){
         <button class="btn btn-ghost btn-sm" data-pact="rotL">&#8634; Rotate left</button>
         <button class="btn btn-ghost btn-sm" data-pact="rotR">&#8635; Rotate right</button>
         <button class="btn btn-ghost btn-sm" data-pact="rot180">&#8645; Upside down</button>
-        <button class="btn btn-ghost btn-sm" data-pact="skip">${p.skip ? "Include photo" : "Skip photo"}</button>
+        <button class="btn btn-ghost btn-sm" data-pact="skip">${p.skip ? "Put photo back" : "Remove photo (Del)"}</button>
         ${isFirstOfGroup ? "" : `<button class="btn btn-ghost btn-sm" data-pact="split">Start a new job from here</button>`}
         <span class="muted small">&larr; &rarr; to move</span>
       </div>
@@ -1168,6 +1173,12 @@ function wire(){
   };
 
   $("groups").addEventListener("click", e => {
+    const rm = e.target.closest("[data-rm]");
+    if (rm){
+      const p = S.photos.find(x => x.id === rm.dataset.rm);
+      if (p){ p.skip = !p.skip; render(); }
+      return;
+    }
     const tile = e.target.closest(".ph");
     if (tile){
       const id = tile.dataset.id;
@@ -1243,6 +1254,12 @@ function wire(){
     else if ((e.key === "r" || e.key === "R") && p){
       const targets = S.multi.size > 1 ? S.photos.filter(x => S.multi.has(x.id)) : [p];
       targets.forEach(x => { x.rot = (x.rot + 90) % 360; x.autoTurned = false; }); render();
+    }
+    else if ((e.key === "Delete" || e.key === "Backspace") && p){
+      e.preventDefault();
+      const targets = S.multi.size > 1 ? S.photos.filter(x => S.multi.has(x.id)) : [p];
+      const v = !targets[0].skip; targets.forEach(x => x.skip = v);
+      if (targets.length === 1 && v){ render(); moveSel(1); } else render();
     }
     else if ((e.key === "s" || e.key === "S") && p){ p.skip = !p.skip; render(); }
   });
