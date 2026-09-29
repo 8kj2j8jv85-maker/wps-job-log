@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wellington Property Services — Photo Tool</title>
+<style>
+  :root{
+    color-scheme: light only;
+    --paper:#F4F7FB; --paper-deep:#E7EEF6;
+    --ink:#1F2D3A; --ink-soft:#5C6B7D;
+    --brand:#1F2D3A; --brand-dark:#141E27;
+    --peri:#4A5B8A; --peri-bg:#E7EAF3;
+    --coral:#E0684B; --coral-dark:#C34F34; --coral-bg:#FBE7E1;
+    --sky:#C9D6E8;
+    --line:#D7DEE8; --line-soft:#E7ECF3;
+    --stone:#7A8493; --stone-bg:#E9ECF0;
+    --green:#2F7D5B; --green-bg:#E2F1EA;
+    --white:#FFFFFF;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:'IBM Plex Sans','Segoe UI',Arial,sans-serif; font-size:14px; }
+  .serif{ font-family:'Zilla Slab', Georgia, serif; }
+  .mono{ font-family:'IBM Plex Mono','Consolas',monospace; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 22px 80px; }
+
+  .header-band{ background:var(--brand); padding:18px 0; }
+  .header-inner{ max-width:1180px; margin:0 auto; padding:0 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; }
+  .brand-row{ display:flex; align-items:center; gap:14px; }
+  .logo-badge{ width:46px; height:46px; border-radius:11px; background:var(--white); display:flex; align-items:center; justify-content:center; }
+  .brand-name{ display:flex; align-items:baseline; gap:9px; }
+  .brand-name .name{ font-size:22px; font-weight:600; color:var(--white); }
+  .brand-name .sub{ font-size:10.5px; font-weight:600; color:var(--sky); letter-spacing:0.14em; }
+  .tool-tag{ font-size:12px; color:var(--sky); margin-top:2px; opacity:.85; }
+  .hdr-links a{ color:var(--sky); font-size:13px; font-weight:600; text-decoration:none; margin-left:16px; }
+  .hdr-links a:hover{ color:var(--white); }
+
+  .btn{ display:inline-flex; align-items:center; gap:7px; border:none; border-radius:7px; padding:9px 15px; font-weight:600; font-size:13.5px; cursor:pointer; font-family:inherit; }
+  .btn:disabled{ opacity:.45; cursor:default; }
+  .btn-coral{ background:var(--coral); color:var(--white); }
+  .btn-coral:hover:not(:disabled){ background:var(--coral-dark); }
+  .btn-navy{ background:var(--brand); color:var(--white); }
+  .btn-ghost{ background:var(--white); border:1px solid var(--line); color:var(--ink-soft); }
+  .btn-ghost:hover:not(:disabled){ background:var(--line-soft); }
+  .btn-sm{ padding:5px 10px; font-size:12.5px; border-radius:6px; }
+
+  .card{ background:var(--white); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-top:16px; }
+  h2{ font-size:16px; margin:0 0 4px; }
+  .muted{ color:var(--ink-soft); }
+  .small{ font-size:12.5px; }
+
+  .drop{ margin-top:20px; border:2px dashed var(--sky); border-radius:12px; background:var(--white); padding:34px 20px; text-align:center; cursor:pointer; }
+  .drop.over{ border-color:var(--coral); background:var(--coral-bg); }
+  .drop .big{ font-size:18px; font-weight:600; margin-bottom:6px; }
+
+  .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:16px; }
+  .toolbar .spacer{ flex:1; }
+  .pill{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .pill-ok{ background:var(--green-bg); color:var(--green); }
+  .pill-warn{ background:var(--coral-bg); color:var(--coral-dark); }
+  .pill-info{ background:var(--peri-bg); color:var(--peri); }
+
+  .notice{ margin-top:14px; padding:10px 14px; border-radius:8px; background:var(--coral-bg); color:var(--coral-dark); font-size:13px; }
+  .notice.info{ background:var(--peri-bg); color:var(--peri); }
+
+  /* group card */
+  .group{ background:var(--white); border:1px solid var(--line); border-radius:12px; margin-top:18px; overflow:hidden; }
+  .ghead{ padding:14px 16px; border-bottom:1px solid var(--line-soft); display:grid; grid-template-columns: 1fr auto; gap:10px; }
+  .gtitle{ font-weight:600; font-size:15px; }
+  .gfields{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; align-items:flex-end; }
+  .field label{ display:block; font-size:11px; font-weight:600; color:var(--ink-soft); letter-spacing:.04em; text-transform:uppercase; margin-bottom:3px; }
+  .field input, .field select{ font-family:inherit; font-size:13.5px; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--white); color:var(--ink); }
+  .field input.bad{ border-color:var(--coral); background:#FFF6F3; }
+  .gactions{ display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+  .preview-name{ font-size:12px; color:var(--ink-soft); margin-top:8px; word-break:break-all; }
+  .linkrow{ margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .linkrow input{ flex:1; min-width:260px; font-family:'IBM Plex Mono',Consolas,monospace; font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px,1fr)); gap:8px; padding:14px 16px 16px; }
+  .ph{ position:relative; border-radius:7px; overflow:hidden; background:var(--paper-deep); cursor:pointer; border:2px solid transparent; aspect-ratio: 4/3; }
+  .ph.sel{ border-color:var(--coral); }
+  .ph.skip{ opacity:.3; }
+  .ph .imgbox{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .ph img{ max-width:100%; max-height:100%; display:block; transition:transform .15s; }
+  .ph .tm{ position:absolute; right:4px; bottom:4px; background:rgba(20,30,39,.72); color:#fff; font-size:10.5px; padding:1px 5px; border-radius:4px; }
+  .ph .area{ position:absolute; left:0; top:0; right:0; background:var(--coral); color:#fff; font-size:11px; font-weight:600; padding:3px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ph .area.cont{ background:rgba(74,91,138,.78); font-weight:500; }
+  .ph .area.none{ background:rgba(122,132,147,.85); }
+  .ph .flag{ position:absolute; left:4px; bottom:4px; background:var(--coral); color:#fff; font-size:10px; padding:1px 5px; border-radius:4px; }
+
+  /* photo panel */
+  .panel{ position:fixed; left:0; right:0; bottom:0; background:var(--white); border-top:3px solid var(--coral); box-shadow:0 -6px 24px rgba(20,30,39,.18); padding:12px 22px 16px; z-index:20; }
+  .panel-inner{ max-width:1180px; margin:0 auto; display:grid; grid-template-columns: 220px 1fr; gap:18px; }
+  .panel .pv{ width:220px; height:165px; background:var(--paper-deep); border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .panel .pv img{ max-width:100%; max-height:100%; transition:transform .15s; }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; max-height:120px; overflow:auto; }
+  .chip{ border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:999px; padding:5px 11px; font-size:12.5px; cursor:pointer; font-family:inherit; }
+  .chip:hover{ border-color:var(--peri); background:var(--peri-bg); }
+  .chip.on{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .prow{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  .kbd{ font-family:'IBM Plex Mono',Consolas,monospace; font-size:11px; background:var(--stone-bg); border-radius:4px; padding:1px 5px; }
+
+  /* settings */
+  .settings-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap:12px 18px; margin-top:10px; }
+  .settings-grid .field input, .settings-grid .field select{ width:100%; }
+  textarea{ width:100%; min-height:150px; font-family:inherit; font-size:13px; padding:8px; border:1px solid var(--line); border-radius:6px; }
+
+  .progress{ position:fixed; inset:0; background:rgba(20,30,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; }
+  .progress .box{ background:#fff; border-radius:12px; padding:22px 26px; width:min(440px,90vw); }
+  .bar{ height:10px; background:var(--line-soft); border-radius:999px; overflow:hidden; margin-top:12px; }
+  .bar > div{ height:100%; background:var(--coral); width:0; transition:width .15s; }
+
+  .hidden{ display:none !important; }
+  @media (max-width:700px){
+    .panel-inner{ grid-template-columns:1fr; }
+    .panel .pv{ width:100%; }
+    .ghead{ grid-template-columns:1fr; }
+    .gactions{ align-items:flex-start; flex-direction:row; flex-wrap:wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="header-band">
+  <div class="header-inner">
+    <div class="brand-row">
+      <div class="logo-badge">
+        <svg width="24" height="24" viewBox="0 0 40 40" fill="none"><path d="M12 34V18C12 12.477 16.477 8 22 8C27.523 8 32 12.477 32 18V34" stroke="#1F2D3A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="brand-name"><span class="serif name">Wellington</span><span class="sub">PROPERTY SERVICES</span></div>
+        <div class="tool-tag">WPS Automation &middot; Photo Tool</div>
+      </div>
+    </div>
+    <div class="hdr-links">
+      <a href="./">Job Log</a>
+      <a href="#" id="lnkSettings">Settings</a>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="jobsNote" class="notice info hidden"></div>
+
+  <div id="dropZone" class="drop">
+    <div class="big">Drop a day's photos here</div>
+    <div class="muted">or click to choose them. A whole Send Anywhere batch is fine &mdash; they'll be split into jobs by the time they were taken.</div>
+    <div class="muted small" style="margin-top:8px">Your original photos are never changed. Everything happens on this computer.</div>
+    <input id="fileInput" type="file" accept="image/jpeg,image/heic,image/heif,.jpg,.jpeg,.heic,.heif" multiple class="hidden" />
+  </div>
+
+  <div id="loadMsg" class="notice info hidden"></div>
+  <div id="heicMsg" class="notice hidden"></div>
+
+  <div id="workArea" class="hidden">
+    <div class="toolbar">
+      <span id="summary" class="muted"></span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" id="btnAddMore">+ Add more photos</button>
+      <button class="btn btn-ghost btn-sm" id="btnClear">Start again</button>
+      <button class="btn btn-coral" id="btnAll">Process all jobs</button>
+    </div>
+    <div class="muted small" style="margin-top:8px">
+      How it works: photos are split into jobs by the gaps between them, and each set is matched to the Job Log by <b>where</b> the photos were taken. Check each job, then click the <b>first photo of each room</b> and pick the area &mdash; it carries on until the next room you mark.
+      Keys in the photo panel: <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> move, <span class="kbd">R</span> rotate, <span class="kbd">S</span> skip, <span class="kbd">Esc</span> close.
+    </div>
+    <div id="groups"></div>
+  </div>
+
+  <div id="settingsCard" class="card hidden">
+    <h2>Settings</h2>
+    <div class="muted small">Saved on this computer.</div>
+    <div class="settings-grid">
+      <div class="field"><label>New job after a gap of (minutes)</label><input type="number" id="s_gap" min="5" max="600" /></div>
+      <div class="field"><label>Photo size (long edge, pixels)</label><input type="number" id="s_size" min="640" max="4000" step="10" /></div>
+      <div class="field"><label>JPEG quality (50&ndash;95)</label><input type="number" id="s_quality" min="50" max="95" /></div>
+      <div class="field"><label>Portrait photos</label>
+        <select id="s_portrait">
+          <option value="canvas">Keep upright on a landscape canvas</option>
+          <option value="rotate">Turn sideways to fill landscape</option>
+          <option value="keep">Leave as portrait</option>
+        </select></div>
+      <div class="field"><label>Canvas colour (portrait fill)</label><input type="color" id="s_canvas" /></div>
+      <div class="field"><label>Watermark position</label>
+        <select id="s_wmpos">
+          <option value="br">Bottom right</option><option value="bl">Bottom left</option>
+          <option value="tr">Top right</option><option value="tl">Top left</option>
+          <option value="bc">Bottom centre</option>
+        </select></div>
+      <div class="field"><label>Watermark size (%)</label><input type="number" id="s_wmsize" min="50" max="250" step="10" /></div>
+      <div class="field"><label>Watermark text</label><input type="text" id="s_wmtext" /></div>
+      <div class="field"><label>Photo link starts with</label><input type="text" id="s_base" /></div>
+      <div class="field"><label>Location in finished photos</label>
+        <select id="s_gps"><option value="1">Remove it (date &amp; time kept)</option><option value="0">Keep it</option></select></div>
+      <div class="field"><label>Logo for watermark (PNG, optional)</label>
+        <input type="file" id="s_logo" accept="image/png" />
+        <div class="small muted" id="logoState" style="margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>Area list (one per line, in the order you usually walk a property)</label>
+      <textarea id="s_areas"></textarea>
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-ghost btn-sm" id="btnPreviewWm">Preview watermark</button>
+      <button class="btn btn-ghost btn-sm" id="btnLoadBackup">Load Job Log backup (.json)</button>
+      <input type="file" id="backupInput" accept=".json,application/json" class="hidden" />
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" id="btnResetSettings">Reset to defaults</button>
+      <button class="btn btn-navy btn-sm" id="btnSaveSettings">Save settings</button>
+    </div>
+    <div id="wmPreview" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div id="panel" class="panel hidden"></div>
+<div id="progress" class="progress hidden"><div class="box"><div id="progTitle" style="font-weight:600">Working&hellip;</div><div id="progText" class="muted small" style="margin-top:4px"></div><div class="bar"><div id="progBar"></div></div></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+"use strict";
+// ============================================================ constants
+const LS_JOBS = "wps_standalone_jobs_v1";          // shared with the Job Log (same site)
+const LS_SETTINGS = "wps_photo_settings_v1";
+const LS_LOGO = "wps_photo_logo_v1";
+const LS_BACKUP_JOBS = "wps_photo_backup_jobs_v1";
+
+const DEFAULT_AREAS = [
+  "Front exterior", "Entrance and Hallway", "Reception", "Living Area", "Living Room", "Dining Room",
+  "Kitchen", "Kitchenette", "Kitchen / Diner", "Utility Room", "W.C", "Cloakroom",
+  "Bedroom 1", "Bedroom 2", "Bedroom 3", "Bedroom 4", "Bedroom 5",
+  "En-suite bathroom", "En-suite Shower room", "Bathroom", "Shower room",
+  "Staircase and Landing", "Staircase and Mezzanine level", "Study", "Conservatory",
+  "Walk-in Wardrobe", "Storage cupboard", "Balcony", "Garden", "Garage", "Loft",
+  "Meters", "Keys", "Smoke alarms", "Communal areas"
+];
+const DEFAULT_SETTINGS = {
+  gap: 30, size: 1600, quality: 82, portrait: "canvas", canvas: "#222222",
+  wmpos: "br", wmsize: 100, wmtext: "Wellington Property Services {year}",
+  base: "http://www.wellingtonparker.com/photos/", stripGps: true,
+  areas: DEFAULT_AREAS
+};
+
+// ============================================================ state
+const S = {
+  photos: [],          // sorted by time
+  breaks: new Set(),   // photo ids that start a new job group
+  areaStart: {},       // photoId -> area name (room start marker)
+  meta: {},            // groupFirstId -> {jobId, jobNo, postcode, date, link}
+  sel: null,           // selected photo id
+  jobs: [],
+  jobsSource: "",
+  settings: null,
+  logoImg: null
+};
+let uidN = 0; const uid = () => "p" + (++uidN);
+
+// ============================================================ helpers
+const $ = id => document.getElementById(id);
+function esc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+const pad2 = n => String(n).padStart(2,"0");
+function isoDate(ms){ const d = new Date(ms); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function hhmm(ms){ const d = new Date(ms); return pad2(d.getHours())+":"+pad2(d.getMinutes()); }
+function niceDate(iso){ if(!iso) return ""; const d = new Date(iso+"T00:00:00"); return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric"}); }
+function ddmmyy(iso){ if(!iso) return "00.00.00"; const [y,m,d] = iso.split("-"); return d+"."+m+"."+y.slice(2); }
+function propCode(pc){ return (pc||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+function safeName(s){ return (s||"").replace(/[\\/:*?"<>|]/g,"-").replace(/\s+/g," ").trim(); }
+function minutesOf(t){ if(!t) return null; const m = /^(\d{1,2}):(\d{2})/.exec(t); return m ? (+m[1])*60 + (+m[2]) : null; }
+
+// ============================================================ settings
+function loadSettings(){
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}") || {}; } catch(e){}
+  S.settings = Object.assign({}, DEFAULT_SETTINGS, s);
+  if (!Array.isArray(S.settings.areas) || !S.settings.areas.length) S.settings.areas = DEFAULT_AREAS.slice();
+  try {
+    const d = localStorage.getItem(LS_LOGO);
+    if (d){ const im = new Image(); im.onload = () => { S.logoImg = im; updateLogoState(); }; im.src = d; }
+  } catch(e){}
+}
+function saveSettingsLS(){ try { localStorage.setItem(LS_SETTINGS, JSON.stringify(S.settings)); } catch(e){} }
+function fillSettingsForm(){
+  const s = S.settings;
+  $("s_gap").value = s.gap; $("s_size").value = s.size; $("s_quality").value = s.quality;
+  $("s_portrait").value = s.portrait; $("s_canvas").value = s.canvas; $("s_wmpos").value = s.wmpos;
+  $("s_wmsize").value = s.wmsize; $("s_wmtext").value = s.wmtext; $("s_base").value = s.base; $("s_gps").value = s.stripGps ? "1" : "0";
+  $("s_areas").value = s.areas.join("\n");
+  updateLogoState();
+}
+function readSettingsForm(){
+  const s = S.settings;
+  const num = (id, lo, hi, def) => { const v = parseInt($(id).value,10); return isNaN(v) ? def : Math.min(hi, Math.max(lo, v)); };
+  const oldGap = s.gap;
+  s.gap = num("s_gap",5,600,30); s.size = num("s_size",640,4000,1600); s.quality = num("s_quality",50,95,82);
+  s.portrait = $("s_portrait").value; s.canvas = $("s_canvas").value; s.wmpos = $("s_wmpos").value;
+  s.wmsize = num("s_wmsize",50,250,100); s.wmtext = $("s_wmtext").value || DEFAULT_SETTINGS.wmtext;
+  s.base = $("s_base").value.trim(); s.stripGps = $("s_gps").value === "1";
+  const areas = $("s_areas").value.split("\n").map(x=>x.trim()).filter(Boolean);
+  s.areas = areas.length ? areas : DEFAULT_AREAS.slice();
+  saveSettingsLS();
+  if (oldGap !== s.gap && S.photos.length){ autoGroup(); render(); }
+}
+function updateLogoState(){
+  const el = $("logoState"); if (!el) return;
+  el.innerHTML = S.logoImg ? 'Logo loaded. <a href="#" id="rmLogo">Remove</a>' : "None &mdash; a simple door mark is drawn instead.";
+  const rm = $("rmLogo"); if (rm) rm.onclick = e => { e.preventDefault(); S.logoImg = null; try{localStorage.removeItem(LS_LOGO);}catch(x){} updateLogoState(); };
+}
+
+// ============================================================ jobs (from the Job Log)
+function loadJobs(){
+  let jobs = null, src = "";
+  try { const j = localStorage.getItem(LS_JOBS); if (j){ jobs = JSON.parse(j); src = "Job Log"; } } catch(e){}
+  if (!jobs || !jobs.length){
+    try { const j = localStorage.getItem(LS_BACKUP_JOBS); if (j){ jobs = JSON.parse(j); src = "Job Log backup"; } } catch(e){}
+  }
+  S.jobs = (jobs||[]).filter(j => j && j.jobNo);
+  S.jobsSource = src;
+  const n = $("jobsNote");
+  if (S.jobs.length){
+    n.classList.add("hidden");
+  } else {
+    n.classList.remove("hidden");
+    n.innerHTML = "Can't see your Job Log jobs from here, so job numbers won't fill in automatically. " +
+      "Open this tool from the same web address as the Job Log, or load a Job Log backup in <a href='#' id='lnkS2'>Settings</a>. You can still type job numbers by hand.";
+    const l = $("lnkS2"); if (l) l.onclick = e => { e.preventDefault(); toggleSettings(true); };
+  }
+}
+function jobsOn(iso){
+  return S.jobs.filter(j => j.date === iso && j.status !== "archived")
+    .sort((a,b) => (minutesOf(a.time) ?? 9999) - (minutesOf(b.time) ?? 9999));
+}
+function jobById(id){ return S.jobs.find(j => j.id === id); }
+// Jobs that photos could belong to: not archived/cancelled, dated within 21 days before to 2 days after the photos.
+const CLOSED = new Set(["archived","cancelled"]);
+function candidateJobs(iso){
+  const t = new Date(iso+"T12:00:00").getTime(), day = 86400000;
+  return S.jobs.filter(j => !CLOSED.has(j.status) && j.date &&
+    (() => { const jt = new Date(j.date+"T12:00:00").getTime(); return jt >= t - 21*day && jt <= t + 2*day; })());
+}
+// Open jobs for the dropdown: most recent first
+function openJobsForList(iso){
+  return candidateJobs(iso).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (minutesOf(a.time)??0) - (minutesOf(b.time)??0));
+}
+
+// ============================================================ postcode -> location (postcodes.io, free, no account)
+const LS_PC = "wps_photo_postcodes_v1";
+let pcCache = {};
+try { pcCache = JSON.parse(localStorage.getItem(LS_PC) || "{}") || {}; } catch(e){}
+function pcKey(pc){ return propCode(pc); }
+async function lookupPostcodes(list){
+  const need = [...new Set(list.map(pcKey).filter(k => k && !(k in pcCache)))];
+  for (let i=0; i<need.length; i+=100){
+    const batch = need.slice(i, i+100);
+    try {
+      const r = await fetch("https://api.postcodes.io/postcodes", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ postcodes: batch }) });
+      const d = await r.json();
+      for (const row of (d.result || [])){
+        const k = pcKey(row.query);
+        pcCache[k] = row.result ? { lat: row.result.latitude, lon: row.result.longitude } : null;
+      }
+    } catch(e){ console.warn("postcode lookup failed", e); S.pcError = true; }
+  }
+  try { localStorage.setItem(LS_PC, JSON.stringify(pcCache)); } catch(e){}
+}
+async function refreshLocations(){
+  if (S.jobs.length && S.photos.some(p => p.lat != null)){
+    const pcs = []; [...new Set(S.photos.map(p => isoDate(p.time)))].forEach(d => candidateJobs(d).forEach(j => j.postcode && pcs.push(j.postcode)));
+    await lookupPostcodes(pcs);
+  }
+  assignJobs(); render();
+}
+function jobLoc(j){ const c = j && pcCache[pcKey(j.postcode)]; return c || null; }
+function distM(a, b){
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function groupLoc(g){
+  const pts = g.photos.filter(p => p.lat != null);
+  if (!pts.length) return null;
+  const med = arr => { const s = arr.slice().sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
+  return { lat: med(pts.map(p=>p.lat)), lon: med(pts.map(p=>p.lon)), n: pts.length };
+}
+const MATCH_M = 400;   // photos within this distance of a job's postcode count as that job
+
+// ============================================================ EXIF (JPEG) — read + keep
+function readExifFromJpeg(buf){
+  const v = new DataView(buf);
+  if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return null;
+  let p = 2;
+  while (p + 4 <= v.byteLength){
+    if (v.getUint8(p) !== 0xFF) return null;
+    const marker = v.getUint8(p+1);
+    if (marker === 0xDA || marker === 0xD9) return null;
+    const len = v.getUint16(p+2);
+    if (marker === 0xE1 && p + 10 <= v.byteLength &&
+        v.getUint32(p+4) === 0x45786966 && v.getUint16(p+8) === 0x0000){
+      if (p + 2 + len > v.byteLength) return null;
+      return parseTiff(new Uint8Array(buf.slice(p, p + 2 + len)));
+    }
+    p += 2 + len;
+  }
+  return null;
+}
+function parseTiff(seg){
+  // seg = full APP1 segment incl. FFE1 marker; TIFF header starts at 10
+  const T = 10, v = new DataView(seg.buffer);
+  const le = v.getUint16(T) === 0x4949;
+  const u16 = o => v.getUint16(o, le), u32 = o => v.getUint32(o, le);
+  const out = { seg, le, orientation:1, dto:null, patches:{} };
+  try {
+    const ifd0 = T + u32(T+4);
+    const n0 = u16(ifd0);
+    let exifPtr = 0, gpsPtr = 0;
+    for (let i=0;i<n0;i++){
+      const e = ifd0 + 2 + i*12, tag = u16(e);
+      if (tag === 0x0112){ out.orientation = u16(e+8); out.patches.orient = e+8; }
+      if (tag === 0x8769){ exifPtr = T + u32(e+8); }
+      if (tag === 0x8825){ gpsPtr = T + u32(e+8); }
+      if (tag === 0x0132 && !out.dto){ out.dtoFallback = readAscii(v, T + u32(e+8), 19); }
+    }
+    out.patches.nextIfd = ifd0 + 2 + n0*12;   // pointer to IFD1 (thumbnail) — we cut it
+    if (gpsPtr){
+      const ng = u16(gpsPtr); let latRef = "N", lonRef = "E", lat = null, lon = null;
+      const rat3 = off => { const r = i => { const d = u32(off + i*8 + 4); return d ? u32(off + i*8) / d : 0; }; return r(0) + r(1)/60 + r(2)/3600; };
+      out.patches.gps = { ifd: gpsPtr, ranges: [] };
+      for (let i=0;i<ng;i++){
+        const e = gpsPtr + 2 + i*12, tag = u16(e);
+        if (tag === 1) latRef = String.fromCharCode(v.getUint8(e+8));
+        if (tag === 3) lonRef = String.fromCharCode(v.getUint8(e+8));
+        if (tag === 2){ lat = rat3(T + u32(e+8)); out.patches.gps.ranges.push(T + u32(e+8)); }
+        if (tag === 4){ lon = rat3(T + u32(e+8)); out.patches.gps.ranges.push(T + u32(e+8)); }
+      }
+      if (lat != null && lon != null && (lat || lon)){
+        out.lat = latRef === "S" ? -lat : lat;
+        out.lon = lonRef === "W" ? -lon : lon;
+      }
+    }
+    if (exifPtr){
+      const n1 = u16(exifPtr);
+      for (let i=0;i<n1;i++){
+        const e = exifPtr + 2 + i*12, tag = u16(e), type = u16(e+2);
+        if (tag === 0x9003) out.dto = readAscii(v, T + u32(e+8), 19);
+        if (tag === 0xA002) out.patches.w = { at:e+8, type };
+        if (tag === 0xA003) out.patches.h = { at:e+8, type };
+      }
+    }
+  } catch(e){ /* partial EXIF is fine */ }
+  if (!out.dto && out.dtoFallback) out.dto = out.dtoFallback;
+  return out;
+}
+function readAscii(v, off, n){
+  let s = ""; for (let i=0;i<n && off+i < v.byteLength;i++){ const c = v.getUint8(off+i); if (!c) break; s += String.fromCharCode(c); }
+  return s;
+}
+function exifTimeToMs(s){
+  const m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s||"");
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]);
+  return isNaN(d) ? null : d.getTime();
+}
+// Put the original's EXIF into the processed JPEG: orientation -> 1 (already applied), size updated, old thumbnail dropped.
+function spliceExif(jpegBuf, exif, w, h){
+  if (!exif) return jpegBuf;
+  const seg = exif.seg.slice();
+  const v = new DataView(seg.buffer), le = exif.le;
+  try {
+    if (exif.patches.orient) v.setUint16(exif.patches.orient, 1, le);
+    if (exif.patches.nextIfd) v.setUint32(exif.patches.nextIfd, 0, le);
+    for (const [k,val] of [["w",w],["h",h]]){
+      const pt = exif.patches[k]; if (!pt) continue;
+      if (pt.type === 3) v.setUint16(pt.at, val, le); else v.setUint32(pt.at, val, le);
+    }
+    if (S.settings.stripGps && exif.patches.gps){
+      // blank the coordinates and empty the GPS block, so the location isn't in the published photos
+      for (const at of exif.patches.gps.ranges) for (let i=0;i<24;i++) v.setUint8(at + i, 0);
+      v.setUint16(exif.patches.gps.ifd, 0, le);
+    }
+  } catch(e){}
+  // rebuild: SOI + our APP1 + canvas JPEG minus its SOI and APP0/APP1
+  const src = new Uint8Array(jpegBuf), sv = new DataView(jpegBuf);
+  let p = 2;
+  while (p + 4 <= src.length && src[p] === 0xFF && (src[p+1] === 0xE0 || src[p+1] === 0xE1)){
+    p += 2 + sv.getUint16(p+2);
+  }
+  const out = new Uint8Array(2 + seg.length + (src.length - p));
+  out[0] = 0xFF; out[1] = 0xD8;
+  out.set(seg, 2);
+  out.set(src.subarray(p), 2 + seg.length);
+  return out.buffer;
+}
+
+// ============================================================ loading photos
+async function addFiles(fileList){
+  const files = Array.from(fileList).filter(f => /\.(jpe?g|heic|heif)$/i.test(f.name) || /^image\/(jpeg|heic|heif)$/.test(f.type));
+  if (!files.length) return;
+  const heics = files.filter(f => /\.(heic|heif)$/i.test(f.name) || /heic|heif/.test(f.type));
+  showProgress("Reading photos", 0, files.length);
+  let done = 0, noDate = 0;
+  const added = [];
+  for (const f of files){
+    let file = f, exif = null, isHeic = heics.includes(f);
+    try {
+      if (isHeic){
+        file = await convertHeic(f);
+      } else {
+        const head = await f.slice(0, 256*1024).arrayBuffer();
+        exif = readExifFromJpeg(head);
+      }
+    } catch(e){ console.warn("read failed", f.name, e); }
+    if (!file){ done++; continue; }
+    let t = exif ? exifTimeToMs(exif.dto) : null;
+    const hasDate = !!t;
+    if (!t){ t = f.lastModified || Date.now(); noDate++; }
+    const ph = { id: uid(), file, name: f.name, time: t, hasDate, exif, rot: 0, skip: false, thumb: null, portrait: false, heic: isHeic,
+                 lat: exif && exif.lat != null ? exif.lat : null, lon: exif && exif.lon != null ? exif.lon : null };
+    added.push(ph);
+    done++; updateProgress(done, files.length, f.name);
+  }
+  // de-duplicate (same name + time) when adding more
+  const seen = new Set(S.photos.map(p => p.name + "|" + p.time));
+  const fresh = added.filter(p => !seen.has(p.name + "|" + p.time));
+  S.photos = S.photos.concat(fresh).sort((a,b) => a.time - b.time || a.name.localeCompare(b.name, undefined, {numeric:true}));
+  // look up where each candidate job is, so photos can be matched by location
+  if (S.jobs.length && S.photos.some(p => p.lat != null)){
+    $("progTitle").textContent = "Looking up job locations";
+    const dates = [...new Set(S.photos.map(p => isoDate(p.time)))];
+    const pcs = []; dates.forEach(d => candidateJobs(d).forEach(j => j.postcode && pcs.push(j.postcode)));
+    await lookupPostcodes(pcs);
+  }
+  autoGroup(true);
+  hideProgress();
+  const lm = $("loadMsg");
+  lm.classList.remove("hidden");
+  lm.innerHTML = `${fresh.length} photo${fresh.length===1?"":"s"} added.` +
+    (added.length - fresh.length ? ` ${added.length - fresh.length} already here, skipped.` : "") +
+    (noDate ? ` <b>${noDate}</b> had no &ldquo;date taken&rdquo; inside, so the file date was used &mdash; check the split.` : "");
+  if (heics.length){
+    const hm = $("heicMsg"); hm.classList.remove("hidden");
+    hm.innerHTML = `${heics.length} HEIC photo${heics.length===1?"":"s"} were converted. HEIC photos lose their &ldquo;date taken&rdquo; details in this version. ` +
+      `Easiest fix: on the iPhone, Settings &rsaquo; Camera &rsaquo; Formats &rsaquo; <b>Most Compatible</b>, so it shoots JPG.`;
+  }
+  render();
+  makeThumbs();
+}
+let heicLib = null;
+async function convertHeic(f){
+  if (!heicLib){
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+      s.onload = res; s.onerror = () => rej(new Error("Couldn't load the HEIC converter (internet needed)."));
+      document.head.appendChild(s);
+    });
+    heicLib = window.heic2any;
+  }
+  const blob = await heicLib({ blob: f, toType: "image/jpeg", quality: 0.92 });
+  return new File([Array.isArray(blob) ? blob[0] : blob], f.name.replace(/\.(heic|heif)$/i, ".jpg"), { type:"image/jpeg", lastModified: f.lastModified });
+}
+let thumbRunning = false;
+async function makeThumbs(){
+  if (thumbRunning) return; thumbRunning = true;
+  const todo = () => S.photos.filter(p => !p.thumb && !p.thumbFailed);
+  const worker = async () => {
+    let p;
+    while ((p = todo().find(x => !x._busy))){
+      p._busy = true;
+      try {
+        const bmp = await createImageBitmap(p.file, { resizeWidth: 260, resizeQuality: "medium", imageOrientation: "from-image" });
+        p.portrait = bmp.height > bmp.width;
+        const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+        c.getContext("2d").drawImage(bmp, 0, 0); bmp.close && bmp.close();
+        const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.7));
+        p.thumb = URL.createObjectURL(blob);
+        const img = document.querySelector(`.ph[data-id="${p.id}"] img`);
+        if (img){ img.src = p.thumb; }
+        refreshFlag(p);
+      } catch(e){ p.thumbFailed = true; console.warn("thumb failed", p.name, e); }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  thumbRunning = false;
+  if (todo().length) makeThumbs();
+}
+function refreshFlag(p){
+  const el = document.querySelector(`.ph[data-id="${p.id}"] .flag`);
+  const txt = flagText(p);
+  if (el){ el.textContent = txt; el.classList.toggle("hidden", !txt); }
+}
+function flagText(p){
+  const finalPortrait = isPortraitAfterRot(p);
+  if (p.skip) return "Skipped";
+  if (finalPortrait && S.settings.portrait !== "keep") return "Portrait";
+  return "";
+}
+function isPortraitAfterRot(p){ return (p.rot % 180 === 0) ? p.portrait : !p.portrait; }
+
+// ============================================================ grouping
+function autoGroup(keepManual){
+  const gapMs = S.settings.gap * 60000;
+  const manual = keepManual ? new Set(S.manualBreaks || []) : new Set();
+  const removed = keepManual ? new Set(S.removedBreaks || []) : new Set();
+  S.breaks = new Set();
+  if (!keepManual){ S.manualBreaks = []; S.removedBreaks = []; }
+  S.photos.forEach((p, i) => {
+    if (i === 0){ S.breaks.add(p.id); return; }
+    const gapBreak = (p.time - S.photos[i-1].time) >= gapMs;
+    if ((gapBreak && !removed.has(p.id)) || manual.has(p.id)) S.breaks.add(p.id);
+  });
+  assignJobs();
+}
+function groups(){
+  const out = []; let cur = null;
+  for (const p of S.photos){
+    if (S.breaks.has(p.id) || !cur){ cur = { id: p.id, photos: [] }; out.push(cur); }
+    cur.photos.push(p);
+  }
+  return out;
+}
+// Which job does each group of photos belong to?
+//  1. By location: the job whose postcode is nearest the photos (within ~400 m). Works whatever time you got there.
+//     Two jobs at the same block/postcode -> the one nearest its booking time wins, flagged to check.
+//  2. No location in the photos: nearest booked time on that day, flagged to check.
+//  3. Nothing close: left for you to pick from the list of open jobs.
+// Anything you pick or type yourself is never changed.
+function timeScore(g, j){
+  const first = g.photos[0].time;
+  const jd = j.date ? new Date(j.date + "T" + (j.time || "12:00") + ":00").getTime() : first;
+  const diffMin = (first - jd) / 60000;
+  return diffMin >= -20 ? diffMin : (-diffMin) * 3 + 60;   // arriving after the booked time is normal; well before is less likely
+}
+function assignJobs(){
+  const gs = groups();
+  for (const g of gs){
+    const iso = isoDate(g.photos[0].time);
+    if (!S.meta[g.id]) S.meta[g.id] = { jobId:"", jobNo:"", postcode:"", date: iso, link:"", how:"" };
+    const m = S.meta[g.id];
+    if (!m.dateManual) m.date = iso;
+  }
+  const usedByTime = new Set();
+  for (const g of gs){
+    const m = S.meta[g.id];
+    if (m.how === "manual") continue;
+    const iso = isoDate(g.photos[0].time);
+    const cands = candidateJobs(iso);
+    const loc = groupLoc(g);
+    m.how = ""; m.note = ""; m.dist = null;
+    let pick = null;
+    if (loc){
+      const withD = cands.map(j => ({ j, loc: jobLoc(j) })).filter(x => x.loc)
+        .map(x => ({ j: x.j, d: distM(loc, x.loc) })).sort((a,b) => a.d - b.d);
+      const near = withD.filter(x => x.d <= MATCH_M);
+      if (near.length === 1 || (near.length > 1 && (near[1].d - near[0].d > 150 || near[1].d > near[0].d * 2))){
+        pick = near[0].j; m.how = "location"; m.dist = near[0].d;
+      } else if (near.length > 1){
+        near.sort((a,b) => timeScore(g, a.j) - timeScore(g, b.j));
+        pick = near[0].j; m.how = "location-close"; m.dist = near[0].d;
+        m.note = `${near.length} jobs at this location (${near.map(x=>x.j.jobNo).join(", ")}) — picked by booking time, please check.`;
+      } else if (withD.length){
+        m.how = "none";
+        m.note = `No open job near where these photos were taken (nearest: ${withD[0].j.jobNo}, ${fmtDist(withD[0].d)} away). Pick the job below.`;
+      } else {
+        m.how = "none";
+        m.note = S.pcError ? "Couldn't look up job postcodes (no internet?). Pick the job below." : "No open jobs found around this date. Pick or type the job below.";
+      }
+    } else {
+      const day = cands.filter(j => j.date === iso && !usedByTime.has(j.id)).sort((a,b) => timeScore(g,a) - timeScore(g,b));
+      if (day.length){ pick = day[0]; m.how = "time"; usedByTime.add(pick.id);
+        m.note = "These photos have no location, so this was matched by booking time — please check."; }
+      else { m.how = "none"; m.note = S.jobs.length ? "These photos have no location and nothing was booked that day. Pick or type the job below." : ""; }
+    }
+    if (pick){ m.jobId = pick.id; m.jobNo = pick.jobNo || ""; m.postcode = pick.postcode || ""; m.link = pick.photoLink || m.link || ""; }
+    else { m.jobId = ""; m.jobNo = ""; m.postcode = ""; }
+  }
+  // drop meta for groups that no longer exist
+  const ids = new Set(gs.map(g => g.id));
+  for (const k of Object.keys(S.meta)) if (!ids.has(k)) delete S.meta[k];
+}
+function fmtShort(iso){ if (!iso) return "no date"; const d = new Date(iso+"T00:00:00"); return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
+function fmtDist(d){ return d < 1000 ? Math.round(d/10)*10 + " m" : (d/1609).toFixed(1) + " miles"; }
+function setJob(m, j){
+  m.jobId = j ? j.id : "";
+  m.how = "manual"; m.note = "";
+  if (j){ m.jobNo = j.jobNo || ""; m.postcode = j.postcode || ""; m.link = j.photoLink || ""; }
+}
+// Groups on the same job (e.g. you went back later) go into one zip.
+function sameJobGroups(gid){
+  const m = S.meta[gid]; if (!m || !m.jobNo) return [gid];
+  return groups().filter(g => S.meta[g.id] && S.meta[g.id].jobNo === m.jobNo).map(g => g.id);
+}
+
+function splitAt(id){
+  if (!S.manualBreaks) S.manualBreaks = [];
+  S.manualBreaks.push(id);
+  S.removedBreaks = (S.removedBreaks||[]).filter(x => x !== id);
+  S.breaks.add(id);
+  assignJobs(); render();
+}
+function mergeUp(gid){
+  if (gid === S.photos[0]?.id) return;
+  S.breaks.delete(gid);
+  S.manualBreaks = (S.manualBreaks||[]).filter(x => x !== gid);
+  if (!S.removedBreaks) S.removedBreaks = [];
+  S.removedBreaks.push(gid);
+  delete S.meta[gid];
+  assignJobs(); render();
+}
+
+// area for every photo = last room-start marker at or before it within the same group
+function areaMap(){
+  const map = {};
+  for (const g of groups()){
+    let cur = "";
+    for (const p of g.photos){
+      if (S.areaStart[p.id] !== undefined) cur = S.areaStart[p.id];
+      map[p.id] = cur;
+    }
+  }
+  return map;
+}
+
+// ============================================================ render
+function render(){
+  const has = S.photos.length > 0;
+  $("workArea").classList.toggle("hidden", !has);
+  $("dropZone").classList.toggle("hidden", has);
+  if (!has){ $("groups").innerHTML = ""; closePanel(); return; }
+  const gs = groups();
+  const amap = areaMap();
+  const skipped = S.photos.filter(p=>p.skip).length;
+  $("summary").innerHTML = `<b>${S.photos.length}</b> photos &middot; <b>${gs.length}</b> job${gs.length===1?"":"s"}` + (skipped ? ` &middot; ${skipped} skipped` : "") +
+    (S.jobs.length ? ` &middot; <span class="pill pill-info">Linked to ${esc(S.jobsSource)}</span>` : "");
+  let html = "";
+  gs.forEach((g, gi) => {
+    const m = S.meta[g.id];
+    const first = g.photos[0], last = g.photos[g.photos.length-1];
+    const unassigned = g.photos.filter(p => !p.skip && !amap[p.id]).length;
+    // dropdown: jobs near these photos first (by distance), then every other open job, newest first
+    const loc = groupLoc(g);
+    const open = openJobsForList(isoDate(first.time));
+    const withDist = open.map(j => ({ j, d: (loc && jobLoc(j)) ? distM(loc, jobLoc(j)) : null }));
+    const nearby = withDist.filter(x => x.d != null && x.d <= 2000).sort((a,b) => a.d - b.d);
+    const nearIds = new Set(nearby.map(x => x.j.id));
+    const others = withDist.filter(x => !nearIds.has(x.j.id));
+    const optOf = x => `<option value="${esc(x.j.id)}" ${m.jobId===x.j.id?"selected":""}>${esc(x.j.jobNo)} · ${esc(fmtShort(x.j.date))}${x.j.time?" "+esc(x.j.time):""} · ${esc([x.j.address, x.j.postcode].filter(Boolean).join(", ").slice(0,48))}${x.d!=null?" · "+fmtDist(x.d):""}</option>`;
+    let opts = `<option value="">— pick the job —</option>`;
+    if (nearby.length) opts += `<optgroup label="Near where these photos were taken">${nearby.map(optOf).join("")}</optgroup>`;
+    if (others.length) opts += `<optgroup label="Other open jobs">${others.map(optOf).join("")}</optgroup>`;
+    if (m.jobId && !open.find(j => j.id === m.jobId)){
+      const j = jobById(m.jobId); if (j) opts += `<option value="${esc(j.id)}" selected>${esc(j.jobNo)} · ${esc(fmtShort(j.date))}</option>`;
+    }
+    const badge = {
+      "location":       `<span class="pill pill-ok">Matched by location${m.dist!=null?" · "+fmtDist(m.dist):""}</span>`,
+      "location-close": `<span class="pill pill-warn">Location match — check</span>`,
+      "time":           `<span class="pill pill-warn">Matched by booking time — check</span>`,
+      "manual":         `<span class="pill pill-info">Set by you</span>`,
+      "none":           S.jobs.length ? `<span class="pill pill-warn">Not matched — pick the job</span>` : ""
+    }[m.how] || "";
+    const siblings = sameJobGroups(g.id);
+    const sameJobNote = siblings.length > 1 ? `<div class="notice info" style="margin-top:8px">Same job as ${siblings.filter(x=>x!==g.id).map(x => "Job " + (gs.findIndex(y=>y.id===x)+1)).join(" and ")} (you went back?) &mdash; they'll all go into one zip.</div>` : "";
+    const isLaterSibling = siblings.length > 1 && siblings[0] !== g.id;
+    const job = m.jobId ? jobById(m.jobId) : null;
+    const addr = job ? [job.address, job.town, job.postcode].filter(Boolean).join(", ") : "";
+    const ready = m.jobNo && propCode(m.postcode);
+    html += `<div class="group" data-g="${g.id}">
+      <div class="ghead">
+        <div>
+          <div class="gtitle">Job ${gi+1} of ${gs.length} &middot; ${esc(niceDate(isoDate(first.time)))} &middot; ${hhmm(first.time)}&ndash;${hhmm(last.time)} &middot; ${g.photos.length} photos</div>
+          ${addr ? `<div class="muted small" style="margin-top:2px">${esc(addr)}</div>` : ""}
+          <div style="margin-top:6px">${badge} ${loc ? "" : `<span class="pill pill-info">No location in photos</span>`}</div>
+          ${m.note ? `<div class="small" style="margin-top:6px;color:var(--coral-dark)">${esc(m.note)}</div>` : ""}
+          ${sameJobNote}
+          <div class="gfields">
+            ${S.jobs.length ? `<div class="field"><label>Job Log</label><select data-act="job" data-g="${g.id}" style="max-width:420px">${opts}</select></div>` : ""}
+            <div class="field"><label>Job number</label><input data-act="jobNo" data-g="${g.id}" value="${esc(m.jobNo)}" placeholder="WPS261001" size="12" class="${m.jobNo?"":"bad"}" /></div>
+            <div class="field"><label>Postcode</label><input data-act="postcode" data-g="${g.id}" value="${esc(m.postcode)}" placeholder="E3 2UE" size="9" class="${propCode(m.postcode)?"":"bad"}" /></div>
+            <div class="field"><label>Date</label><input type="date" data-act="date" data-g="${g.id}" value="${esc(m.date)}" /></div>
+          </div>
+          <div class="preview-name">Zip: <span class="mono">${esc(zipName(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, firstArea(g, amap) || "Kitchen", 1))}</span></div>
+          ${m.link ? `<div class="linkrow"><input readonly value="${esc(m.link)}" id="lnk_${g.id}" /><button class="btn btn-ghost btn-sm" data-act="copy" data-g="${g.id}">Copy link</button></div>` : ""}
+        </div>
+        <div class="gactions">
+          ${isLaterSibling ? `<span class="small muted">Goes in the zip with the first set</span>` : `<button class="btn btn-coral" data-act="process" data-g="${g.id}" ${ready?"":"disabled"}>Process &amp; download zip</button>`}
+          ${gi>0 ? `<button class="btn btn-ghost btn-sm" data-act="merge" data-g="${g.id}">Merge with job above</button>` : ""}
+          ${unassigned ? `<span class="pill pill-warn">${unassigned} photo${unassigned===1?"":"s"} with no area</span>` : `<span class="pill pill-ok">All areas set</span>`}
+        </div>
+      </div>
+      <div class="grid">${g.photos.map(p => photoTile(p, amap)).join("")}</div>
+    </div>`;
+  });
+  $("groups").innerHTML = html;
+  if (S.sel) openPanel(S.sel, true);
+}
+function firstArea(g, amap){ for (const p of g.photos) if (amap[p.id]) return amap[p.id]; return ""; }
+function photoTile(p, amap){
+  const isStart = S.areaStart[p.id] !== undefined;
+  const a = amap[p.id];
+  const label = isStart ? (a || "(no area)") : (a ? a : "No area yet");
+  const cls = isStart ? "area" : (a ? "area cont" : "area none");
+  const flag = flagText(p);
+  return `<div class="ph ${S.sel===p.id?"sel":""} ${p.skip?"skip":""}" data-id="${p.id}" title="${esc(p.name)}">
+    <div class="imgbox"><img ${p.thumb?`src="${p.thumb}"`:""} style="transform:rotate(${p.rot}deg)${p.rot%180? ";max-width:75%;max-height:133%":""}" alt="" /></div>
+    <div class="${cls}">${isStart?"▶ ":""}${esc(label)}</div>
+    <div class="flag ${flag?"":"hidden"}">${esc(flag)}</div>
+    <div class="tm">${hhmm(p.time)}${p.hasDate?"":"*"}</div>
+  </div>`;
+}
+
+// ============================================================ photo panel
+function openPanel(id, keep){
+  S.sel = id;
+  document.querySelectorAll(".ph.sel").forEach(e => e.classList.remove("sel"));
+  const tile = document.querySelector(`.ph[data-id="${id}"]`);
+  if (tile) tile.classList.add("sel");
+  const p = S.photos.find(x => x.id === id); if (!p){ closePanel(); return; }
+  const amap = areaMap();
+  const isStart = S.areaStart[p.id] !== undefined;
+  const cur = amap[p.id] || "";
+  const isFirstOfGroup = S.breaks.has(p.id);
+  const pan = $("panel");
+  pan.classList.remove("hidden");
+  pan.innerHTML = `<div class="panel-inner">
+    <div class="pv"><img src="${p.thumb||""}" style="transform:rotate(${p.rot}deg)${p.rot%180?";max-width:75%;max-height:133%":""}" /></div>
+    <div>
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <div><b>${esc(p.name)}</b> <span class="muted small">taken ${hhmm(p.time)}${p.hasDate?"":" (file date — no date in photo)"}</span></div>
+        <button class="btn btn-ghost btn-sm" data-pact="close">Close &times;</button>
+      </div>
+      <div class="small muted" style="margin-top:4px">${isStart ? `This photo starts <b>${esc(cur)}</b>.` : (cur ? `Part of <b>${esc(cur)}</b>. Pick an area to start a new room here.` : "Pick the area this room starts with:")}</div>
+      <div class="chips">
+        ${S.settings.areas.map(a => `<button class="chip ${isStart && cur===a ? "on":""}" data-area="${esc(a)}">${esc(a)}</button>`).join("")}
+      </div>
+      <div class="prow">
+        <input id="customArea" placeholder="Other area, e.g. Bedroom 1 (1st LHS)" style="flex:1;min-width:220px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;font-family:inherit" />
+        <button class="btn btn-navy btn-sm" data-pact="custom">Set</button>
+        ${isStart ? `<button class="btn btn-ghost btn-sm" data-pact="unmark">Remove room start</button>` : ""}
+      </div>
+      <div class="prow">
+        <button class="btn btn-ghost btn-sm" data-pact="rotL">&#8634; Rotate left</button>
+        <button class="btn btn-ghost btn-sm" data-pact="rotR">&#8635; Rotate right</button>
+        <button class="btn btn-ghost btn-sm" data-pact="skip">${p.skip ? "Include photo" : "Skip photo"}</button>
+        ${isFirstOfGroup ? "" : `<button class="btn btn-ghost btn-sm" data-pact="split">Start a new job from here</button>`}
+        <span class="muted small">&larr; &rarr; to move</span>
+      </div>
+    </div>
+  </div>`;
+  document.body.style.paddingBottom = (pan.offsetHeight + 20) + "px";
+  if (!keep && tile) tile.scrollIntoView({ block:"nearest", behavior:"smooth" });
+}
+function closePanel(){ S.sel = null; $("panel").classList.add("hidden"); document.body.style.paddingBottom = ""; document.querySelectorAll(".ph.sel").forEach(e => e.classList.remove("sel")); }
+function moveSel(d){
+  if (!S.sel) return;
+  const i = S.photos.findIndex(p => p.id === S.sel);
+  const n = S.photos[i + d]; if (n) openPanel(n.id);
+}
+function setArea(id, area){
+  area = (area||"").trim(); if (!area) return;
+  S.areaStart[id] = area;
+  if (!S.settings.areas.includes(area)){ S.settings.areas.push(area); saveSettingsLS(); }
+  render();
+  // jump to the next photo so the next room can be marked quickly
+  const i = S.photos.findIndex(p => p.id === id);
+  if (S.photos[i+1]) openPanel(S.photos[i+1].id);
+}
+
+// ============================================================ output naming
+function zipName(m){ return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.zip`; }
+function fileName(m, area, seq){
+  return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.${ddmmyy(m.date)}.${safeName(area)}_${pad2(seq)}.jpg`;
+}
+
+// ============================================================ image processing
+function drawDoor(ctx, x, y, h, color){
+  // the WPS doorway arch, scaled to height h, top-left at x,y
+  const s = h / 28;
+  ctx.save(); ctx.translate(x - 12*s, y - 7*s); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(12,34); ctx.lineTo(12,18);
+  ctx.bezierCurveTo(12,12.477,16.477,8,22,8); ctx.bezierCurveTo(27.523,8,32,12.477,32,18); ctx.lineTo(32,34);
+  ctx.lineWidth = 2.8; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = color; ctx.stroke();
+  ctx.restore();
+  return 20 * s; // width used
+}
+function drawWatermark(ctx, W, H, year){
+  const st = S.settings;
+  const scale = st.wmsize / 100;
+  const th = Math.max(12, Math.round(H * 0.028 * scale));      // text height
+  const pad = Math.round(th * 0.9);
+  const text = (st.wmtext || "").replace("{year}", year);
+  ctx.save();
+  ctx.font = `600 ${th}px 'Segoe UI', Arial, sans-serif`;
+  const tw = ctx.measureText(text).width;
+  let logoW, logoH = Math.round(th * 1.9);
+  if (S.logoImg){ logoW = Math.round(logoH * S.logoImg.width / S.logoImg.height); }
+  else { logoW = Math.round(th * 1.25); logoH = Math.round(th * 1.75); }
+  const gap = Math.round(th * 0.5);
+  const boxW = logoW + gap + tw, boxH = Math.max(logoH, th);
+  let x, y;
+  switch (st.wmpos){
+    case "bl": x = pad; y = H - pad - boxH; break;
+    case "tr": x = W - pad - boxW; y = pad; break;
+    case "tl": x = pad; y = pad; break;
+    case "bc": x = (W - boxW)/2; y = H - pad - boxH; break;
+    default:   x = W - pad - boxW; y = H - pad - boxH;
+  }
+  ctx.globalAlpha = 0.9;
+  ctx.shadowColor = "rgba(0,0,0,0.65)"; ctx.shadowBlur = Math.round(th * 0.35); ctx.shadowOffsetY = 1;
+  if (S.logoImg) ctx.drawImage(S.logoImg, x, y + (boxH - logoH)/2, logoW, logoH);
+  else drawDoor(ctx, x, y + (boxH - logoH)/2, logoH, "#FFFFFF");
+  ctx.fillStyle = "#FFFFFF"; ctx.textBaseline = "middle";
+  ctx.fillText(text, x + logoW + gap, y + boxH/2);
+  ctx.restore();
+}
+async function processPhoto(p){
+  const st = S.settings;
+  const bmp = await createImageBitmap(p.file, { imageOrientation: "from-image" });
+  // manual rotation
+  let rot = ((p.rot % 360) + 360) % 360;
+  let sw = bmp.width, sh = bmp.height;
+  let rw = rot % 180 ? sh : sw, rh = rot % 180 ? sw : sh;
+  // portrait handling
+  let autoRotate = false;
+  if (rh > rw && st.portrait === "rotate"){ rot = (rot + 90) % 360; autoRotate = true; [rw, rh] = [rh, rw]; }
+  const L = st.size;
+  let W, H, dw, dh;
+  if (rh > rw && st.portrait === "canvas"){
+    H = Math.min(L * 3/4, rh) | 0; W = Math.round(H * 4/3);
+    dh = H; dw = Math.round(rw * H / rh);
+  } else {
+    const k = Math.min(1, L / Math.max(rw, rh));
+    W = Math.round(rw * k); H = Math.round(rh * k); dw = W; dh = H;
+  }
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.fillStyle = st.canvas || "#222"; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.rotate(rot * Math.PI / 180);
+  const bw = rot % 180 ? dh : dw, bh = rot % 180 ? dw : dh;
+  ctx.drawImage(bmp, -bw/2, -bh/2, bw, bh);
+  ctx.restore();
+  bmp.close && bmp.close();
+  drawWatermark(ctx, W, H, new Date(p.time).getFullYear());
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", st.quality / 100));
+  let buf = await blob.arrayBuffer();
+  if (p.exif){
+    // read the full original header again (thumb read may have been partial for very large EXIF)
+    buf = spliceExif(buf, p.exif, W, H);
+  }
+  c.width = c.height = 1;
+  return buf;
+}
+
+async function processGroup(gid, opts){
+  const g = groups().find(x => x.id === gid); if (!g) return;
+  const m = S.meta[gid];
+  if (!m.jobNo || !propCode(m.postcode)){ alert("Add the job number and postcode first."); return; }
+  const amap = areaMap();
+  const sibs = sameJobGroups(gid);
+  const all = groups().filter(x => sibs.includes(x.id));
+  const keep = all.flatMap(x => x.photos).filter(p => !p.skip);
+  const noArea = keep.filter(p => !amap[p.id]).length;
+  if (noArea && !(opts && opts.quiet)){
+    if (!confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll go in a folder called "Unsorted". Carry on?`)) return;
+  }
+  // folder order = order areas first appear
+  const order = [];
+  for (const p of keep){ const a = amap[p.id] || "Unsorted"; if (!order.includes(a)) order.push(a); }
+  const seq = {};
+  const zip = new JSZip();
+  if (!opts || !opts.inBatch) showProgress(`Processing ${m.jobNo}`, 0, keep.length);
+  let i = 0;
+  for (const p of keep){
+    const a = amap[p.id] || "Unsorted";
+    seq[a] = (seq[a] || 0) + 1;
+    const folder = `${pad2(order.indexOf(a) + 1)} ${safeName(a)}`;
+    const buf = await processPhoto(p);
+    zip.file(`${folder}/${fileName(m, a, seq[a])}`, buf, { binary:true, date: new Date(p.time) });
+    i++; updateProgress(i, keep.length, `${m.jobNo}: ${a} ${pad2(seq[a])}`);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  $("progText").textContent = "Building zip…";
+  const out = await zip.generateAsync({ type:"blob", compression:"STORE" });
+  const name = zipName(m);
+  downloadBlob(out, name);
+  m.link = (S.settings.base || "") + name;
+  for (const id of sibs) if (S.meta[id]) S.meta[id].link = m.link;
+  saveLinkToJobLog(m);
+  if (!opts || !opts.inBatch) hideProgress();
+  render();
+}
+function downloadBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function saveLinkToJobLog(m){
+  if (!m.jobId) return;
+  try {
+    const raw = localStorage.getItem(LS_JOBS); if (!raw) return;
+    const jobs = JSON.parse(raw);
+    const j = jobs.find(x => x.id === m.jobId); if (!j) return;
+    j.photoLink = m.link;
+    localStorage.setItem(LS_JOBS, JSON.stringify(jobs));
+  } catch(e){}
+}
+async function processAll(){
+  const gs = groups();
+  const notReady = gs.filter(g => !S.meta[g.id].jobNo || !propCode(S.meta[g.id].postcode));
+  if (notReady.length){ alert(`${notReady.length} job${notReady.length===1?" is":"s are"} missing a job number or postcode.`); return; }
+  const amap = areaMap();
+  const noArea = S.photos.filter(p => !p.skip && !amap[p.id]).length;
+  if (noArea && !confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll go in "Unsorted" folders. Carry on?`)) return;
+  const total = S.photos.filter(p => !p.skip).length;
+  showProgress("Processing all jobs", 0, total);
+  for (const g of gs){
+    if (sameJobGroups(g.id)[0] !== g.id) continue;   // already included with an earlier set of the same job
+    await processGroup(g.id, { quiet:true, inBatch:true });
+  }
+  hideProgress();
+}
+
+// ============================================================ progress
+function showProgress(title, n, total){ $("progTitle").textContent = title; $("progress").classList.remove("hidden"); updateProgress(n, total, ""); }
+function updateProgress(n, total, text){
+  $("progBar").style.width = (total ? Math.round(100*n/total) : 0) + "%";
+  $("progText").textContent = `${n} of ${total}` + (text ? ` — ${text}` : "");
+}
+function hideProgress(){ $("progress").classList.add("hidden"); }
+
+// ============================================================ settings panel
+function toggleSettings(force){
+  const c = $("settingsCard");
+  const show = force !== undefined ? force : c.classList.contains("hidden");
+  c.classList.toggle("hidden", !show);
+  if (show){ fillSettingsForm(); c.scrollIntoView({ behavior:"smooth" }); }
+}
+async function previewWatermark(){
+  readSettingsForm();
+  const W = 800, H = 600;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d");
+  const grd = ctx.createLinearGradient(0,0,W,H); grd.addColorStop(0,"#C9B8A0"); grd.addColorStop(1,"#6E7C8C");
+  ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(80,120,300,380); ctx.fillRect(450,200,260,160);
+  drawWatermark(ctx, W, H, new Date().getFullYear());
+  $("wmPreview").innerHTML = "";
+  c.style.maxWidth = "100%"; c.style.borderRadius = "8px";
+  $("wmPreview").appendChild(c);
+}
+
+// ============================================================ events
+function wire(){
+  const dz = $("dropZone"), fi = $("fileInput");
+  dz.onclick = () => fi.click();
+  fi.onchange = () => { addFiles(fi.files); fi.value = ""; };
+  ["dragenter","dragover"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("over"); }));
+  ["dragleave","drop"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("over"); }));
+  document.addEventListener("drop", e => { if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+  $("btnAddMore").onclick = () => fi.click();
+  $("btnClear").onclick = () => {
+    if (!confirm("Clear all photos from the tool? (Your original files aren't touched.)")) return;
+    S.photos.forEach(p => p.thumb && URL.revokeObjectURL(p.thumb));
+    S.photos = []; S.breaks = new Set(); S.areaStart = {}; S.meta = {}; S.manualBreaks = []; S.removedBreaks = [];
+    $("loadMsg").classList.add("hidden"); $("heicMsg").classList.add("hidden");
+    closePanel(); render();
+  };
+  $("btnAll").onclick = processAll;
+  $("lnkSettings").onclick = e => { e.preventDefault(); toggleSettings(); };
+  $("btnSaveSettings").onclick = () => { readSettingsForm(); render(); toggleSettings(false); };
+  $("btnResetSettings").onclick = () => { if (!confirm("Reset all settings and the area list to defaults?")) return; S.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); saveSettingsLS(); fillSettingsForm(); render(); };
+  $("btnPreviewWm").onclick = previewWatermark;
+  $("s_logo").onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { const im = new Image(); im.onload = () => { S.logoImg = im; try{ localStorage.setItem(LS_LOGO, r.result); }catch(x){} updateLogoState(); previewWatermark(); }; im.src = r.result; };
+    r.readAsDataURL(f);
+  };
+  $("btnLoadBackup").onclick = () => $("backupInput").click();
+  $("backupInput").onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const d = JSON.parse(r.result); const jobs = Array.isArray(d) ? d : d.jobs;
+        if (!Array.isArray(jobs)) throw 0;
+        localStorage.setItem(LS_BACKUP_JOBS, JSON.stringify(jobs));
+        loadJobs(); refreshLocations();
+        alert(`Loaded ${jobs.length} jobs from the backup.`);
+      } catch(x){ alert("That doesn't look like a Job Log backup file."); }
+    };
+    r.readAsText(f); e.target.value = "";
+  };
+
+  $("groups").addEventListener("click", e => {
+    const tile = e.target.closest(".ph");
+    if (tile){ openPanel(tile.dataset.id); return; }
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const gid = b.dataset.g, act = b.dataset.act;
+    if (act === "process") processGroup(gid);
+    if (act === "merge") mergeUp(gid);
+    if (act === "copy"){ const inp = $("lnk_"+gid); inp.select(); navigator.clipboard ? navigator.clipboard.writeText(inp.value) : document.execCommand("copy"); b.textContent = "Copied"; setTimeout(()=>b.textContent="Copy link",1500); }
+  });
+  $("groups").addEventListener("change", e => {
+    const el = e.target.closest("[data-act]"); if (!el) return;
+    const m = S.meta[el.dataset.g]; if (!m) return;
+    const act = el.dataset.act;
+    if (act === "job"){ const j = jobById(el.value); if (j) setJob(m, j); else { m.jobId = ""; m.jobNo = ""; m.postcode = ""; m.how = "manual"; } render(); }
+    if (act === "jobNo"){
+      m.jobNo = el.value.trim().toUpperCase(); m.how = "manual"; m.note = "";
+      const j = S.jobs.find(x => (x.jobNo||"").toUpperCase() === m.jobNo);
+      if (j){ m.jobId = j.id; m.postcode = j.postcode || m.postcode; } else m.jobId = "";
+      render();
+    }
+    if (act === "postcode"){ m.postcode = el.value.trim().toUpperCase(); m.how = "manual"; m.note = ""; render(); }
+    if (act === "date"){ m.date = el.value; m.dateManual = true; render(); }
+  });
+  $("panel").addEventListener("click", e => {
+    const chip = e.target.closest("[data-area]");
+    if (chip){ setArea(S.sel, chip.dataset.area); return; }
+    const b = e.target.closest("[data-pact]"); if (!b) return;
+    const p = S.photos.find(x => x.id === S.sel); if (!p) return;
+    const a = b.dataset.pact;
+    if (a === "close") closePanel();
+    if (a === "custom") setArea(p.id, $("customArea").value);
+    if (a === "unmark"){ delete S.areaStart[p.id]; render(); }
+    if (a === "rotL"){ p.rot = (p.rot + 270) % 360; render(); }
+    if (a === "rotR"){ p.rot = (p.rot + 90) % 360; render(); }
+    if (a === "skip"){ p.skip = !p.skip; render(); }
+    if (a === "split"){ splitAt(p.id); }
+  });
+  $("panel").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "customArea"){ setArea(S.sel, e.target.value); } });
+  document.addEventListener("keydown", e => {
+    if (!S.sel || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    const p = S.photos.find(x => x.id === S.sel);
+    if (e.key === "ArrowRight"){ e.preventDefault(); moveSel(1); }
+    else if (e.key === "ArrowLeft"){ e.preventDefault(); moveSel(-1); }
+    else if (e.key === "Escape") closePanel();
+    else if ((e.key === "r" || e.key === "R") && p){ p.rot = (p.rot + 90) % 360; render(); }
+    else if ((e.key === "s" || e.key === "S") && p){ p.skip = !p.skip; render(); }
+  });
+  window.addEventListener("storage", e => { if (e.key === LS_JOBS){ loadJobs(); refreshLocations(); } });
+}
+
+// ============================================================ start
+loadSettings();
+loadJobs();
+wire();
+render();
+</script>
+</body>
+</html>
