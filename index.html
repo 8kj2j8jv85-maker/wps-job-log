@@ -64,7 +64,7 @@
   .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:6px; }
 
   /* status strip */
-  .status-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr)); gap:10px; margin:20px 0; }
+  .status-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:10px; margin:20px 0; }
   .due{ display:block; margin-top:4px; font-size:11.5px; font-weight:600; white-space:nowrap; }
   .due-ok{ color:var(--ink-soft); } .due-soon{ color:#8A5A00; } .due-late{ color:#B42318; }
   tr.row-late td{ background:#FDF0EE; }
@@ -115,7 +115,7 @@
   th{ text-align:left; font-size:11.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; padding:10px 12px; white-space:nowrap; }
   td{ padding:12px; border-top:1px solid var(--line-soft); font-size:13.5px; vertical-align:top; }
   tr:hover td{ background:var(--paper); }
-  .pill{ display:inline-block; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; cursor:pointer; border:none; font-family:inherit; }
+  .pill{ display:inline-block; white-space:nowrap; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; cursor:pointer; border:none; font-family:inherit; }
   .type-badge{ display:inline-block; padding:3px 8px; border-radius:5px; font-size:11.5px; font-weight:600; background:var(--peri-bg); color:var(--peri); white-space:nowrap; }
   .row-actions{ display:flex; gap:6px; }
   .icon-btn{ background:none; border:none; cursor:pointer; padding:5px; border-radius:5px; color:var(--ink-soft); display:flex; }
@@ -261,6 +261,15 @@ const STATUSES = [
 ];
 // Report turnaround targets (hours from the visit) — change these to match what you promise agents
 const TURNAROUND_HOURS = { CO:48, MTI:72, CLN:72, ICI:72, SOC:72 };
+// Invoice tracking — separate from the report stages
+const INVOICE_STATES = [
+  { code:"",         label:"Not invoiced", fg:"var(--stone)", bg:"var(--stone-bg)" },
+  { code:"invoiced", label:"Invoiced",     fg:"#8A5A00",      bg:"#FFF1D0" },
+  { code:"paid",     label:"Paid",         fg:"#2E6B45",      bg:"#E0F0E6" },
+];
+const REPORT_OUT = ["sent","signed","archived"];   // report has gone out, so it should be invoiced
+function invoiceMeta(c){ return INVOICE_STATES.find(s=>s.code===(c||"")) || INVOICE_STATES[0]; }
+function needsInvoice(j){ return REPORT_OUT.includes(j.status) && !j.invoice; }
 const DUE_STATUSES = ["booked","processing","completed"];   // report not yet sent
 
 const DEFAULT_CLIENTS = [
@@ -337,7 +346,7 @@ function nextJobNumber(dateStr){
 function emptyJob(){
   return { id:uid(), jobNo:"", type:"ICI", client:"", date:"", time:"", address:"", town:"", postcode:"",
            bedrooms:"", extraAreas:"", propertyType:"",
-           tenants:"", notes:"", status:"booked" };
+           tenants:"", notes:"", status:"booked", invoice:"", invoiceNo:"" };
 }
 function clientByName(name){ return state.clients.find(c=>c.name===name); }
 function formatDate(s){
@@ -395,7 +404,10 @@ function monthOptions(){
 
 function baseFilteredJobs(){
   return state.jobs
-    .filter(j=> state.statusFilter==="all" || (state.statusFilter==="overdue" ? !!(dueInfo(j)&&dueInfo(j).late) : j.status===state.statusFilter))
+    .filter(j=> state.statusFilter==="all" || (state.statusFilter==="overdue" ? !!(dueInfo(j)&&dueInfo(j).late)
+         : state.statusFilter==="toinvoice" ? needsInvoice(j)
+         : state.statusFilter==="unpaid" ? j.invoice==="invoiced"
+         : j.status===state.statusFilter))
     .filter(j=> state.typeFilter==="all" || j.type===state.typeFilter)
     .filter(j=> state.clientFilter==="all" || j.client===state.clientFilter)
     .filter(j=>{
@@ -403,7 +415,7 @@ function baseFilteredJobs(){
       const q = state.search.toLowerCase();
       return (j.address||"").toLowerCase().includes(q) || (j.town||"").toLowerCase().includes(q) ||
              (j.postcode||"").toLowerCase().includes(q) || (j.client||"").toLowerCase().includes(q) ||
-             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q);
+             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q);
     });
 }
 function filteredJobs(){
@@ -504,6 +516,8 @@ function captureFormValues(){
   setIf('extraAreas','f_extraAreas');
   setIf('tenants','f_tenants');
   setIf('notes','f_notes');
+  setIf('invoice','f_invoice');
+  setIf('invoiceNo','f_invoiceNo');
 }
 
 // ---------------------------------------------------------------- CRUD
@@ -572,15 +586,21 @@ function submitForm(){
     propertyType: g("f_propertyType").value,
     tenants: g("f_tenants").value,
     notes: g("f_notes").value,
+    invoice: g("f_invoice").value,
+    invoiceNo: g("f_invoiceNo").value.trim(),
   };
   const idx = state.jobs.findIndex(x=>x.id===job.id);
-  if (idx>=0){ job.gcalEventId = state.jobs[idx].gcalEventId; if (state.jobs[idx].processingAt) job.processingAt = state.jobs[idx].processingAt; state.jobs[idx] = job; } else state.jobs.push(job);
-  setJobStatus(job, job.status);
+  const prev = idx>=0 ? state.jobs[idx] : {};
+  if (job.invoice && job.invoice!==prev.invoice){ if (job.invoice==="invoiced" && !prev.invoicedAt) job.invoicedAt = new Date().toISOString(); if (job.invoice==="paid") job.paidAt = new Date().toISOString(); }
+  const merged = Object.assign({}, prev, job);   // keeps photo link, calendar id, dates etc.
+  if (idx>=0) state.jobs[idx] = merged; else state.jobs.push(merged);
+  const saved = merged;
+  setJobStatus(saved, saved.status);
   saveJobs();
   if (state.fromQueueId){ markQueueDone(state.fromQueueId, "added"); state.fromQueueId = null; }
   state.editing = null;
   render();
-  syncJobToCalendar(job);
+  syncJobToCalendar(saved);
 }
 
 function deleteJob(id){
@@ -599,6 +619,17 @@ function cycleStatus(id){
   const idx = order.indexOf(j.status);
   if (idx >= order.length-1) return;               // archived is the end
   setJobStatus(j, order[idx+1]);
+  saveJobs();
+  render();
+}
+
+function cycleInvoice(id){
+  const j = state.jobs.find(x=>x.id===id);
+  if (!j) return;
+  const now = new Date().toISOString();
+  if (!j.invoice){ j.invoice = "invoiced"; j.invoicedAt = now; }
+  else if (j.invoice==="invoiced"){ j.invoice = "paid"; j.paidAt = now; }
+  else { j.invoice = ""; delete j.paidAt; delete j.invoicedAt; }
   saveJobs();
   render();
 }
@@ -1025,7 +1056,7 @@ function render(){
       ${state.editing ? renderForm() : ""}
       ${renderToolbar()}
       ${state.view === "calendar" ? renderCalendar() : renderTable()}
-      <div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed) &middot; data is stored only in this browser</div>
+      <div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed); click the invoice pill for Invoiced → Paid &middot; data is stored only in this browser</div>
     </div>
     </main>
     </div>
@@ -1109,6 +1140,8 @@ function renderStatusStrip(){
   STATUSES.forEach(s=>{ if (counts[s.code]===undefined) counts[s.code]=0; });
   state.jobs.forEach(j=>{ if (counts[j.status]!==undefined) counts[j.status]++; });
   const overdue = state.jobs.filter(j=>{ const d=dueInfo(j); return d && d.late; }).length;
+  const toInvoice = state.jobs.filter(needsInvoice).length;
+  const unpaid = state.jobs.filter(j=>j.invoice==="invoiced").length;
   return `<div class="status-strip">
     ${STATUSES.map(s=>`
       <button class="status-card" style="border-color:${state.statusFilter===s.code?s.fg:'var(--line)'}; background:${state.statusFilter===s.code?s.bg:'var(--white)'};"
@@ -1119,6 +1152,14 @@ function renderStatusStrip(){
       <button class="status-card" style="border-color:${state.statusFilter==='overdue'?'#B42318':'var(--line)'}; background:${state.statusFilter==='overdue'?'#FDF0EE':'var(--white)'};" onclick="setStatusFilter('overdue')">
       <div class="num" style="color:${overdue?'#B42318':'var(--stone)'}">${overdue}</div>
       <div class="lbl">Reports overdue</div>
+    </button>
+    <button class="status-card" style="border-color:${state.statusFilter==='toinvoice'?'var(--coral-dark)':'var(--line)'}; background:${state.statusFilter==='toinvoice'?'var(--coral-bg)':'var(--white)'};" onclick="setStatusFilter('toinvoice')">
+      <div class="num" style="color:${toInvoice?'var(--coral-dark)':'var(--stone)'}">${toInvoice}</div>
+      <div class="lbl">To invoice</div>
+    </button>
+    <button class="status-card" style="border-color:${state.statusFilter==='unpaid'?'#8A5A00':'var(--line)'}; background:${state.statusFilter==='unpaid'?'#FFF1D0':'var(--white)'};" onclick="setStatusFilter('unpaid')">
+      <div class="num" style="color:${unpaid?'#8A5A00':'var(--stone)'}">${unpaid}</div>
+      <div class="lbl">Awaiting payment</div>
     </button>
   </div>`;
 }
@@ -1264,6 +1305,14 @@ function renderForm(){
           ${STATUSES.map(s=>`<option value="${s.code}" ${f.status===s.code?"selected":""}>${s.label}</option>`).join("")}
         </select>
       </label>
+      <label class="field">Invoice
+        <select id="f_invoice">
+          ${INVOICE_STATES.map(s=>`<option value="${s.code}" ${(f.invoice||"")===s.code?"selected":""}>${s.label}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field">Invoice number
+        <input type="text" id="f_invoiceNo" value="${esc(f.invoiceNo||"")}" placeholder="From Tide (optional)" />
+      </label>
 
       <label class="field">Agent / client
         ${state.addingClient ? `
@@ -1353,7 +1402,7 @@ function renderTable(){
   return `<div class="tablewrap">
     <table>
       <thead><tr>
-        <th>Job No</th><th>Type</th><th>Agent</th><th>Address</th><th>Date</th><th>Time</th><th>Status</th><th></th>
+        <th>Job No</th><th>Type</th><th>Agent</th><th>Address</th><th>Date</th><th>Time</th><th>Status</th><th>Invoice</th><th></th>
       </tr></thead>
       <tbody>
         ${jobs.map(j=>{
@@ -1366,6 +1415,8 @@ function renderTable(){
             <td>${formatDate(j.date)}</td>
             <td>${esc(j.time)||"—"}</td>
             <td><button class="pill" title="Click to move to the next stage" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
+            <td>${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
+                return `<button class="pill" title="Click: Not invoiced, then Invoiced, then Paid" style="color:${need?'var(--coral-dark)':im.fg}; background:${need?'var(--coral-bg)':im.bg};" onclick="cycleInvoice('${j.id}')">${need?'To invoice':im.label}</button>${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
             <td>
               <div class="row-actions">
                 <button class="icon-btn" title="Edit" onclick="openEdit('${j.id}')">
