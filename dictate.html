@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WPS Dictation">
+<meta name="theme-color" content="#1F2D5A">
+<title>WPS Dictation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#1F2D5A; --navy2:#2B3D74; --coral:#FF6F61; --coral2:#E85A4C;
+  --bg:#F5F3EE; --card:#FFFFFF; --ink:#1C2233; --muted:#6B7285; --line:#E2DED5; --ok:#2E8B57;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg)}
+body{font-family:Jost,system-ui,-apple-system,sans-serif;color:var(--ink);font-size:16px;-webkit-tap-highlight-color:transparent;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+header{background:var(--navy);color:#fff;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:10}
+header .door{width:22px;height:30px;border:2.5px solid #fff;border-radius:11px 11px 2px 2px;position:relative;flex:none}
+header .door:after{content:"";position:absolute;right:4px;top:13px;width:4px;height:4px;border-radius:50%;background:var(--coral)}
+header h1{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:25px;margin:0 0 0 4px;flex:1;line-height:1}
+header button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 12px;font:inherit;font-size:14px}
+main{padding:12px 16px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px}
+label.f{display:block;font-size:12px;color:var(--muted);margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
+textarea{resize:vertical;line-height:1.45}
+.jobline{font-size:14px;color:var(--muted);margin-top:8px}
+h2{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:26px;margin:0;line-height:1.1;color:var(--navy)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;font:inherit;font-size:14px;color:var(--ink);position:relative}
+.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.chip.has:not(.on){border-color:var(--navy2);color:var(--navy)}
+.chip.has:after{content:"";position:absolute;top:3px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--coral)}
+.chip.add{border-style:dashed;color:var(--muted)}
+.roomhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.roomhead h2{flex:1}
+.mini{background:none;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit;font-size:13px;color:var(--muted)}
+.micwrap{display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0 12px}
+.mic{width:96px;height:96px;border-radius:50%;border:none;background:var(--coral);color:#fff;box-shadow:0 6px 18px rgba(255,111,97,.35);display:flex;align-items:center;justify-content:center}
+.mic svg{width:40px;height:40px}
+.mic.live{background:var(--navy);box-shadow:0 0 0 0 rgba(31,45,90,.5);animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,45,90,.45)}70%{box-shadow:0 0 0 18px rgba(31,45,90,0)}100%{box-shadow:0 0 0 0 rgba(31,45,90,0)}}
+.status{font-size:14px;color:var(--muted);min-height:20px;text-align:center}
+.interim{font-style:italic;color:var(--muted);min-height:22px;font-size:15px;margin:2px 0 8px}
+.clips{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.clip{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.clip span{flex:1}
+.clip button,.clip a{background:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font:inherit;font-size:13px;color:var(--navy);text-decoration:none}
+.tip{font-size:13px;color:var(--muted);line-height:1.5}
+.tip b{font-weight:600;color:var(--ink)}
+footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:10}
+footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:16px}
+.btn{flex:1;border:none;border-radius:12px;padding:13px 10px;font:inherit;font-weight:600;font-size:15px}
+.btn.primary{background:var(--navy);color:#fff}
+.btn.coral{background:var(--coral);color:#fff}
+.btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--line)}
+.sheet{position:fixed;inset:0;background:rgba(15,20,35,.45);z-index:20;display:none}
+.sheet.open{display:block}
+.panel{position:absolute;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;background:var(--bg);border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+.panel h3{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:26px;margin:0 0 10px;color:var(--navy);display:flex;align-items:center}
+.panel h3 span{flex:1}
+.joblist .j{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.joblist .j.cur{border-color:var(--navy);box-shadow:inset 3px 0 0 var(--navy)}
+.joblist .j div{flex:1;font-size:14px}
+.joblist .j strong{display:block;font-weight:600;font-size:15px}
+.toggle{display:flex;align-items:center;gap:10px;font-size:15px;margin:8px 0}
+.toggle input{width:22px;height:22px}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));background:var(--ink);color:#fff;padding:12px 14px;border-radius:12px;font-size:14px;z-index:30;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;max-width:608px;margin:0 auto}
+.toast.show{opacity:1;transform:none}
+.warn{background:#FFF4E5;border:1px solid #F3D3A3;color:#7A4B00;border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:12px;display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="door" aria-hidden="true"></div>
+  <h1>Dictation</h1>
+  <button id="jobsBtn">Jobs</button>
+  <button id="setBtn">Settings</button>
+</header>
+
+<main>
+  <div class="warn" id="warn"></div>
+
+  <section class="card" id="jobCard">
+    <div class="row">
+      <div style="flex:1"><label class="f" for="jobNo">Job no.</label><input id="jobNo" placeholder="WPS261005" autocomplete="off" autocapitalize="characters"></div>
+      <div style="width:42%"><label class="f" for="jobType">Type</label>
+        <select id="jobType">
+          <option value="CO">Check-Out</option>
+          <option value="ICI">Inventory &amp; Check-In</option>
+          <option value="MTI">Mid-Term</option>
+          <option value="SOC">Schedule of Condition</option>
+        </select></div>
+    </div>
+    <div style="margin-top:8px"><label class="f" for="jobAddr">Address</label><input id="jobAddr" placeholder="Flat 9, Test House, 1 Test Road, E3 9ZZ" autocomplete="off"></div>
+  </section>
+
+  <section class="card">
+    <label class="f">Room</label>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section class="card" id="roomCard">
+    <div class="roomhead"><h2 id="roomName">Pick a room</h2><button class="mini" id="clearRoom">Clear</button></div>
+    <div class="micwrap">
+      <button class="mic" id="mic" aria-label="Start dictating">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
+      </button>
+      <div class="status" id="status">Tap to dictate this room</div>
+    </div>
+    <div class="interim" id="interim"></div>
+    <textarea id="roomText" rows="7" placeholder="Your notes for this room appear here. You can type or fix words too."></textarea>
+    <div class="clips" id="clips"></div>
+  </section>
+
+  <section class="card tip">
+    Say <b>"full stop"</b>, <b>"comma"</b>, <b>"new line"</b> or <b>"next item"</b> while talking. Tap a new room to move on; your notes are kept. When you're done, tap <b>Copy for Claude</b> and paste into the WPS project chat.
+  </section>
+</main>
+
+<footer>
+  <div class="sum" id="sum"></div>
+  <button class="btn ghost" id="shareBtn">Share</button>
+  <button class="btn primary" id="copyBtn">Copy for Claude</button>
+</footer>
+
+<div class="sheet" id="jobsSheet">
+  <div class="panel">
+    <h3><span>Jobs</span><button class="mini" data-close>Close</button></h3>
+    <button class="btn coral" id="newJob" style="width:100%;margin-bottom:12px">Start a new job</button>
+    <div class="joblist" id="jobList"></div>
+  </div>
+</div>
+
+<div class="sheet" id="setSheet">
+  <div class="panel">
+    <h3><span>Settings</span><button class="mini" data-close>Close</button></h3>
+    <div class="card">
+      <label class="f" for="corr">Corrections (heard = correct, one per line)</label>
+      <textarea id="corr" rows="7"></textarea>
+      <div class="tip" style="margin-top:6px">When the phone keeps mishearing a word, add it here. It's fixed automatically from then on.</div>
+    </div>
+    <div class="card">
+      <label class="f" for="roomsList">Rooms (one per line, in walk-round order)</label>
+      <textarea id="roomsList" rows="9"></textarea>
+    </div>
+    <div class="card">
+      <label class="toggle"><input type="checkbox" id="audioOn"> Keep audio backup of each room</label>
+      <div class="tip">Saves the recording on this phone so you can replay a note if the text came out wrong. If live text stops working with this on, switch it off.</div>
+    </div>
+    <div class="card">
+      <button class="btn ghost" id="exportBtn" style="width:100%;margin-bottom:8px">Export all notes (backup file)</button>
+      <div class="tip">Notes and audio are stored on this phone only, in this browser.</div>
+    </div>
+    <button class="btn primary" id="saveSet" style="width:100%">Save settings</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+var KEY = 'wps-dictate-v1';
+var DEFAULT_ROOMS = ['External picture','Exterior','Entrance and Hallway','Lounge','Kitchen','Dining Room','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom','En-suite','WC','Landing','Stairs','Garden','Electricity meter','Gas meter','Heat meter','Keys','General'];
+var DEFAULT_CORR = [
+  ['skirting bored','skirting board'],
+  ['skirting bords','skirting boards'],
+  ['magnolia emotion','magnolia emulsion'],
+  ['white emotion','white emulsion'],
+  ['emotion paint','emulsion paint'],
+  ['silicon sealant','silicone sealant'],
+  ['arc a trave','architrave'],
+  ['work top','worktop']
+];
+var TYPES = {
+  CO:{name:'Check-Out', ask:'Please write this up as the check-out column comments in my report style, compared against the check-in.'},
+  ICI:{name:'Inventory & Check-In', ask:'Please write this up as inventory and check-in descriptions and conditions in my report style.'},
+  MTI:{name:'Mid-Term Inspection', ask:'Please write this up as mid-term inspection comments in my report style, and list any items needing attention.'},
+  SOC:{name:'Schedule of Condition', ask:'Please write this up as schedule of condition descriptions in my report style.'}
+};
+
+var state = load();
+var memClips = {};
+var $ = function(id){ return document.getElementById(id); };
+
+function fresh(){
+  return {jobs:[], currentId:null, settings:{rooms:DEFAULT_ROOMS.slice(), corrections:DEFAULT_CORR.slice(), audio:true}};
+}
+function load(){
+  try{
+    var s = JSON.parse(localStorage.getItem(KEY));
+    if(s && s.jobs && s.settings) return s;
+  }catch(e){}
+  return fresh();
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch(e){ toast('Could not save on this phone. Copy your notes out now.'); }
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function reEsc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+function job(){
+  for(var i=0;i<state.jobs.length;i++) if(state.jobs[i].id===state.currentId) return state.jobs[i];
+  return null;
+}
+function newJob(){
+  var j = {id:uid(), jobNo:'', type:'CO', address:'', created:Date.now(), rooms:[], current:null};
+  state.jobs.unshift(j); state.currentId = j.id; save(); return j;
+}
+function room(name, create){
+  var j = job(); if(!j) return null;
+  for(var i=0;i<j.rooms.length;i++) if(j.rooms[i].name===name) return j.rooms[i];
+  if(!create) return null;
+  var r = {name:name, text:'', clips:[]}; j.rooms.push(r); return r;
+}
+function curRoom(){ var j=job(); return j && j.current ? room(j.current, true) : null; }
+
+/* ---------- text processing ---------- */
+function processText(t){
+  var s = ' ' + t.trim() + ' ';
+  var corr = state.settings.corrections || [];
+  for(var i=0;i<corr.length;i++){
+    if(!corr[i][0]) continue;
+    s = s.replace(new RegExp('\\b' + reEsc(corr[i][0]) + '\\b','gi'), corr[i][1]);
+  }
+  s = s.replace(/\s*\bnew paragraph\b\s*/gi,'\n\n')
+       .replace(/\s*\bnew ?line\b\s*/gi,'\n')
+       .replace(/\s*\bnext item\b\s*/gi,'\n- ')
+       .replace(/\s+\b(full stop|period)\b/gi,'.')
+       .replace(/\s+\bcomma\b/gi,',')
+       .replace(/\s+\bquestion mark\b/gi,'?')
+       .replace(/[ \t]+/g,' ')
+       .replace(/ ([.,?])/g,'$1')
+       .replace(/ *\n */g,'\n')
+       .trim();
+  s = s.replace(/(^|[.?!]\s+|\n-?\s*)([a-z])/g, function(m,p,c){ return p + c.toUpperCase(); });
+  return s;
+}
+function joinText(a,b){
+  if(!b) return a; if(!a) return b;
+  if(/\n$/.test(a) || /^\n/.test(b)) return a + b;
+  var end = a.replace(/\s+$/,'');
+  if(!/[.?!,]$/.test(end) && /^[A-Z]/.test(b)) end += '.';
+  return end + ' ' + b;
+}
+
+/* ---------- storage for audio ---------- */
+var dbp = null;
+function db(){
+  if(!dbp) dbp = new Promise(function(res,rej){
+    try{
+      var r = indexedDB.open('wps-dictate',1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore('clips'); };
+      r.onsuccess = function(){ res(r.result); };
+      r.onerror = function(){ rej(r.error); };
+    }catch(e){ rej(e); }
+  });
+  return dbp;
+}
+function idb(mode, fn){
+  return db().then(function(d){ return new Promise(function(res,rej){
+    var tx = d.transaction('clips', mode); var st = tx.objectStore('clips');
+    var req = fn(st); tx.oncomplete = function(){ res(req && req.result); }; tx.onerror = function(){ rej(tx.error); };
+  }); });
+}
+function putClip(k,b){ memClips[k]=b; return idb('readwrite', function(s){ return s.put(b,k); }).catch(function(){}); }
+function getClip(k){ if(memClips[k]) return Promise.resolve(memClips[k]); return idb('readonly', function(s){ return s.get(k); }).catch(function(){ return null; }); }
+function delClip(k){ delete memClips[k]; return idb('readwrite', function(s){ return s.delete(k); }).catch(function(){}); }
+
+/* ---------- recording ---------- */
+var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+var rec=null, want=false, base='', sessFinal='', mediaRec=null, stream=null, chunks=[], startedAt=0, lock=null, recRoom=null;
+
+function setLive(on){
+  $('mic').classList.toggle('live', on);
+  $('mic').setAttribute('aria-label', on ? 'Stop dictating' : 'Start dictating');
+  $('roomText').readOnly = on;
+  $('status').textContent = on ? 'Listening… tap to stop' : 'Tap to dictate this room';
+  if(!on) $('interim').textContent = '';
+}
+function start(){
+  if(!job()) newJob();
+  var r = curRoom();
+  if(!r){ toast('Pick a room first'); return; }
+  if(!SR && !(window.MediaRecorder && navigator.mediaDevices)){ toast('Dictation needs Safari on iPhone or Chrome.'); return; }
+  r.text = $('roomText').value; save();
+  recRoom = r.name; base = r.text; sessFinal = ''; want = true; setLive(true);
+  var go = function(){ if(SR) startSR(); keepAwake(); };
+  if(state.settings.audio && window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){
+      stream = s;
+      var types = ['audio/mp4','audio/webm;codecs=opus','audio/webm'];
+      var type = ''; for(var i=0;i<types.length;i++){ if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(types[i])){ type=types[i]; break; } }
+      try{ mediaRec = type ? new MediaRecorder(s,{mimeType:type}) : new MediaRecorder(s); }catch(e){ mediaRec = new MediaRecorder(s); }
+      chunks = []; startedAt = Date.now();
+      mediaRec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+      mediaRec.onstop = saveClip;
+      mediaRec.start(1000);
+      go();
+    }).catch(function(){ toast('Audio backup unavailable; live text only.'); go(); });
+  } else { go(); }
+}
+function startSR(){
+  try{
+    rec = new SR();
+    rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = function(e){
+      var fin = '', interim = '';
+      for(var i=0;i<e.results.length;i++){
+        var res = e.results[i];
+        if(res.isFinal) fin += res[0].transcript + ' '; else interim += res[0].transcript;
+      }
+      sessFinal = fin;
+      $('roomText').value = joinText(base, processText(sessFinal));
+      $('interim').textContent = interim;
+    };
+    rec.onerror = function(e){
+      if(e.error==='not-allowed' || e.error==='service-not-allowed'){
+        toast('Microphone or speech access is blocked. Check Settings > Safari > Microphone, and Siri & Dictation is on.');
+        want = false;
+      } else if(e.error==='audio-capture' && mediaRec){
+        toast("This phone can't do live text and audio backup together. Turn off audio backup in Settings.");
+      }
+    };
+    rec.onend = function(){
+      base = joinText(base, processText(sessFinal)); sessFinal = '';
+      var r = room(recRoom, true); if(r){ r.text = base; save(); }
+      if(want){ setTimeout(function(){ if(want){ try{ rec.start(); }catch(_){ startSR(); } } }, 150); }
+      else finishUI();
+    };
+    rec.start();
+  }catch(e){ toast('Live text could not start.'); }
+}
+function stop(){
+  want = false;
+  if(rec){ try{ rec.stop(); }catch(e){ finishUI(); } } else finishUI();
+  if(mediaRec && mediaRec.state !== 'inactive'){ try{ mediaRec.stop(); }catch(e){} }
+  if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+  if(lock){ try{ lock.release(); }catch(e){} lock = null; }
+}
+function finishUI(){
+  rec = null; setLive(false);
+  var r = room(recRoom, true); if(r){ r.text = $('roomText').value; save(); }
+  render();
+}
+function saveClip(){
+  if(!chunks.length || !recRoom){ mediaRec = null; return; }
+  var type = (mediaRec && mediaRec.mimeType) || chunks[0].type || 'audio/mp4';
+  var blob = new Blob(chunks, {type:type});
+  var j = job(); var r = room(recRoom, true);
+  var k = j.id + '|' + recRoom + '|' + Date.now();
+  r.clips.push({key:k, secs:Math.round((Date.now()-startedAt)/1000), type:type});
+  save(); putClip(k, blob); chunks = []; mediaRec = null; renderClips();
+}
+function keepAwake(){
+  try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l){ lock = l; }).catch(function(){}); }catch(e){}
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  var j = job() || newJob();
+  $('jobNo').value = j.jobNo; $('jobType').value = j.type; $('jobAddr').value = j.address;
+  var names = state.settings.rooms.slice();
+  j.rooms.forEach(function(r){ if(names.indexOf(r.name) < 0) names.push(r.name); });
+  var html = names.map(function(n){
+    var r = room(n, false);
+    var has = r && (r.text.trim() || r.clips.length);
+    return '<button class="chip' + (j.current===n?' on':'') + (has?' has':'') + '" data-room="' + esc(n) + '">' + esc(n) + '</button>';
+  }).join('') + '<button class="chip add" id="addRoom">+ Other</button>';
+  $('chips').innerHTML = html;
+  var r = curRoom();
+  $('roomName').textContent = r ? r.name : 'Pick a room';
+  if(!want) $('roomText').value = r ? r.text : '';
+  $('roomText').disabled = !r;
+  renderClips();
+  var done = j.rooms.filter(function(x){ return x.text.trim(); }).length;
+  $('sum').textContent = done ? done + ' room' + (done>1?'s':'') + ' dictated' : '';
+}
+function fmt(s){ var m = Math.floor(s/60), x = s%60; return m + ':' + (x<10?'0':'') + x; }
+function renderClips(){
+  var r = curRoom(); var el = $('clips');
+  if(!r || !r.clips.length){ el.innerHTML = ''; return; }
+  el.innerHTML = r.clips.map(function(c,i){
+    return '<div class="clip"><span>Audio ' + (i+1) + ' · ' + fmt(c.secs||0) + '</span>' +
+      '<button data-play="' + i + '">Play</button><button data-dl="' + i + '">Save</button><button data-del="' + i + '">✕</button></div>';
+  }).join('');
+}
+
+/* ---------- output ---------- */
+function buildOutput(){
+  var j = job(); if(!j) return '';
+  var t = TYPES[j.type] || TYPES.CO;
+  var d = new Date(j.created).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var lines = ['WPS dictation for report writing',
+    'Job: ' + (j.jobNo || '(no job no.)') + ' | ' + t.name + ' | ' + (j.address || '(no address)'),
+    'Date: ' + d, t.ask, ''];
+  var rooms = j.rooms.filter(function(r){ return r.text.trim(); });
+  if(!rooms.length) return '';
+  rooms.forEach(function(r){ lines.push('## ' + r.name); lines.push(r.text.trim()); lines.push(''); });
+  return lines.join('\n').trim();
+}
+function copyText(s){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(s).then(function(){ return true; }, function(){ return fallbackCopy(s); });
+  }
+  return Promise.resolve(fallbackCopy(s));
+}
+function fallbackCopy(s){
+  var ta = document.createElement('textarea'); ta.value = s; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  var ok = false; try{ ok = document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta); return ok;
+}
+
+var tt = null;
+function toast(msg){
+  var el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(tt); tt = setTimeout(function(){ el.classList.remove('show'); }, 3600);
+}
+
+/* ---------- events ---------- */
+$('mic').addEventListener('click', function(){ want ? stop() : start(); });
+$('chips').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  if(want) stop();
+  var j = job() || newJob();
+  if(b.id === 'addRoom'){
+    var n = prompt('Room name (e.g. Bedroom 4, Utility, Balcony)');
+    if(!n || !n.trim()) return; n = n.trim();
+    if(state.settings.rooms.indexOf(n) < 0) state.settings.rooms.push(n);
+    j.current = n; room(n, true); save(); render(); return;
+  }
+  var cur = curRoom(); if(cur){ cur.text = $('roomText').value; }
+  j.current = b.getAttribute('data-room'); room(j.current, true); save(); render();
+  window.scrollTo({top: $('roomCard').offsetTop - 70, behavior:'smooth'});
+});
+$('roomText').addEventListener('input', function(){ var r = curRoom(); if(r && !want){ r.text = this.value; save(); var done = job().rooms.filter(function(x){ return x.text.trim(); }).length; $('sum').textContent = done ? done + ' room' + (done>1?'s':'') + ' dictated' : ''; } });
+$('clearRoom').addEventListener('click', function(){
+  var r = curRoom(); if(!r || want) return;
+  if(!confirm('Clear the notes for ' + r.name + '? Audio backups are kept.')) return;
+  r.text = ''; save(); render();
+});
+['jobNo','jobType','jobAddr'].forEach(function(id){
+  $(id).addEventListener('input', function(){ var j = job() || newJob(); j.jobNo = $('jobNo').value.trim(); j.type = $('jobType').value; j.address = $('jobAddr').value.trim(); save(); });
+  $(id).addEventListener('change', function(){ var j = job(); if(j){ j.jobNo = $('jobNo').value.trim(); j.type = $('jobType').value; j.address = $('jobAddr').value.trim(); save(); } });
+});
+$('clips').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  var r = curRoom(); if(!r) return;
+  var i, c;
+  if(b.hasAttribute('data-play')){
+    c = r.clips[+b.getAttribute('data-play')];
+    getClip(c.key).then(function(blob){ if(!blob){ toast('Audio not found on this phone.'); return; } var a = new Audio(URL.createObjectURL(blob)); a.play().catch(function(){ toast('Could not play audio.'); }); });
+  } else if(b.hasAttribute('data-dl')){
+    i = +b.getAttribute('data-dl'); c = r.clips[i];
+    getClip(c.key).then(function(blob){
+      if(!blob){ toast('Audio not found on this phone.'); return; }
+      var ext = /mp4|m4a|aac/.test(c.type||'') ? 'm4a' : 'webm';
+      var j = job();
+      var name = ((j.jobNo||'job') + '_' + r.name + '_' + (i+1)).replace(/[^\w.-]+/g,'_') + '.' + ext;
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    });
+  } else if(b.hasAttribute('data-del')){
+    i = +b.getAttribute('data-del'); c = r.clips[i];
+    if(!confirm('Delete this audio backup?')) return;
+    delClip(c.key); r.clips.splice(i,1); save(); renderClips(); render();
+  }
+});
+$('copyBtn').addEventListener('click', function(){
+  if(want) stop();
+  setTimeout(function(){
+    var s = buildOutput(); if(!s){ toast('Nothing dictated yet.'); return; }
+    copyText(s).then(function(ok){ toast(ok ? 'Copied. Paste it into the WPS project chat.' : 'Copy failed. Use Share instead.'); });
+  }, want ? 400 : 0);
+});
+$('shareBtn').addEventListener('click', function(){
+  if(want) stop();
+  var s = buildOutput(); if(!s){ toast('Nothing dictated yet.'); return; }
+  var j = job();
+  if(navigator.share){ navigator.share({title:'WPS dictation ' + (j.jobNo||''), text:s}).catch(function(){}); }
+  else copyText(s).then(function(){ toast('Sharing not available here, so it was copied instead.'); });
+});
+
+/* jobs sheet */
+function openSheet(id){ $(id).classList.add('open'); }
+document.querySelectorAll('.sheet').forEach(function(sh){
+  sh.addEventListener('click', function(e){ if(e.target === sh || e.target.hasAttribute('data-close')) sh.classList.remove('open'); });
+});
+function renderJobs(){
+  $('jobList').innerHTML = state.jobs.map(function(j){
+    var t = TYPES[j.type] ? TYPES[j.type].name : j.type;
+    var n = j.rooms.filter(function(r){ return r.text.trim(); }).length;
+    var d = new Date(j.created).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    return '<div class="j' + (j.id===state.currentId?' cur':'') + '" data-id="' + j.id + '"><div><strong>' + esc(j.jobNo || 'No job no.') + ' · ' + esc(t) + '</strong>' +
+      esc(j.address || 'No address') + '<br>' + d + ' · ' + n + ' room' + (n===1?'':'s') + '</div><button class="mini" data-deljob="' + j.id + '">Delete</button></div>';
+  }).join('') || '<div class="tip">No jobs yet.</div>';
+}
+$('jobsBtn').addEventListener('click', function(){ if(want) stop(); renderJobs(); openSheet('jobsSheet'); });
+$('newJob').addEventListener('click', function(){ newJob(); render(); $('jobsSheet').classList.remove('open'); $('jobNo').focus(); });
+$('jobList').addEventListener('click', function(e){
+  var del = e.target.closest('[data-deljob]');
+  if(del){
+    var id = del.getAttribute('data-deljob');
+    var j = state.jobs.filter(function(x){ return x.id===id; })[0];
+    if(!confirm('Delete ' + (j.jobNo || 'this job') + ' and its audio from this phone?')) return;
+    j.rooms.forEach(function(r){ r.clips.forEach(function(c){ delClip(c.key); }); });
+    state.jobs = state.jobs.filter(function(x){ return x.id!==id; });
+    if(state.currentId===id) state.currentId = state.jobs[0] ? state.jobs[0].id : null;
+    save(); renderJobs(); render(); return;
+  }
+  var row = e.target.closest('[data-id]');
+  if(row){ state.currentId = row.getAttribute('data-id'); save(); render(); $('jobsSheet').classList.remove('open'); }
+});
+
+/* settings sheet */
+$('setBtn').addEventListener('click', function(){
+  if(want) stop();
+  $('corr').value = state.settings.corrections.map(function(p){ return p[0] + ' = ' + p[1]; }).join('\n');
+  $('roomsList').value = state.settings.rooms.join('\n');
+  $('audioOn').checked = !!state.settings.audio;
+  openSheet('setSheet');
+});
+$('saveSet').addEventListener('click', function(){
+  state.settings.corrections = $('corr').value.split('\n').map(function(l){
+    var p = l.split('='); if(p.length < 2) return null;
+    var a = p[0].trim(), b = p.slice(1).join('=').trim(); return a ? [a,b] : null;
+  }).filter(Boolean);
+  var rooms = $('roomsList').value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+  state.settings.rooms = rooms.length ? rooms : DEFAULT_ROOMS.slice();
+  state.settings.audio = $('audioOn').checked;
+  save(); render(); $('setSheet').classList.remove('open'); toast('Settings saved.');
+});
+$('exportBtn').addEventListener('click', function(){
+  var blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'wps-dictation-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+document.addEventListener('visibilitychange', function(){ if(document.hidden && want) stop(); });
+
+if(!SR){
+  var w = $('warn'); w.style.display = 'block';
+  w.textContent = 'Live text isn\'t available in this browser. Open this page in Safari on your iPhone (or Chrome on a computer). Audio backup still works.';
+}
+render();
+})();
+</script>
+</body>
+</html>
