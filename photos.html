@@ -304,7 +304,7 @@ const DEFAULT_AREAS = [
 ];
 const DEFAULT_SETTINGS = {
   gap: 30, size: 1440, quality: 76, sizeVersion: 2, portrait: "canvas", canvas: "#222222",
-  wmpos: "br", wmsize: 100, wmtext: "Wellington Property Services {year}",
+  wmpos: "br", wmsize: 100, wmtext: "Wellington Property Services", wmVersion: 2, coverSize: 2400,
   base: "http://www.wellingtonparker.com/photos/", stripGps: true, flatFix: true, areasVersion: 3,
   areas: DEFAULT_AREAS
 };
@@ -347,6 +347,12 @@ function loadSettings(){
     if (!s.size || s.size === 1600) S.settings.size = 1440;
     if (!s.quality || s.quality === 82) S.settings.quality = 76;
     S.settings.sizeVersion = 2;
+    saveSettingsLS();
+  }
+  // 8 Oct: new watermark (navy tag with date and time) — move the old default text over once
+  if ((s.wmVersion || 1) < 2){
+    if (!s.wmtext || s.wmtext === "Wellington Property Services {year}") S.settings.wmtext = "Wellington Property Services";
+    S.settings.wmVersion = 2;
     saveSettingsLS();
   }
   // areas added in later versions: add them to a saved list once (29 Sept: cover photo + meters)
@@ -999,6 +1005,10 @@ function setArea(id, area){
 
 // ============================================================ output naming
 function zipName(m){ return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.zip`; }
+function isCoverArea(a){ return /^external picture/i.test(a || ""); }
+function coverName(m, n, total){
+  return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.cover${total > 1 ? "_" + pad2(n) : ""}.jpg`;
+}
 function fileName(m, area, seq){
   return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.${ddmmyy(m.date)}.${safeName(area)}_${pad2(seq)}.jpg`;
 }
@@ -1014,45 +1024,76 @@ function drawDoor(ctx, x, y, h, color){
   ctx.restore();
   return 20 * s; // width used
 }
-function drawWatermark(ctx, W, H, year, rect){
-  // rect = where the photo actually sits (inside any canvas bars), so the mark never runs onto the background
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+}
+function drawDoorMark(ctx, x, y, h){
+  // WPS door: white outer arch, coral inner arch, base line (as in the logo)
+  const s = h / 213;                                  // logo door is ~254 x 213 units
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.translate(-52, -515);
+  ctx.lineWidth = 14; ctx.lineCap = "butt";
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.beginPath(); ctx.moveTo(88,722); ctx.lineTo(88,612); ctx.arc(179,612,91,Math.PI,0); ctx.lineTo(270,722); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(58,722); ctx.lineTo(300,722); ctx.stroke();
+  ctx.strokeStyle = "#E8735A";
+  ctx.beginPath(); ctx.moveTo(120,722); ctx.lineTo(120,614); ctx.arc(179,614,59,Math.PI,0); ctx.lineTo(238,722); ctx.stroke();
+  ctx.restore();
+  return h * 254 / 213;                               // width used
+}
+function stampText(ms){
+  const d = new Date(ms);
+  return pad2(d.getDate()) + "." + pad2(d.getMonth()+1) + "." + d.getFullYear() + " \u00B7 " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+function drawWatermark(ctx, W, H, timeMs, rect){
+  // 8 Oct: small rounded navy tag — door mark + "Wellington Property Services" + date and time taken.
+  // rect = where the photo actually sits (inside any canvas bars), so the tag never runs onto the background
   const R = rect || { x:0, y:0, w:W, h:H };
   const st = S.settings;
   const scale = st.wmsize / 100;
-  let th = Math.max(12, Math.round(R.h * 0.028 * scale));      // text height, based on the photo's own height
-  const text = (st.wmtext || "").replace("{year}", year);
+  let th = Math.max(11, Math.round(R.h * 0.022 * scale));     // main text height, from the photo's own height
+  const line1 = (st.wmtext || "Wellington Property Services").replace("{year}", new Date(timeMs).getFullYear());
+  const line2 = stampText(timeMs);
   ctx.save();
-  let tw, logoW, logoH, gap, boxW, boxH, pad;
+  let w1, w2, th2, markH, markW, gap, padX, padY, boxW, boxH, rad, margin;
   const measure = () => {
-    ctx.font = `600 ${th}px 'Segoe UI', Arial, sans-serif`;
-    tw = ctx.measureText(text).width;
-    logoH = Math.round(th * 1.9);
-    if (S.logoImg){ logoW = Math.round(logoH * S.logoImg.width / S.logoImg.height); }
-    else { logoW = Math.round(th * 1.25); logoH = Math.round(th * 1.75); }
-    gap = Math.round(th * 0.5); pad = Math.round(th * 0.9);
-    boxW = logoW + gap + tw; boxH = Math.max(logoH, th);
+    th2 = Math.round(th * 0.86);
+    ctx.font = `600 ${th}px 'Segoe UI', Arial, sans-serif`; w1 = ctx.measureText(line1).width;
+    ctx.font = `400 ${th2}px 'Segoe UI', Arial, sans-serif`; w2 = ctx.measureText(line2).width;
+    markH = Math.round(th * 1.9);
+    markW = S.logoImg ? Math.round(markH * S.logoImg.width / S.logoImg.height) : Math.round(markH * 254 / 213);
+    gap = Math.round(th * 0.6); padX = Math.round(th * 0.75); padY = Math.round(th * 0.45);
+    boxW = padX + markW + gap + Math.max(w1, w2) + padX;
+    boxH = padY + Math.max(markH, th + th2 + Math.round(th * 0.25)) + padY;
+    rad = Math.round(th * 0.6); margin = Math.round(th * 0.8);
   };
   measure();
-  // shrink to fit narrow photos (e.g. a real portrait shot on a landscape canvas)
-  while (boxW + 2*pad > R.w && th > 10){ th = Math.floor(th * 0.9); measure(); }
+  while (boxW + 2*margin > R.w && th > 9){ th = Math.floor(th * 0.9); measure(); }
   let x, y;
   const L = R.x, T = R.y, Rt = R.x + R.w, B = R.y + R.h;
   switch (st.wmpos){
-    case "bl": x = L + pad; y = B - pad - boxH; break;
-    case "tr": x = Rt - pad - boxW; y = T + pad; break;
-    case "tl": x = L + pad; y = T + pad; break;
-    case "bc": x = L + (R.w - boxW)/2; y = B - pad - boxH; break;
-    default:   x = Rt - pad - boxW; y = B - pad - boxH;
+    case "bl": x = L + margin; y = B - margin - boxH; break;
+    case "tr": x = Rt - margin - boxW; y = T + margin; break;
+    case "tl": x = L + margin; y = T + margin; break;
+    case "bc": x = L + (R.w - boxW)/2; y = B - margin - boxH; break;
+    default:   x = Rt - margin - boxW; y = B - margin - boxH;
   }
-  ctx.globalAlpha = 0.9;
-  ctx.shadowColor = "rgba(0,0,0,0.65)"; ctx.shadowBlur = Math.round(th * 0.35); ctx.shadowOffsetY = 1;
-  if (S.logoImg) ctx.drawImage(S.logoImg, x, y + (boxH - logoH)/2, logoW, logoH);
-  else drawDoor(ctx, x, y + (boxH - logoH)/2, logoH, "#FFFFFF");
-  ctx.fillStyle = "#FFFFFF"; ctx.textBaseline = "middle";
-  ctx.fillText(text, x + logoW + gap, y + boxH/2);
+  ctx.fillStyle = "rgba(31,45,90,0.82)";
+  roundRect(ctx, x, y, boxW, boxH, rad); ctx.fill();
+  const mx = x + padX, my = y + (boxH - markH)/2;
+  if (S.logoImg) ctx.drawImage(S.logoImg, mx, my, markW, markH);
+  else drawDoorMark(ctx, mx, my, markH);
+  const tx = mx + markW + gap, mid = y + boxH/2;
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#FFFFFF"; ctx.font = `600 ${th}px 'Segoe UI', Arial, sans-serif`;
+  ctx.fillText(line1, tx, mid - Math.round(th * 0.12));
+  ctx.fillStyle = "#D5DAE8"; ctx.font = `400 ${th2}px 'Segoe UI', Arial, sans-serif`;
+  ctx.fillText(line2, tx, mid + th2 + Math.round(th * 0.05));
   ctx.restore();
 }
-async function processPhoto(p){
+async function processPhoto(p, o){
+  o = o || {};
   const st = S.settings;
   const bmp = await createImageBitmap(p.file, { imageOrientation: "from-image" });
   // manual rotation
@@ -1062,7 +1103,7 @@ async function processPhoto(p){
   // portrait handling
   let autoRotate = false;
   if (rh > rw && st.portrait === "rotate"){ rot = (rot + 90) % 360; autoRotate = true; [rw, rh] = [rh, rw]; }
-  const L = st.size;
+  const L = o.size || st.size;
   let W, H, dw, dh;
   if (rh > rw && st.portrait === "canvas"){
     H = Math.min(L * 3/4, rh) | 0; W = Math.round(H * 4/3);
@@ -1082,8 +1123,8 @@ async function processPhoto(p){
   ctx.drawImage(bmp, -bw/2, -bh/2, bw, bh);
   ctx.restore();
   bmp.close && bmp.close();
-  drawWatermark(ctx, W, H, new Date(p.time).getFullYear(), { x:(W-dw)/2, y:(H-dh)/2, w:dw, h:dh });
-  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", st.quality / 100));
+  if (!o.clean) drawWatermark(ctx, W, H, p.time, { x:(W-dw)/2, y:(H-dh)/2, w:dw, h:dh });
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", (o.quality || st.quality) / 100));
   let buf = await blob.arrayBuffer();
   if (p.exif){
     // read the full original header again (thumb read may have been partial for very large EXIF)
@@ -1124,6 +1165,17 @@ async function processGroup(gid, opts){
   const out = await zip.generateAsync({ type:"blob", compression:"STORE" });
   const name = zipName(m);
   downloadBlob(out, name);
+  // 8 Oct: report cover photo — a clean copy (no watermark or date tag), bigger, saved next to the zip.
+  // The stamped copy stays in the zip as evidence.
+  const covers = keep.filter(p => isCoverArea(amap[p.id]));
+  let cn = 0;
+  for (const p of covers){
+    cn++;
+    $("progText").textContent = "Making cover photo…";
+    const cbuf = await processPhoto(p, { clean:true, size: S.settings.coverSize || 2400, quality: 88 });
+    downloadBlob(new Blob([cbuf], { type:"image/jpeg" }), coverName(m, cn, covers.length));
+    await new Promise(r => setTimeout(r, 400));
+  }
   m.link = (S.settings.base || "") + name;
   for (const id of sibs) if (S.meta[id]) S.meta[id].link = m.link;
   saveLinkToJobLog(m);
@@ -1185,7 +1237,7 @@ async function previewWatermark(){
   const grd = ctx.createLinearGradient(0,0,W,H); grd.addColorStop(0,"#C9B8A0"); grd.addColorStop(1,"#6E7C8C");
   ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
   ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(80,120,300,380); ctx.fillRect(450,200,260,160);
-  drawWatermark(ctx, W, H, new Date().getFullYear());
+  drawWatermark(ctx, W, H, Date.now());
   $("wmPreview").innerHTML = "";
   c.style.maxWidth = "100%"; c.style.borderRadius = "8px";
   $("wmPreview").appendChild(c);
