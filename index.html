@@ -757,6 +757,12 @@ function amendOpenFor(j){
   const a = state.amend; if (!a || !a.loaded) return null;          // unknown until the Amendments Sheet is read
   return a.jobs.some(g => normJobNo(g.job) === normJobNo(j.jobNo));
 }
+function autoReminder(j){
+  // date text if the script already sent this window's 7-day reminder, else null
+  const a = state.amend; if (!a || !a.autoRem) return null;
+  const s = j.reissuedAt || j.sentAt; if (!s) return null;
+  return a.autoRem[normJobNo(j.jobNo)+"|"+String(s).slice(0,10)] || null;
+}
 function windowState(j){
   // open | hold (amendments open, window passed) | due (passed, amendments not checked yet) | deemed | signed
   if (j.status==="signed") return "signed";
@@ -1170,7 +1176,7 @@ function gcalEventBody(j){
   if (j.client) descParts.push("Agent: "+j.client);
   if (j.tenants) descParts.push("Tenant/contact: "+j.tenants);
   if (j.tenantEmails) descParts.push("Tenant emails: "+j.tenantEmails);
-  if (j.agentEmail) descParts.push("Agent email: "+j.agentEmail);
+  if (j.agentEmail) descParts.push("Copy to: "+j.agentEmail);
   if (j.notes) descParts.push("Notes: "+j.notes);
   return { summary: gcalEventSummary(j), location: fullAddress(j), description: descParts.join("\n"), start, end };
 }
@@ -1557,7 +1563,15 @@ function loadAmendments(){
         if (row[iName]) g.names.add(row[iName] + (row[iRole] ? " ("+row[iRole]+")" : ""));
         if (row[iSub] && (!g.first || row[iSub] < g.first)) g.first = row[iSub];
       });
-      state.amend = { loaded:true, at:new Date(), jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
+      // automatic 7-day reminders sent by the WPS Amendments script (Process emails tab, email D, status Sent)
+      const autoRem = {};
+      try {
+        const pr = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/"+encodeURIComponent("'Process emails'!A:G")+"?valueRenderOption=UNFORMATTED_VALUE");
+        const prow = pr.values || [], ph = prow[0] || [];
+        const pT = ph.indexOf("Time"), pJ = ph.indexOf("Job"), pE = ph.indexOf("Email"), pW = ph.indexOf("Window"), pS = ph.indexOf("Status");
+        prow.slice(1).forEach(r => { if (r[pE]==="D" && r[pS]==="Sent") autoRem[normJobNo(r[pJ])+"|"+String(r[pW]||"").replace(/^'/,"")] = (typeof r[pT]==="number") ? new Date(Math.round((r[pT]-25569)*86400000)) : new Date(); });
+      } catch(e){ console.log("[WPS] process emails read failed", e); }
+      state.amend = { loaded:true, at:new Date(), autoRem, jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
       autoDeem();
     } catch(e){
       console.log("[WPS] amendments read failed", e);
@@ -1642,6 +1656,7 @@ function windowRow(x, now){
   let rem = "";
   if (open && j.status==="sent"){
     if (j.reminderAt) rem = `<div class="sub">Reminder sent ${esc(shortDay(new Date(j.reminderAt)))} · <button class="t-link" style="font-size:12px" onclick="markReminder('${j.id}', false)">undo</button></div>`;
+    else if (autoReminder(j)) rem = `<div class="sub">Reminder sent automatically ${esc(shortDay(autoReminder(j)))}</div>`;
     else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')" style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
   }
   return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
@@ -1682,7 +1697,7 @@ function renderToday(){
   const windows = live.filter(j => j.type==="ICI" && j.sentAt && j.status!=="archived").map(j => ({ j, closes: windowClose(j), st: windowState(j) }))
     .filter(x => x.st==="open" || x.st==="hold" || x.st==="due" || x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
   const openWin = windows.filter(x => x.st==="open" || x.st==="hold" || x.st==="due").length;
-  const remindersDue = windows.filter(x => x.st==="open" && x.j.status==="sent" && !x.j.reminderAt && Math.ceil((x.closes-now)/86400000) <= REMINDER_DAYS_LEFT).length;
+  const remindersDue = windows.filter(x => x.st==="open" && x.j.status==="sent" && !x.j.reminderAt && !autoReminder(x.j) && Math.ceil((x.closes-now)/86400000) <= REMINDER_DAYS_LEFT).length;
   const sentNoDate = live.filter(j => j.type==="ICI" && j.status==="sent" && !j.sentAt).length;
   const wkStats = turnaroundStats(live, addDays(now, -7));
   const moStats = turnaroundStats(live, new Date(now.getFullYear(), now.getMonth(), 1));
@@ -2103,9 +2118,9 @@ function renderForm(){
         <input type="text" id="f_tenantEmails" value="${esc(f.tenantEmails||"")}" placeholder="e.g. jo@gmail.com, sam@outlook.com" />
         <span class="field-hint">Separate two tenants with a comma. Used for the 7-day reminder.</span>
       </label>
-      <label class="field wide">Agent email (for this job)
+      <label class="field wide">Copy to (agent / landlord)
         <input type="text" id="f_agentEmail" value="${esc(f.agentEmail||"")}" placeholder="${esc(((state.clients.find(c=>c.name===f.client)||{}).contactEmail)||"e.g. manny@winkworth.co.uk")}" />
-        <span class="field-hint">Who gets report updates. Leave blank on private landlord jobs.</span>
+        <span class="field-hint">Gets the amendments, signed and deemed agreed emails. Agent and/or landlord, separated by a comma. Blank = the client's email.</span>
       </label>
 
       <label class="field wide">Notes
