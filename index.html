@@ -97,7 +97,7 @@
   /* compact dashboard (one screen) */
   .wrap-dash{ max-width:1560px; }
   .wrap-dash .page-head{ padding-top:20px; }
-  .d-tiles{ display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:8px; margin:14px 0 12px; }
+  .d-tiles{ display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
   .d-tile{ text-align:left; background:var(--white); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; min-width:0; }
   .d-tile:hover{ border-color:var(--peri); }
   .d-tile.on{ border-color:var(--brand); background:var(--sky); }
@@ -126,6 +126,22 @@
   .side-links .side-label{ font-size:11px; font-weight:600; letter-spacing:.16em; color:#8A97B8; padding:0 14px 6px; }
   .side-links a{ color:var(--sky); font-size:13.5px; text-decoration:none; padding:5px 14px; border-radius:6px; }
   .side-links a:hover{ background:rgba(255,255,255,.06); color:#fff; }
+  #undo-bar{ position:fixed; left:50%; bottom:20px; transform:translate(-50%,140%); display:flex; align-items:center; gap:14px; max-width:calc(100vw - 32px); padding:10px 12px 10px 16px; background:var(--brand); color:#fff; border-radius:10px; font-size:14px; box-shadow:0 6px 24px rgba(31,45,90,.28); opacity:0; transition:transform .2s, opacity .2s; z-index:999; pointer-events:none; }
+  #undo-bar.show{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #undo-bar button{ border:0; border-radius:6px; background:var(--coral); color:#fff; font:inherit; font-weight:600; padding:6px 12px; cursor:pointer; }
+  #undo-bar button.undo-x{ background:transparent; padding:6px 4px; font-weight:400; opacity:.8; }
+  @media (max-width:600px){ #undo-bar{ width:calc(100vw - 32px); box-sizing:border-box; justify-content:space-between; bottom:12px; } #undo-bar span{ flex:1; } }
+  .d-info{ display:flex; flex-direction:column; gap:2px; margin:-2px 0 6px; padding-left:74px; font-size:12.5px; color:var(--ink); line-height:1.4; }
+  .d-tel{ color:var(--coral-dark); font-weight:600; text-decoration:none; white-space:nowrap; }
+  @media (max-width:600px){ .d-info{ padding-left:0; font-size:13px; } }
+  .d-sect{ margin:2px 0 6px; font-size:12.5px; font-weight:600; color:var(--coral-dark); letter-spacing:.02em; }
+  .d-mv{ white-space:nowrap; border:1px solid var(--coral); background:#fff; color:var(--coral-dark); border-radius:6px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; }
+  .d-mv:hover{ background:var(--coral-bg); }
+  .d-ghead{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); padding:0 2px 2px; border-bottom:2px solid var(--line); margin-bottom:-2px; }
+  .d-ghead.d-g-todo{ border-color:var(--coral); } .d-ghead.d-g-wait{ border-color:var(--peri); } .d-ghead.d-g-money{ border-color:var(--brand); } .d-ghead.d-g-perf{ border-color:#2E6B45; }
+  .d-tile.zero{ opacity:.55; } .d-tile.zero:hover{ opacity:1; }
+  @media (min-width:1251px){ .d-tile.d-gstart{ margin-left:6px; } .d-ghead.d-g-wait, .d-ghead.d-g-money, .d-ghead.d-g-perf{ margin-left:6px; } }
+  @media (max-width:1250px){ .d-ghead{ display:none; } .d-tile{ border-top-width:3px; } .d-tile.d-g-todo{ border-top-color:var(--coral); } .d-tile.d-g-wait{ border-top-color:var(--peri); } .d-tile.d-g-money{ border-top-color:var(--brand); } .d-tile.d-g-perf{ border-top-color:#2E6B45; } }
   @media (max-width:1250px){ .d-tiles{ grid-template-columns:repeat(5,minmax(0,1fr)); } }
   @media (max-width:900px){ .d-row{ grid-template-columns:1fr; } .d-tiles{ grid-template-columns:repeat(2,minmax(0,1fr)); } .c-row{ flex-wrap:wrap; } .c-job{ white-space:normal; } }
 
@@ -752,6 +768,8 @@ function dueInfo(j){
   const d = reportDue(j); if (!d) return null;
   const mins = Math.round((d - new Date())/60000);
   const fmt = m => { const a=Math.abs(m); return a>=1440 ? Math.round(a/1440)+"d" : a>=60 ? Math.round(a/60)+"h" : a+"m"; };
+  // Still at Booked after the visit time: not counted as overdue until the visit is confirmed (12 Oct)
+  if (j.status === "booked") return { cls:"due-soon", late:false, confirm:true, text:"Visit done? Move to Processing", due:d };
   if (mins < 0) return { cls:"due-late", late:true, text:"Report overdue "+fmt(mins), due:d };
   if (mins < 360) return { cls:"due-soon", late:false, text:"Report due in "+fmt(mins), due:d };
   return { cls:"due-ok", late:false, text:"Report due "+d.toLocaleString("en-GB",{weekday:"short",hour:"2-digit",minute:"2-digit"}), due:d };
@@ -1076,14 +1094,51 @@ function cycleStatus(id){
   const NEXT = { booked:"processing", processing:"completed", completed:"sent", sent:"signed", signed:"archived", deemed:"archived" };
   const next = NEXT[j.status];
   if (!next) return;                               // archived is the end
+  const before = snapJob(j);
   setJobStatus(j, next);
   saveJobs();
   render();
+  showUndo(`${j.jobNo || "Job"} moved to ${statusMeta(next).label}`, before);
+}
+
+// ---------------------------------------------------------------- undo (12 Oct)
+// A pill click changes the job straight away. For a few seconds an Undo bar puts the job back exactly as it was.
+function snapJob(j){ return JSON.parse(JSON.stringify(j)); }
+let undoTimer = null, undoSnap = null;
+function showUndo(msg, before){
+  undoSnap = before;
+  let bar = document.getElementById("undo-bar");
+  if (!bar){ bar = document.createElement("div"); bar.id = "undo-bar"; document.body.appendChild(bar); }
+  bar.innerHTML = `<span>${esc(msg)}</span><button onclick="doUndo()">Undo</button><button class="undo-x" onclick="hideUndo()" aria-label="Close">✕</button>`;
+  bar.classList.add("show");
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndo, 8000);
+}
+function hideUndo(){ const bar = document.getElementById("undo-bar"); if (bar) bar.classList.remove("show"); undoSnap = null; }
+function doUndo(){
+  if (!undoSnap) return hideUndo();
+  const j = state.jobs.find(x => x.id === undoSnap.id);
+  if (j){ Object.keys(j).forEach(k => delete j[k]); Object.assign(j, undoSnap); saveJobs(); render(); }
+  hideUndo();
+}
+// Job still at Booked after its visit time: mark the visit done. The report countdown keeps counting
+// from the visit time (not from this click), so an overdue report stays overdue.
+function markVisited(id){
+  const j = state.jobs.find(x=>x.id===id);
+  if (!j || j.status !== "booked") return;
+  const before = snapJob(j), v = visitTime(j);
+  setJobStatus(j, "processing");
+  if (v) j.processingAt = v.toISOString();
+  saveJobs();
+  render();
+  showUndo(`${j.jobNo || "Job"} marked visited (Processing)`, before);
 }
 
 function cycleInvoice(id){
   const j = state.jobs.find(x=>x.id===id);
   if (!j) return;
+  const before = snapJob(j);
+  setTimeout(() => showUndo(`${j.jobNo || "Job"} invoice: ${invoiceMeta(j.invoice).label}`, before), 0);
   const now = new Date().toISOString();
   if (!j.invoice){ j.invoice = "invoiced"; j.invoicedAt = now; }
   else if (j.invoice==="invoiced"){ j.invoice = "paid"; j.paidAt = now; }
@@ -1569,6 +1624,28 @@ function tJobRow(j, opts){
     <button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
   </div>`;
 }
+// ---------------------------------------------------------------- refresh all (12 Oct)
+// One Google sign-in, then: sync the Job Log Sheet, and once that has finished (so the jobs are current)
+// check the booking queue and load amendments. All three use the same Google token.
+function refreshAll(){
+  state.refreshBusy = true; render();
+  const done = () => { state.refreshBusy = false; render(); };
+  ensureSheetsToken(function(){
+    cloudSyncNow();   // safe on a device that has never synced: it loads, it never overwrites
+    let waited = 0;
+    const next = () => {
+      if (state.cloudStatus === "saving" && waited < 30000){ waited += 300; return setTimeout(next, 300); }
+      loadAmendments();
+      checkForBookings();
+      setTimeout(done, 400);
+    };
+    setTimeout(next, 300);
+  });
+  // Sign-in cancelled or refused: stop showing "Refreshing…" (the sync button shows the reason)
+  const watch = setInterval(() => { if (!state.refreshBusy){ clearInterval(watch); return; }
+    if (!state.gcalToken && state.cloudStatus === "error"){ clearInterval(watch); done(); } }, 500);
+  setTimeout(() => { clearInterval(watch); if (state.refreshBusy && !state.gcalToken) done(); }, 60000);
+}
 function loadAmendments(){
   // Called from a click (or when a valid token already exists): reads the WPS Amendments Sheet, read-only.
   ensureSheetsToken(async function(){
@@ -1627,31 +1704,6 @@ function renderAmendCard(inner){
       ${link}
     </div>`;
 }
-function renderWeekStrip(active, total){
-  const days = [];
-  for (let i=1; i<=7; i++){
-    const iso = isoToday(i);
-    const d = new Date(iso+"T00:00:00");
-    const jobs = active.filter(j => j.date === iso).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
-    days.push({ iso, d, jobs });
-  }
-  const cell = x => {
-    const wk = x.d.getDay()===0 || x.d.getDay()===6;
-    return `<div class="wk-day${wk?' wk-end':''}">
-      <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()} ${x.d.toLocaleDateString("en-GB",{month:"short"})}</div>
-      ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" title="${esc(fullAddress(j))}">
-          <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div>
-          <div class="wk-a">${esc(j.address||j.postcode||"No address")}</div>
-          <div class="wk-c">${esc(j.postcode||"")}${j.client ? " · "+esc(j.client) : ""}</div>
-        </button>`; }).join("") : `<div class="wk-free">Free</div>`}
-      <button class="wk-add" onclick="openNewOnDate('${x.iso}')">+ add</button>
-    </div>`;
-  };
-  return `<div class="t-card wide">
-      <h3>Next 7 days <span class="count">${total} job${total===1?"":"s"}</span></h3>
-      <div class="wk-strip">${days.map(cell).join("")}</div>
-    </div>`;
-}
 const VISIT_DONE = ["processing","completed","sent","signed","deemed"];
 function routeUrl(jobs){
   const stops = jobs.map(fullAddress).filter(Boolean);
@@ -1704,6 +1756,17 @@ function cRow(j, opts){
     <button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
   </div>`;
 }
+// Today rows (12 Oct): tenant contact and notes (keys, access) under each job, phone numbers tap-to-call
+const PHONE_RE = /(?:\+44\s?|\b0)\d(?:[\s-]?\d){8,10}\b/g;
+function linkPhones(t){
+  return esc(t).replace(PHONE_RE, m => `<a href="tel:${m.replace(/[\s-]/g,"")}" class="d-tel">${m}</a>`);
+}
+function todayInfo(j){
+  const bits = [];
+  if (j.tenants) bits.push(`<span><span class="c-dim">Tenant:</span> ${linkPhones(j.tenants)}</span>`);
+  if (j.notes) bits.push(`<span><span class="c-dim">Notes:</span> ${linkPhones(String(j.notes).replace(/\s+/g," ").slice(0,160))}${String(j.notes).length>160 ? "…" : ""}</span>`);
+  return bits.length ? `<div class="d-info">${bits.join("")}</div>` : "";
+}
 function setDashPanel(k){ state.dashPanel = k; state.dashAll = false; render(); }
 function toggleDashAll(){ state.dashAll = !state.dashAll; render(); }
 function renderToday(){
@@ -1713,7 +1776,11 @@ function renderToday(){
   const byTime = (a,b) => ((a.date||"")+(a.time||"99")).localeCompare((b.date||"")+(b.time||"99"));
   const todays = active.filter(j => j.date === today).sort(byTime);
   const coming = active.filter(j => j.date > today && j.date <= weekEnd).sort(byTime);
-  const due = live.map(j => ({ j, d: dueInfo(j) })).filter(x => x.d).sort((a,b) => a.d.due - b.d.due);
+  const dueAll = live.map(j => ({ j, d: dueInfo(j) })).filter(x => x.d).sort((a,b) => a.d.due - b.d.due);
+  // Still at Booked after the visit time: probably visited but the pill wasn't moved on. Kept apart so
+  // "overdue" only counts reports that are really late (12 Oct).
+  const unconfirmed = dueAll.filter(x => x.j.status === "booked");
+  const due = dueAll.filter(x => x.j.status !== "booked");
   const overdue = due.filter(x => x.d.late).length;
   const awaitingSig = live.filter(j => j.status === "sent" && j.type === "ICI").sort(byTime);
   const toInvoice = live.filter(needsInvoice).sort(byTime);
@@ -1736,14 +1803,15 @@ function renderToday(){
 
   // Tiles: [key, label, number shown, sub line, tone]
   const tc = s => !s ? "var(--stone)" : s.pct>=80 ? "#2E6B45" : s.pct>=50 ? "#8A5A00" : "#B42318";
+  // Grouped (12 Oct): to do now · waiting on others · money · performance
   const tiles = [
-    ["due", "Reports due", due.length, overdue ? overdue+" overdue" : "", overdue ? "late" : due.length ? "warn" : ""],
+    ["due", "Reports due", due.length, [overdue ? overdue+" overdue" : "", unconfirmed.length ? unconfirmed.length+" to confirm" : ""].filter(Boolean).join(" · "), overdue ? "late" : (due.length || unconfirmed.length) ? "warn" : ""],
+    ["times", "Times to agree", timesToAgree.length, "", timesToAgree.length ? "warn" : ""],
+    ["photos", "Photos not done", photosMissing.length, "", photosMissing.length ? "warn" : ""],
     ["book", "New bookings", state.queueChecked ? queueN : "–", state.queueChecked ? "" : "not checked", queueN ? "warn" : ""],
     ["sig", "Out for signature", awaitingSig.length, "", ""],
     ["win", "Comment windows", openWin, remindersDue ? remindersDue+" reminder"+(remindersDue===1?"":"s")+" due" : "", remindersDue ? "warn" : ""],
     ["amend", "Amendments", amN==null ? "–" : amN, amN==null ? "click to load" : "", amN ? "late" : ""],
-    ["times", "Times to agree", timesToAgree.length, "", timesToAgree.length ? "warn" : ""],
-    ["photos", "Photos not done", photosMissing.length, "", photosMissing.length ? "warn" : ""],
     ["inv", "To invoice", toInvoice.length, "", toInvoice.length ? "coral" : ""],
     ["paid", "Awaiting payment", unpaid.length, "", ""],
     ["turn", "On time (7 days)", wkStats ? wkStats.pct+"%" : "–", wkStats ? "avg "+wkStats.avg+"h" : "no reports yet", ""],
@@ -1751,16 +1819,19 @@ function renderToday(){
   const countOf = k => { const t = tiles.find(x => x[0]===k); return typeof t[2]==="number" ? t[2] : 0; };
   // Default panel: the most urgent thing with something in it
   let panel = state.dashPanel;
-  if (!panel) panel = overdue ? "due" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
+  if (!panel) panel = (overdue || unconfirmed.length) ? "due" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
   const toneCol = { late:"#B42318", warn:"#8A5A00", coral:"var(--coral-dark)" };
   const TILE_TIPS = {
-    due:"Visited jobs whose report hasn't been sent yet, soonest due first", book:"Bookings Claude found in Gmail, waiting for you to check",
+    due:"Visited jobs whose report hasn't been sent yet, soonest due first. Jobs still at Booked after their visit time are listed separately to confirm", book:"Bookings Claude found in Gmail, waiting for you to check",
     sig:"Check-in reports sent and waiting for signatures in Acrobat", win:"The 7-day comment window on each sent check-in report",
     amend:"Tenant comments from the amendments form that are still open", times:"Booked jobs with no time agreed yet",
     photos:"Visited jobs with no photo link saved yet", inv:"Reports sent but not invoiced yet", paid:"Invoiced but not paid yet",
     turn:"How many reports went out on time over the last 7 days"
   };
-  const tileHtml = tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile${panel===k?' on':''}" onclick="setDashPanel('${k}')"${tip(TILE_TIPS[k]+". Click to see the list below.")}>
+  const TILE_GROUP = { due:"todo", times:"todo", photos:"todo", book:"todo", sig:"wait", win:"wait", amend:"wait", inv:"money", paid:"money", turn:"perf" };
+  const GROUPS = [["todo","To do now",4],["wait","Waiting on others",3],["money","Money",2],["perf","Performance",1]];
+  const groupHead = GROUPS.map(([g, lbl, n]) => `<div class="d-ghead d-g-${g}" style="grid-column:span ${n}">${lbl}</div>`).join("");
+  const tileHtml = groupHead + tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile d-g-${TILE_GROUP[k]}${panel===k?' on':''}${n===0 && panel!==k ? ' zero' : ''}${["sig","inv","turn"].includes(k) ? ' d-gstart' : ''}" onclick="setDashPanel('${k}')"${tip(TILE_TIPS[k]+". Click to see the list below.")}>
       <span class="d-num" style="color:${k==='turn' ? tc(wkStats) : (toneCol[tone] || (n && n!=='–' ? 'var(--brand)' : 'var(--stone)'))}">${n}</span>
       <span class="d-lbl">${lbl}</span>${sub ? `<span class="d-sub"${tone==='late'?' style="color:#B42318"':''}>${esc(sub)}</span>` : ""}
     </button>`).join("");
@@ -1774,7 +1845,12 @@ function renderToday(){
   const note = t => `<div class="d-note">${t}</div>`;
   let title = "", body = "";
   switch (panel){
-    case "due": title = "Reports due"; body = rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;
+    case "due": title = "Reports due";
+      body = (unconfirmed.length ? `<div class="d-sect">Visit time passed, still at Booked (${unconfirmed.length})</div>`
+          + rows(unconfirmed, x => cRow(x.j, {extra: `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>`}), "")
+          + note("If the report has already gone out, click the job and set its Status. Not visited? Change the date.")
+          + `<div class="d-sect" style="margin-top:14px">Reports to write (${due.length})</div>` : "")
+        + rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;
     case "book": title = "New bookings";
       body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" booking"+(queueN===1?"":"s")+" waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
     case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
@@ -1804,7 +1880,7 @@ function renderToday(){
     <div class="d-row">
       <div class="t-card d-card">
         <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route"${tip("Opens Google Maps with today's jobs as stops, in time order")}>Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
-        ${todays.length ? todays.map(j => cRow(j, {timeOnly:true})).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
+        ${todays.length ? todays.map(j => cRow(j, {timeOnly:true}) + todayInfo(j)).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
       </div>
       <div class="t-card d-card">
         <h3>Next 7 days <span class="count">${coming.length} job${coming.length===1?"":"s"}</span></h3>
@@ -1847,7 +1923,9 @@ function renderPageHead(){
     <div><h1 class="page-title">${state.view === "today" ? "Wellington Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
     <div class="page-actions">
       ${renderSyncBtn()}
-      <button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>
+      ${state.view === "today"
+        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: syncs with the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Refreshing…" : "Refresh all"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
+        : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
       <button class="btn btn-coral" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
     </div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
@@ -2231,6 +2309,24 @@ window.addEventListener("storage", function(e){
   if (state.gcalConnected && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) scheduleCloudSave();
   if (!state.editing) render();
 });
+
+// ---------------------------------------------------------------- auto-refresh (12 Oct)
+// Keeps Today, the report countdowns and comment windows current if the page is left open (overnight,
+// or in a background tab). Every 3 minutes, and when the tab is shown again. Never while a job form is
+// open or something is being typed, so nothing in progress is lost.
+let lastRefreshDay = isoToday(0);
+function autoRefresh(){
+  if (document.hidden || state.editing) return;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
+  autoDeem();
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}
+setInterval(autoRefresh, 3*60*1000);
+document.addEventListener("visibilitychange", function(){ if (!document.hidden) autoRefresh(); });
 
 // ---------------------------------------------------------------- init
 load();
