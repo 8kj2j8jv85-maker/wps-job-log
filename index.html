@@ -80,6 +80,18 @@
   .t-links a{ display:block; padding:10px 12px; border:1px solid var(--line); border-radius:8px; color:var(--brand); text-decoration:none; font-weight:600; font-size:13.5px; background:var(--paper); }
   .t-links a:hover{ border-color:var(--peri); }
   .t-big{ font-size:30px; font-weight:600; line-height:1; }
+  .wk-strip{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; }
+  .wk-day{ background:var(--paper); border:1px solid var(--line-soft); border-radius:8px; padding:8px; min-height:110px; display:flex; flex-direction:column; gap:6px; }
+  .wk-day.wk-end{ background:var(--paper-deep); }
+  .wk-head{ font-size:12.5px; color:var(--ink-soft); font-weight:600; }
+  .wk-head span{ color:var(--brand); }
+  .wk-job{ text-align:left; background:var(--white); border:1px solid var(--line); border-left:3px solid var(--peri); border-radius:6px; padding:6px 7px; cursor:pointer; font-family:inherit; }
+  .wk-t{ font-size:12px; font-weight:600; color:var(--brand); }
+  .wk-a{ font-size:12.5px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wk-c{ font-size:11.5px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wk-free{ font-size:12px; color:var(--stone); }
+  .wk-add{ margin-top:auto; background:none; border:none; color:var(--peri); font:inherit; font-size:12px; text-align:left; cursor:pointer; padding:0; }
+  @media (max-width:900px){ .wk-strip{ grid-template-columns:1fr; } .wk-day{ min-height:0; } }
 
   /* status strip */
   .status-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:10px; margin:20px 0; }
@@ -1347,6 +1359,31 @@ function renderAmendCard(){
       ${link}
     </div>`;
 }
+function renderWeekStrip(active, total){
+  const days = [];
+  for (let i=1; i<=7; i++){
+    const iso = isoToday(i);
+    const d = new Date(iso+"T00:00:00");
+    const jobs = active.filter(j => j.date === iso).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
+    days.push({ iso, d, jobs });
+  }
+  const cell = x => {
+    const wk = x.d.getDay()===0 || x.d.getDay()===6;
+    return `<div class="wk-day${wk?' wk-end':''}">
+      <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()} ${x.d.toLocaleDateString("en-GB",{month:"short"})}</div>
+      ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" title="${esc(fullAddress(j))}">
+          <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div>
+          <div class="wk-a">${esc(j.address||j.postcode||"No address")}</div>
+          <div class="wk-c">${esc(j.postcode||"")}${j.client ? " · "+esc(j.client) : ""}</div>
+        </button>`; }).join("") : `<div class="wk-free">Free</div>`}
+      <button class="wk-add" onclick="openNewOnDate('${x.iso}')">+ add</button>
+    </div>`;
+  };
+  return `<div class="t-card wide">
+      <h3>Next 7 days <span class="count">${total} job${total===1?"":"s"}</span></h3>
+      <div class="wk-strip">${days.map(cell).join("")}</div>
+    </div>`;
+}
 function renderToday(){
   const today = isoToday(0), weekEnd = isoToday(7);
   const live = state.jobs;
@@ -1369,6 +1406,7 @@ function renderToday(){
       <h3>Today's jobs <span class="count">${todays.length}</span></h3>
       ${list(todays, j => tJobRow(j), "Nothing booked for today.")}
     </div>
+    ${renderWeekStrip(active, coming.length)}
     <div class="t-card">
       <h3>Reports due <span class="count" style="${overdue?'color:#B42318':''}">${overdue ? overdue+" overdue" : due.length+" due"}</span></h3>
       ${list(due, x => tJobRow(x.j, {showDate:true, showDue:true}), "No reports waiting to be written.", 8)}
@@ -1377,10 +1415,6 @@ function renderToday(){
       <h3>New bookings <span class="count">${state.queueChecked ? queueN+" to review" : "not checked yet"}</span></h3>
       ${queueN ? `<div class="t-empty" style="color:var(--ink)">${queueN} booking${queueN===1?"":"s"} waiting in the To review tray above.</div>` : `<div class="t-empty">${state.queueChecked ? "Nothing new." : "Click below to read the latest scan."}</div>`}
       <button class="btn btn-sm" style="margin-top:8px" onclick="checkForBookings()">Check for new bookings</button>
-    </div>
-    <div class="t-card">
-      <h3>Coming up <span class="count">next 7 days · ${coming.length}</span></h3>
-      ${list(coming, j => tJobRow(j, {showDate:true}), "Nothing booked in the next 7 days.", 8)}
     </div>
     <div class="t-card">
       <h3>Out for signature <span class="count">${awaitingSig.length}</span></h3>
