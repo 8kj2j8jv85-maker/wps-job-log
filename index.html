@@ -241,6 +241,12 @@ const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const QUEUE_SUBJECT = "WPS Job Log Queue";
 const LS_QUEUE_DONE = "wps_standalone_queue_done_v1";
+// Google Sheet master copy — drive.file only lets the Job Log see the files it created itself
+const SHEETS_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const SHEET_NAME = "WPS Job Log";
+const LS_SHEET_ID = "wps_job_log_sheet_id_v1";
+const LS_LOCAL_SAVED_AT = "wps_job_log_local_saved_at_v1";   // when this browser last changed data
+const LS_CLOUD_SYNCED_AT = "wps_job_log_cloud_synced_at_v1"; // the Sheet's savedAt we last matched
 let gcalTokenClient = null;
 
 const TYPES = [
@@ -326,8 +332,182 @@ function load(){
   try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
   try { const q = localStorage.getItem(LS_QUEUE_DONE); if (q) state.queueDone = JSON.parse(q) || {}; } catch(e){}
 }
-function saveJobs(){ localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); }
-function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); }
+function saveJobs(){ localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); markLocalChange(); }
+function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); markLocalChange(); }
+
+// ---------------------------------------------------------------- Google Sheet master copy
+// The browser copy stays as the working/offline copy (the Photo Tool reads it too).
+// Every change is pushed to the "WPS Job Log" Sheet on info@. On "Sync now" the newer copy wins,
+// and a save never overwrites a Sheet that another device changed since we last synced.
+const SHEET_JOB_COLS = [
+  ["Job no","jobNo"],["Type","type"],["Status","status"],["Date","date"],["Time","time"],
+  ["Address","address"],["Town","town"],["Postcode","postcode"],["Client","client"],
+  ["Tenants","tenants"],["Invoice","invoice"],["Invoice no","invoiceNo"],
+  ["Photo link","photoLink"],["Notes","notes"],["ID","id"]
+];
+let cloudSaveTimer = null;
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+function markLocalChange(){
+  lsSet(LS_LOCAL_SAVED_AT, new Date().toISOString());
+  if (!state.gcalConnected) return;
+  // Ask for the Google token now, while we're still inside the click (pop-ups need a click).
+  if (!(state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000)){
+    ensureSheetsToken(function(){ scheduleCloudSave(); });
+    return;
+  }
+  scheduleCloudSave();
+}
+function scheduleCloudSave(){
+  clearTimeout(cloudSaveTimer);
+  setCloud("saving");
+  cloudSaveTimer = setTimeout(cloudSave, 1500);
+}
+function setCloud(status, msg){
+  state.cloudStatus = status; state.cloudMsg = msg || "";
+  if (status==="saved") state.cloudAt = new Date();
+  const el = document.getElementById("cloudPill");
+  if (el) el.outerHTML = renderCloudPill();
+}
+function sheetsGranted(resp){
+  try { return google.accounts.oauth2.hasGrantedAllScopes(resp, SHEETS_SCOPE); } catch(e){ return false; }
+}
+function ensureSheetsToken(onReady){
+  if (state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
+  if (!gcalTokenClient){ initGCal(); }
+  if (!gcalTokenClient){ setCloud("error","Google sign-in hasn't loaded"); return; }
+  gcalTokenClient.callback = function(resp){
+    if (resp.error){ setCloud("error","Google sign-in needed"); return; }
+    state.gcalToken = resp.access_token;
+    state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
+    state.gmailOk = gmailGranted(resp);
+    state.sheetsOk = sheetsGranted(resp);
+    if (!state.sheetsOk){ setCloud("error","Allow Google Sheets access"); return; }
+    onReady();
+  };
+  gcalTokenClient.requestAccessToken({ prompt: state.sheetsOk ? "" : "consent" });
+}
+async function gapi(url, opts){
+  opts = opts || {};
+  const res = await fetch(url, Object.assign({}, opts, {
+    headers: Object.assign({ "Authorization": "Bearer "+state.gcalToken, "Content-Type": "application/json" }, opts.headers||{})
+  }));
+  if (!res.ok){ const t = await res.text(); throw new Error(res.status+" "+t.slice(0,200)); }
+  return res.status===204 ? null : res.json();
+}
+async function findOrCreateSheet(){
+  let id = lsGet(LS_SHEET_ID);
+  if (id){
+    try { await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"?fields=spreadsheetId"); return id; }
+    catch(e){ id = null; }
+  }
+  const q = encodeURIComponent("name='"+SHEET_NAME+"' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false");
+  const found = await gapi("https://www.googleapis.com/drive/v3/files?q="+q+"&fields=files(id,createdTime)&orderBy=createdTime");
+  if (found.files && found.files.length){ id = found.files[0].id; lsSet(LS_SHEET_ID,id); return id; }
+  const made = await gapi("https://sheets.googleapis.com/v4/spreadsheets", { method:"POST", body: JSON.stringify({
+    properties: { title: SHEET_NAME },
+    sheets: [ {properties:{title:"Jobs", gridProperties:{frozenRowCount:1}}},
+              {properties:{title:"Clients", gridProperties:{frozenRowCount:1}}},
+              {properties:{title:"Meta"}} ]
+  })});
+  lsSet(LS_SHEET_ID, made.spreadsheetId);
+  return made.spreadsheetId;
+}
+async function readCloudMeta(id){
+  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values/Meta!A1:B4");
+  const meta = {};
+  (r.values||[]).forEach(row=>{ if (row[0]) meta[row[0]] = row[1]||""; });
+  return meta;
+}
+function jobsToRows(){
+  const head = SHEET_JOB_COLS.map(c=>c[0]).concat(["Data (do not edit)"]);
+  const rows = state.jobs.map(j => SHEET_JOB_COLS.map(c => j[c[1]]==null ? "" : String(j[c[1]])).concat([JSON.stringify(j)]));
+  return [head].concat(rows);
+}
+function clientsToRows(){
+  return [["Name","Contact","Phone","Email","Data (do not edit)"]].concat(
+    state.clients.map(c=>[c.name, c.contactName||"", c.contactPhone||"", c.contactEmail||"", JSON.stringify(c)]));
+}
+async function cloudSave(){
+  if (!state.gcalToken){ setCloud("error","Google sign-in needed"); return; }
+  try {
+    const id = await findOrCreateSheet();
+    const meta = await readCloudMeta(id);
+    const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
+    if (meta.savedAt && synced && meta.savedAt > synced){
+      setCloud("conflict","Changed on another device — click Sync now");
+      return;
+    }
+    const savedAt = new Date().toISOString();
+    const base = "https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values";
+    await gapi(base+":batchClear", { method:"POST", body: JSON.stringify({ ranges:["Jobs!A:Z","Clients!A:Z","Meta!A:B"] }) });
+    await gapi(base+":batchUpdate", { method:"POST", body: JSON.stringify({
+      valueInputOption: "RAW",
+      data: [
+        { range:"Jobs!A1", values: jobsToRows() },
+        { range:"Clients!A1", values: clientsToRows() },
+        { range:"Meta!A1", values: [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."]] }
+      ]
+    })});
+    lsSet(LS_CLOUD_SYNCED_AT, savedAt);
+    setCloud("saved");
+  } catch(e){
+    console.log("[WPS] cloud save failed", e);
+    setCloud("error","Not saved to Google — will retry on next change");
+  }
+}
+async function cloudSyncNow(){
+  // Called from the "Sync now" click: loads the Sheet if it's newer, otherwise pushes this browser's copy.
+  ensureSheetsToken(async function(){
+    setCloud("saving");
+    try {
+      const id = await findOrCreateSheet();
+      const meta = await readCloudMeta(id);
+      const localAt = lsGet(LS_LOCAL_SAVED_AT) || "";
+      const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
+      const cloudNewer = meta.savedAt && meta.savedAt > synced;
+      const localChanged = localAt && localAt > synced;
+      if (cloudNewer && localChanged && !confirm("The Job Log was changed both here and on another device since the last sync.\n\nOK = load the Google copy (this browser's unsynced changes are lost)\nCancel = keep this browser's copy and overwrite Google")){
+        lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt); await cloudSave(); return;
+      }
+      if (cloudNewer){
+        const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs!A:Z&ranges=Clients!A:Z");
+        const parse = (vr) => {
+          const rows = (vr && vr.values) || [];
+          if (rows.length < 2) return [];
+          const di = rows[0].indexOf("Data (do not edit)");
+          return rows.slice(1).map(row => { try { return JSON.parse(row[di]); } catch(e){ return null; } }).filter(Boolean);
+        };
+        const jobs = parse(r.valueRanges[0]);
+        const clients = normalizeClients(parse(r.valueRanges[1]));
+        if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return; }
+        state.jobs = jobs; if (clients) state.clients = clients;
+        localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
+        localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
+        lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
+        lsSet(LS_LOCAL_SAVED_AT, meta.savedAt);
+        setCloud("saved");
+        render();
+      } else {
+        await cloudSave();
+      }
+    } catch(e){
+      console.log("[WPS] sync failed", e);
+      setCloud("error","Sync failed — check connection");
+    }
+  });
+}
+function renderCloudPill(){
+  const s = state.cloudStatus || "idle";
+  const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
+  const label = s==="saved" ? "Saved to Google ✓ "+t
+    : s==="saving" ? "Saving to Google…"
+    : s==="conflict" ? state.cloudMsg
+    : s==="error" ? state.cloudMsg
+    : (state.gcalConnected ? "Google copy: click Sync now" : "Not backed up to Google");
+  const col = s==="saved" ? "var(--sky)" : (s==="error"||s==="conflict") ? "var(--coral)" : "inherit";
+  return `<div id="cloudPill" style="font-size:12px;color:${col};padding:4px 0 6px">${esc(label)}</div>`;
+}
 
 // ---------------------------------------------------------------- helpers
 function pad2(n){ return String(n).padStart(2,"0"); }
@@ -673,7 +853,7 @@ function initGCal(){
   if (!window.google || !google.accounts || !google.accounts.oauth2) return;
   gcalTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: GCAL_SCOPE + " " + GMAIL_SCOPE,
+    scope: GCAL_SCOPE + " " + GMAIL_SCOPE + " " + SHEETS_SCOPE,
     callback: function(){}
   });
 }
@@ -683,7 +863,7 @@ function connectGCal(){
     if (resp.error){ alert("Couldn't connect to Google Calendar."); return; }
     state.gcalToken = resp.access_token;
     state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
-    state.gmailOk = gmailGranted(resp);
+    state.gmailOk = gmailGranted(resp); state.sheetsOk = sheetsGranted(resp);
     state.gcalConnected = true;
     try{ localStorage.setItem(LS_GCAL_PREF, "1"); }catch(e){}
     render();
@@ -704,7 +884,7 @@ function ensureGCalToken(onReady){
     if (resp.error){ alert('Google Calendar needs reconnecting — click "Connect Google Calendar" again.'); return; }
     state.gcalToken = resp.access_token;
     state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
-    state.gmailOk = gmailGranted(resp);
+    state.gmailOk = gmailGranted(resp); state.sheetsOk = sheetsGranted(resp);
     onReady();
   };
   gcalTokenClient.requestAccessToken({ prompt: "" });
@@ -793,7 +973,7 @@ function ensureGmailToken(onReady){
     if (resp.error){ state.queueBusy=false; state.queueMsg="Google sign-in was cancelled."; render(); return; }
     state.gcalToken = resp.access_token;
     state.gcalTokenExpiry = Date.now() + (resp.expires_in*1000);
-    state.gmailOk = gmailGranted(resp);
+    state.gmailOk = gmailGranted(resp); state.sheetsOk = sheetsGranted(resp);
     if (!state.gcalConnected && google.accounts.oauth2.hasGrantedAllScopes(resp, GCAL_SCOPE)){
       state.gcalConnected = true; try{ localStorage.setItem(LS_GCAL_PREF, "1"); }catch(e){}
     }
@@ -1119,6 +1299,11 @@ function renderHeader(){
 
 function renderUtilityRow(){
   return `<div class="side-tool-list" style="display:flex;flex-direction:column;gap:2px;">
+    ${renderCloudPill()}
+    <button class="btn-link" onclick="cloudSyncNow()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></svg>
+      Sync now (Google Sheet)
+    </button>
     <button class="btn-link" onclick="exportData()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Export backup
