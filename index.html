@@ -262,6 +262,9 @@ const LS_QUEUE_DONE = "wps_standalone_queue_done_v1";
 // Google Sheet master copy — drive.file only lets the Job Log see the files it created itself
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const SHEET_NAME = "WPS Job Log";
+// Read-only access to the WPS Amendments Sheet (made by the amendments form) for the Today dashboard
+const AMEND_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
+const AMEND_SHEET_ID = "1FjRFw2l9L1T3DVbASn08NfSsvbxlGQAQ4Qu95CRK6gs";
 const LS_SHEET_ID = "wps_job_log_sheet_id_v1";
 const LS_LOCAL_SAVED_AT = "wps_job_log_local_saved_at_v1";   // when this browser last changed data
 const LS_CLOUD_SYNCED_AT = "wps_job_log_cloud_synced_at_v1"; // the Sheet's savedAt we last matched
@@ -388,7 +391,7 @@ function setCloud(status, msg){
   if (el) el.outerHTML = renderCloudPill();
 }
 function sheetsGranted(resp){
-  try { return google.accounts.oauth2.hasGrantedAllScopes(resp, SHEETS_SCOPE); } catch(e){ return false; }
+  try { return google.accounts.oauth2.hasGrantedAllScopes(resp, SHEETS_SCOPE, AMEND_SCOPE); } catch(e){ return false; }
 }
 function ensureSheetsToken(onReady){
   if (state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
@@ -871,7 +874,7 @@ function initGCal(){
   if (!window.google || !google.accounts || !google.accounts.oauth2) return;
   gcalTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: GCAL_SCOPE + " " + GMAIL_SCOPE + " " + SHEETS_SCOPE,
+    scope: GCAL_SCOPE + " " + GMAIL_SCOPE + " " + SHEETS_SCOPE + " " + AMEND_SCOPE,
     callback: function(){}
   });
 }
@@ -1296,6 +1299,54 @@ function tJobRow(j, opts){
     <button class="pill" title="Click to move to the next stage" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
   </div>`;
 }
+function loadAmendments(){
+  // Called from a click (or when a valid token already exists): reads the WPS Amendments Sheet, read-only.
+  ensureSheetsToken(async function(){
+    state.amend = { busy:true };
+    rerenderToday();
+    try {
+      const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/Amendments!A:P");
+      const rows = r.values || [];
+      const head = rows[0] || [];
+      const col = name => head.indexOf(name);
+      const iJob = col("Job"), iAddr = col("Address"), iSub = col("Submitted"), iName = col("Name"), iRole = col("Role"), iStatus = col("Status"), iDec = col("Decision");
+      const byJob = {};
+      rows.slice(1).forEach(row => {
+        const job = (row[iJob]||"").trim(); if (!job) return;
+        const status = (row[iStatus]||"").trim();
+        if (/done|complete|closed|finished/i.test(status)) return;   // finished points drop off
+        const g = byJob[job] || (byJob[job] = { job, address: row[iAddr]||"", first: row[iSub]||"", names: new Set(), points: 0, decided: 0 });
+        g.points++;
+        if ((row[iDec]||"").trim()) g.decided++;
+        if (row[iName]) g.names.add(row[iName] + (row[iRole] ? " ("+row[iRole]+")" : ""));
+        if (row[iSub] && (!g.first || row[iSub] < g.first)) g.first = row[iSub];
+      });
+      state.amend = { loaded:true, at:new Date(), jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
+    } catch(e){
+      console.log("[WPS] amendments read failed", e);
+      state.amend = { error: "Couldn't read the WPS Amendments Sheet" };
+    }
+    rerenderToday();
+  });
+}
+function rerenderToday(){ if (state.view === "today") render(); }
+function renderAmendCard(){
+  const a = state.amend || {};
+  const link = `<div class="t-links" style="margin-top:10px"><a href="https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF" target="_blank" rel="noopener">Open review page</a><a href="https://docs.google.com/spreadsheets/d/${AMEND_SHEET_ID}" target="_blank" rel="noopener">Amendments Sheet</a></div>`;
+  let body;
+  if (a.busy) body = `<div class="t-empty">Reading the Amendments Sheet…</div>`;
+  else if (a.error) body = `<div class="t-empty" style="color:var(--coral-dark)">${esc(a.error)}</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()">Try again</button>`;
+  else if (!a.loaded) body = `<div class="t-empty">Click to load tenant comments waiting to be worked.</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()">Load amendments</button>`;
+  else if (!a.jobs.length) body = `<div class="t-empty">No open amendments.</div>`;
+  else body = a.jobs.map(g => `<div class="t-row"><div class="t-main"><strong>${esc(g.job)}</strong> · ${esc(g.address)}<div class="sub">${g.points} point${g.points===1?"":"s"}${g.decided?" · "+g.decided+" decided":""} · first sent ${esc(String(g.first).slice(0,16))}${g.names.size ? " · "+esc([...g.names].join(", ")) : ""}</div><div class="sub">Say "review amendments ${esc(g.job)}" to Claude</div></div></div>`).join("");
+  const n = a.loaded ? a.jobs.length : null;
+  return `<div class="t-card">
+      <h3>Amendments <span class="count">${n==null ? "" : n+" job"+(n===1?"":"s")+" open"}</span></h3>
+      ${body}
+      ${a.loaded ? `<button class="t-link" style="font-size:12.5px;margin-top:6px" onclick="loadAmendments()">Refresh</button>` : ""}
+      ${link}
+    </div>`;
+}
 function renderToday(){
   const today = isoToday(0), weekEnd = isoToday(7);
   const live = state.jobs;
@@ -1308,6 +1359,7 @@ function renderToday(){
   const awaitingSig = live.filter(j => j.status === "sent" && j.type === "ICI").sort(byTime);
   const toInvoice = live.filter(needsInvoice);
   const unpaid = live.filter(j => j.invoice === "invoiced");
+  if (!state.amend && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) setTimeout(loadAmendments, 0);
   const queueN = pendingQueue().length;
   const sheetId = lsGet(LS_SHEET_ID);
   const links = TODAY_LINKS.concat(sheetId ? [["Job Log Sheet", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
@@ -1343,11 +1395,7 @@ function renderToday(){
       </div>
       <div class="t-empty" style="font-size:12px">Click a number to see the jobs.</div>
     </div>
-    <div class="t-card">
-      <h3>Amendments</h3>
-      <div class="t-empty" style="color:var(--ink)">New tenant comments are flagged by the inbox check (7:51, 12:51, 15:51). To work one, say "review amendments JOBNO" to Claude.</div>
-      <div class="t-links" style="margin-top:10px"><a href="https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF" target="_blank" rel="noopener">Open review page</a></div>
-    </div>
+    ${renderAmendCard()}
     <div class="t-card wide">
       <h3>Quick links</h3>
       <div class="t-links">${links.map(l => `<a href="${l[1]}"${l[1].startsWith("http")?' target="_blank" rel="noopener"':''}>${esc(l[0])}</a>`).join("")}</div>
