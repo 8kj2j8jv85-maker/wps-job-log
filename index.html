@@ -278,6 +278,7 @@ const SHEET_NAME = "WPS Job Log";
 const AMEND_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
 const AMEND_SHEET_ID = "1FjRFw2l9L1T3DVbASn08NfSsvbxlGQAQ4Qu95CRK6gs";
 const LS_SHEET_ID = "wps_job_log_sheet_id_v1";
+const LS_JOBNO_HIGH = "wps_job_log_jobno_high_v1";   // highest job number ever used per month, so numbers never repeat after a delete
 const LS_LOCAL_SAVED_AT = "wps_job_log_local_saved_at_v1";   // when this browser last changed data
 const LS_CLOUD_SYNCED_AT = "wps_job_log_cloud_synced_at_v1"; // the Sheet's savedAt we last matched
 let gcalTokenClient = null;
@@ -365,7 +366,16 @@ function load(){
   try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
   try { const q = localStorage.getItem(LS_QUEUE_DONE); if (q) state.queueDone = JSON.parse(q) || {}; } catch(e){}
 }
-function saveJobs(){ localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); markLocalChange(); }
+function getJobNoHigh(){ try { return JSON.parse(localStorage.getItem(LS_JOBNO_HIGH)||"{}")||{}; } catch(e){ return {}; } }
+function mergeJobNoHigh(extra){
+  const high = getJobNoHigh();
+  const add = (prefix, n) => { if (!isNaN(n) && (!high[prefix] || n > high[prefix])) high[prefix] = n; };
+  state.jobs.forEach(j => { const m = /^(WPS\d{4})(\d+)$/.exec(j.jobNo||""); if (m) add(m[1], parseInt(m[2],10)); });
+  if (extra) Object.keys(extra).forEach(k => add(k, parseInt(extra[k],10)));
+  try { localStorage.setItem(LS_JOBNO_HIGH, JSON.stringify(high)); } catch(e){}
+  return high;
+}
+function saveJobs(){ mergeJobNoHigh(); localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); markLocalChange(); }
 function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); markLocalChange(); }
 
 // ---------------------------------------------------------------- Google Sheet master copy
@@ -447,7 +457,7 @@ async function findOrCreateSheet(){
   return made.spreadsheetId;
 }
 async function readCloudMeta(id){
-  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values/Meta!A1:B4");
+  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values/Meta!A1:B10");
   const meta = {};
   (r.values||[]).forEach(row=>{ if (row[0]) meta[row[0]] = row[1]||""; });
   return meta;
@@ -479,7 +489,7 @@ async function cloudSave(){
       data: [
         { range:"Jobs!A1", values: jobsToRows() },
         { range:"Clients!A1", values: clientsToRows() },
-        { range:"Meta!A1", values: [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."]] }
+        { range:"Meta!A1", values: [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())]] }
       ]
     })});
     lsSet(LS_CLOUD_SYNCED_AT, savedAt);
@@ -515,6 +525,7 @@ async function cloudSyncNow(){
         const clients = normalizeClients(parse(r.valueRanges[1]));
         if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return; }
         state.jobs = jobs; if (clients) state.clients = clients;
+        try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
         localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
         localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
         lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
@@ -553,7 +564,8 @@ function nextJobNumber(dateStr){
   const prefix = 'WPS' + yy + mm;
   const nums = state.jobs.map(j=>j.jobNo).filter(n=>n && n.startsWith(prefix))
     .map(n=>parseInt(n.slice(prefix.length),10)).filter(n=>!isNaN(n));
-  const next = nums.length ? Math.max(...nums)+1 : 1;
+  const used = mergeJobNoHigh()[prefix] || 0;
+  const next = Math.max(used, nums.length ? Math.max(...nums) : 0) + 1;
   return prefix + pad2(next);
 }
 function emptyJob(){
@@ -823,6 +835,7 @@ function deleteJob(id){
   if (!confirm("Delete this job? This can't be undone.")) return;
   const job = state.jobs.find(j=>j.id===id);
   deleteJobCalendarEvent(job);
+  mergeJobNoHigh();   // remember its number so it's never reused
   state.jobs = state.jobs.filter(j=>j.id!==id);
   saveJobs();
   render();
@@ -1196,11 +1209,10 @@ function qApplyUpdate(id){
 }
 function qApplyCancel(id){
   const it = queueItem(id); const m = it && findMatch(it); if (!m) return;
-  if (!confirm("Mark "+m.jobNo+" as cancelled? It'll be archived and removed from the calendar.")) return;
+  if (!confirm("Delete "+m.jobNo+" ("+(m.address||"")+")? It's cancelled, so it will be removed from the Job Log and the calendar. This can't be undone.")) return;
   deleteJobCalendarEvent(m);
-  m.gcalEventId = null;
-  m.status = "archived";
-  m.notes = [m.notes, "CANCELLED per email"+(it.sourceDate?" ("+it.sourceDate+")":"")+(it.summary?": "+it.summary:"")].filter(Boolean).join("\n");
+  mergeJobNoHigh();   // remember its number so it's never reused
+  state.jobs = state.jobs.filter(j => j.id !== m.id);
   saveJobs(); markQueueDone(id,"cancelled"); render();
 }
 function qReject(id){ markQueueDone(id,"rejected"); render(); }
@@ -1229,7 +1241,7 @@ function renderQueueTray(){
       actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')">Apply change</button>
                  <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')">Edit first</button>`;
     } else {
-      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')">Mark cancelled</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')">Delete cancelled job</button>`;
     }
     actions += `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')">Dismiss</button>`;
     return `<div class="qcard">
