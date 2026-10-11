@@ -281,6 +281,69 @@
     .side-tools .btn-link{ width:auto; padding:6px 10px; font-size:13px; }
     .wrap{ padding:0 16px 40px; }
     .page-title{ font-size:34px; }
+    /* phone menu: links and tools fold away behind one button */
+    .sidebar .side-menu-btn{ display:inline-block; margin-left:auto; background:rgba(255,255,255,.1); color:#fff; border:none; border-radius:8px; padding:8px 12px; font:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+    .sidebar .side-more{ display:none; width:100%; }
+    .sidebar .side-more.open{ display:flex; flex-direction:column; gap:14px; }
+    .side-more .side-links a, .side-more .side-tools .btn-link{ padding:10px 14px; font-size:15px; }
+    .side-more .side-tools{ flex-direction:column; }
+    .page-actions .phone-only{ display:inline-flex; }
+  }
+  .side-menu-btn{ display:none; }
+  .side-more{ display:contents; }
+  .phone-only{ display:none; }
+  .empty-device{ background:var(--coral-bg); border:1px solid var(--coral); border-radius:10px; padding:12px 14px; margin:12px 0; font-size:14px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
+  .empty-device .d-note{ width:100%; margin:0; }
+  @media (max-width:600px){
+    .sidebar{ padding:10px 12px; gap:8px; }
+    .side-logo{ width:120px; }
+    .side-nav{ width:100%; order:3; justify-content:space-between; gap:4px; }
+    .side-nav a{ padding:8px 10px; font-size:14px; gap:6px; }
+    .side-nav a svg{ width:16px; height:16px; }
+    .side-more{ order:4; }
+    .wrap-dash .page-head{ padding-top:12px; }
+    .page-title{ font-size:28px; }
+    .page-actions{ width:100%; }
+    .page-actions .btn{ flex:1 1 auto; justify-content:center; padding:10px 10px; }
+    .d-tiles{ grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+    .d-tile{ padding:7px 8px; }
+    .d-num{ font-size:22px; }
+    .d-lbl{ font-size:11.5px; }
+    .d-sub{ font-size:10.5px; }
+    /* list rows: date + stage on top, job underneath full width */
+    .c-row{ display:grid; grid-template-columns:auto 1fr auto; column-gap:8px; row-gap:3px; align-items:center; padding:9px 0; }
+    .c-when{ grid-column:1; grid-row:1; min-width:0; }
+    .c-row .due{ grid-column:2; grid-row:1; white-space:normal; }
+    .c-row .pill{ grid-column:3; grid-row:1; }
+    .c-job{ grid-column:1 / -1; grid-row:2; white-space:normal; font-size:14px; }
+    .c-row > *:not(.c-when):not(.due):not(.pill):not(.c-job){ grid-column:1 / -1; }
+    .wk-strip{ gap:6px; }
+    /* job form: two columns, nothing wider than the screen */
+    .form-card{ padding:14px 12px; }
+    .field-grid, .agent-contact-edit-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .field{ min-width:0; }
+    .field input, .field select, .field textarea, .form-card input, .form-card select, .form-card textarea{ width:100%; min-width:0; max-width:100%; font-size:16px; }
+    .extract-row{ flex-wrap:wrap; }
+    .form-actions .btn{ flex:1; justify-content:center; }
+    /* Job Log: each job as a card instead of a wide table */
+    .tablewrap{ overflow-x:visible; }
+    .tablewrap table, .tablewrap tbody{ display:block; width:100%; margin:0; }
+    .tablewrap thead{ display:none; }
+    .tablewrap tr{ display:grid; grid-template-columns:auto 1fr auto; column-gap:8px; row-gap:6px; align-items:center; background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+    .tablewrap tr.row-late{ border-color:var(--coral); background:var(--coral-bg); }
+    .tablewrap tr.row-late td{ background:none !important; }
+    .tablewrap td, .tablewrap td:first-child, .tablewrap td:last-child{ display:block; border:none; border-radius:0; padding:0; background:none; max-width:none !important; min-width:0; }
+    .tablewrap tr:hover td{ background:none; }
+    .jt-no{ grid-column:1; grid-row:1; font-size:13px; }
+    .jt-type{ grid-column:2; grid-row:1; }
+    .jt-act{ grid-column:3; grid-row:1; }
+    .jt-addr{ grid-column:1 / -1; grid-row:2; font-size:14.5px; font-weight:500; }
+    .jt-date{ grid-column:1; grid-row:3; font-size:13px; white-space:nowrap; }
+    .jt-time{ grid-column:2; grid-row:3; font-size:13px; }
+    .jt-agent{ grid-column:3; grid-row:3; font-size:12.5px; color:var(--ink-soft); text-align:right; }
+    .jt-status{ grid-column:1 / 3; grid-row:4; display:flex !important; flex-wrap:wrap; gap:4px 8px; align-items:center; }
+    .jt-status .due{ margin:0; }
+    .jt-inv{ grid-column:3; grid-row:4; text-align:right; }
   }
 </style>
 </head>
@@ -514,8 +577,9 @@ async function cloudSave(){
     const id = await findOrCreateSheet();
     const meta = await readCloudMeta(id);
     const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
-    if (meta.savedAt && synced && meta.savedAt > synced){
-      setCloud("conflict","Changed on another device — click Sync now");
+    if (meta.savedAt && (!synced || meta.savedAt > synced)){
+      // !synced = this device has never loaded the Sheet (e.g. a new phone): never overwrite it blind
+      setCloud("conflict", synced ? "Changed on another device — click Sync now" : "Tap Sync now to load your jobs from Google");
       return;
     }
     const savedAt = new Date().toISOString();
@@ -546,7 +610,7 @@ async function cloudSyncNow(){
       const localAt = lsGet(LS_LOCAL_SAVED_AT) || "";
       const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
       const cloudNewer = meta.savedAt && meta.savedAt > synced;
-      const localChanged = localAt && localAt > synced;
+      const localChanged = localAt && localAt > synced && state.jobs.length > 0;
       if (cloudNewer && localChanged && !confirm("The Job Log was changed both here and on another device since the last sync.\n\nOK = load the Google copy (this browser's unsynced changes are lost)\nCancel = keep this browser's copy and overwrite Google")){
         lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt); await cloudSave(); return;
       }
@@ -567,16 +631,23 @@ async function cloudSyncNow(){
         localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
         lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
         lsSet(LS_LOCAL_SAVED_AT, meta.savedAt);
+        rememberGoogleConnected();
         setCloud("saved");
         render();
       } else {
         await cloudSave();
+        rememberGoogleConnected();
+        render();
       }
     } catch(e){
       console.log("[WPS] sync failed", e);
       setCloud("error","Sync failed — check connection");
     }
   });
+}
+function rememberGoogleConnected(){
+  // so later changes on this device save to the Sheet (same flag as "Connect Google Calendar")
+  if (!state.gcalConnected){ state.gcalConnected = true; lsSet(LS_GCAL_PREF, "1"); }
 }
 function renderCloudPill(){
   const s = state.cloudStatus || "idle";
@@ -770,7 +841,8 @@ function filteredJobs(){
 function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
 function firstWeekdayMonIdx(y,m){ const jsDay = new Date(y, m-1, 1).getDay(); return (jsDay+6)%7; }
 function isoDate(y,m,d){ return y+"-"+pad2(m)+"-"+pad2(d); }
-function setView(v){ state.view = v; document.title = v === "today" ? "Wellington Dashboard" : "Wellington Property Services — Job Log"; render(); }
+function toggleMenu(){ state.menuOpen = !state.menuOpen; render(); }
+function setView(v){ state.view = v; state.menuOpen = false; document.title = v === "today" ? "Wellington Dashboard" : "Wellington Property Services — Job Log"; render(); }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -1686,10 +1758,13 @@ function renderSidebar(){
       <a href="#" class="${state.view!=='today'?'active':''}" onclick="setView('table');return false;">${ICON_CAL} Job Log</a>
       <a href="photos.html">${ICON_CAM} Photo Tool</a>
     </nav>
+    <button class="side-menu-btn" onclick="toggleMenu()">${state.menuOpen ? "Close ✕" : "Menu ☰"}</button>
+    <div class="side-more${state.menuOpen ? " open" : ""}">
     ${state.view === "today" ? renderSideLinks() : ""}
     <div class="side-tools">
       <div class="side-label">TOOLS</div>
       ${renderUtilityRow()}
+    </div>
     </div>
   </aside>`;
 }
@@ -1699,10 +1774,11 @@ function renderPageHead(){
   return `<div class="page-head">
     <div><h1 class="page-title">${state.view === "today" ? "Wellington Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
     <div class="page-actions">
+      <button class="btn btn-ghost phone-only" onclick="cloudSyncNow()">Sync now</button>
       <button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>
       <button class="btn btn-coral" onclick="openNew()">+ New job</button>
     </div>
-  </div>`;
+  </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()">Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
 }
 
 function renderHeader(){
@@ -2036,16 +2112,16 @@ function renderTable(){
         ${jobs.map(j=>{
           const sm = statusMeta(j.status), tm = typeMeta(j.type), di = dueInfo(j);
           return `<tr class="${di&&di.late?'row-late':''}">
-            <td class="mono">${esc(j.jobNo)}</td>
-            <td><span class="type-badge">${esc(tm.label)}</span></td>
-            <td>${esc(j.client)||"—"}</td>
-            <td style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
-            <td>${formatDate(j.date)}</td>
-            <td>${esc(j.time)||"—"}</td>
-            <td><button class="pill" title="Click to move to the next stage" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
-            <td>${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
+            <td class="mono jt-no">${esc(j.jobNo)}</td>
+            <td class="jt-type"><span class="type-badge">${esc(tm.label)}</span></td>
+            <td class="jt-agent">${esc(j.client)||"—"}</td>
+            <td class="jt-addr" style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
+            <td class="jt-date">${formatDate(j.date)}</td>
+            <td class="jt-time">${esc(j.time)||"—"}</td>
+            <td class="jt-status"><button class="pill" title="Click to move to the next stage" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
+            <td class="jt-inv">${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
                 return `<button class="pill" title="Click: Not invoiced, then Invoiced, then Paid" style="color:${need?'var(--coral-dark)':im.fg}; background:${need?'var(--coral-bg)':im.bg};" onclick="cycleInvoice('${j.id}')">${need?'To invoice':im.label}</button>${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
-            <td>
+            <td class="jt-act">
               <div class="row-actions">
                 <button class="icon-btn" title="Edit" onclick="openEdit('${j.id}')">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
