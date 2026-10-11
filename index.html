@@ -93,6 +93,42 @@
   .wk-add{ margin-top:auto; background:none; border:none; color:var(--peri); font:inherit; font-size:12px; text-align:left; cursor:pointer; padding:0; }
   @media (max-width:900px){ .wk-strip{ grid-template-columns:1fr; } .wk-day{ min-height:0; } }
 
+
+  /* compact dashboard (one screen) */
+  .wrap-dash{ max-width:1560px; }
+  .wrap-dash .page-head{ padding-top:20px; }
+  .d-tiles{ display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:8px; margin:14px 0 12px; }
+  .d-tile{ text-align:left; background:var(--white); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; min-width:0; }
+  .d-tile:hover{ border-color:var(--peri); }
+  .d-tile.on{ border-color:var(--brand); background:var(--sky); }
+  .d-num{ font-family:'Cormorant Garamond',Georgia,serif; font-weight:700; font-size:26px; line-height:1.05; }
+  .d-lbl{ font-size:12px; font-weight:600; color:var(--ink); line-height:1.25; }
+  .d-sub{ font-size:11px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .d-row{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.6fr); gap:12px; margin-bottom:12px; }
+  .d-card{ padding:12px 16px; }
+  .d-card h3{ font-size:19px; margin-bottom:6px; }
+  .d-route{ text-decoration:none; margin-right:10px; padding:4px 9px; border-radius:6px; background:var(--brand); color:#fff; font-size:12px; font-weight:600; }
+  .c-row{ display:flex; align-items:center; gap:10px; padding:6px 0; border-top:1px solid var(--line-soft); font-size:13.5px; min-width:0; }
+  .c-row:first-of-type{ border-top:none; }
+  .c-when{ flex:0 0 auto; min-width:64px; font-weight:600; color:var(--brand); white-space:nowrap; }
+  .c-job{ flex:1; min-width:0; text-align:left; background:none; border:none; padding:0; font:inherit; color:var(--peri); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .c-job b{ font-weight:600; }
+  .c-dim{ color:var(--ink-soft); font-weight:400; }
+  .d-panel .t-row{ padding:6px 0; font-size:13.5px; }
+  .d-more{ font-size:12.5px; margin-top:6px; margin-right:16px; }
+  .d-note{ font-size:12px; color:var(--stone); margin-top:6px; }
+  .d-wk{ min-height:0; padding:6px; gap:4px; }
+  .d-wk .wk-head{ display:flex; align-items:center; gap:4px; }
+  .d-add{ margin:0 0 0 auto; font-size:16px; line-height:1; padding:0 2px; }
+  .d-wkjob{ padding:4px 6px; }
+  .d-wkjob .wk-t{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .side-links{ display:flex; flex-direction:column; gap:1px; }
+  .side-links .side-label{ font-size:11px; font-weight:600; letter-spacing:.16em; color:#8A97B8; padding:0 14px 6px; }
+  .side-links a{ color:var(--sky); font-size:13.5px; text-decoration:none; padding:5px 14px; border-radius:6px; }
+  .side-links a:hover{ background:rgba(255,255,255,.06); color:#fff; }
+  @media (max-width:1250px){ .d-tiles{ grid-template-columns:repeat(5,minmax(0,1fr)); } }
+  @media (max-width:900px){ .d-row{ grid-template-columns:1fr; } .d-tiles{ grid-template-columns:repeat(2,minmax(0,1fr)); } .c-row{ flex-wrap:wrap; } .c-job{ white-space:normal; } }
+
   /* status strip */
   .status-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:10px; margin:20px 0; }
   .due{ display:block; margin-top:4px; font-size:11.5px; font-weight:600; white-space:nowrap; }
@@ -1356,13 +1392,13 @@ function render(){
     <div class="shell">
     ${renderSidebar()}
     <main class="main">
-    <div class="wrap">
+    <div class="wrap${state.view === "today" ? " wrap-dash" : ""}">
       ${renderPageHead()}
       ${state.view === "today" ? "" : renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : renderToolbar() + (state.view === "calendar" ? renderCalendar() : renderTable())}
-      <div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed); click the invoice pill for Invoiced → Paid &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>
+      ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed); click the invoice pill for Invoiced → Paid &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
     </div>
@@ -1437,7 +1473,7 @@ function loadAmendments(){
   });
 }
 function rerenderToday(){ if (state.view === "today") render(); }
-function renderAmendCard(){
+function renderAmendCard(inner){
   const a = state.amend || {};
   const link = `<div class="t-links" style="margin-top:10px"><a href="https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF" target="_blank" rel="noopener">Open review page</a><a href="https://docs.google.com/spreadsheets/d/${AMEND_SHEET_ID}" target="_blank" rel="noopener">Amendments Sheet</a></div>`;
   let body;
@@ -1447,6 +1483,7 @@ function renderAmendCard(){
   else if (!a.jobs.length) body = `<div class="t-empty">No open amendments.</div>`;
   else body = a.jobs.map(g => `<div class="t-row"><div class="t-main"><strong>${esc(g.job)}</strong> · ${esc(g.address)}<div class="sub">${g.points} point${g.points===1?"":"s"}${g.decided?" · "+g.decided+" decided":""} · first sent ${esc(String(g.first).slice(0,16))}${g.names.size ? " · "+esc([...g.names].join(", ")) : ""}</div><div class="sub">Say "review amendments ${esc(g.job)}" to Claude</div></div></div>`).join("");
   const n = a.loaded ? a.jobs.length : null;
+  if (inner) return `${body}${a.loaded ? `<button class="t-link" style="font-size:12.5px;margin-top:6px" onclick="loadAmendments()">Refresh</button>` : ""}<div style="margin-top:8px;display:flex;gap:16px"><a class="t-link" href="https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF" target="_blank" rel="noopener">Open review page</a><a class="t-link" href="https://docs.google.com/spreadsheets/d/${AMEND_SHEET_ID}" target="_blank" rel="noopener">Amendments Sheet</a></div>`;
   return `<div class="t-card">
       <h3>Amendments <span class="count">${n==null ? "" : n+" job"+(n===1?"":"s")+" open"}</span></h3>
       ${body}
@@ -1517,6 +1554,21 @@ function windowRow(x, now){
     <div class="sub">${started} · ${line}</div>${rem}</div>
     <span class="due ${cls}" style="white-space:nowrap">${tag}</span></div>`;
 }
+function cRow(j, opts){
+  opts = opts || {};
+  const sm = statusMeta(j.status), tm = typeMeta(j.type), di = opts.due ? dueInfo(j) : null;
+  const when = j.date ? shortDay(new Date(j.date+"T00:00:00")) : "No date";
+  const addr = [j.address, j.postcode].filter(Boolean).join(", ") || "No address";
+  return `<div class="c-row">
+    <span class="c-when">${opts.timeOnly ? esc(j.time||"Any time") : esc(when)+(j.time && !opts.noTime ? ` <span class="c-dim">${esc(j.time)}</span>` : "")}</span>
+    <button class="c-job" onclick="openEdit('${j.id}')" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(tm.code)} · ${esc(addr)}<span class="c-dim"> · ${esc(j.client||"")}</span></button>
+    ${opts.extra || ""}
+    ${di ? `<span class="due ${di.cls}" style="margin:0">${di.text}</span>` : ""}
+    <button class="pill" title="Click to move to the next stage" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
+  </div>`;
+}
+function setDashPanel(k){ state.dashPanel = k; state.dashAll = false; render(); }
+function toggleDashAll(){ state.dashAll = !state.dashAll; render(); }
 function renderToday(){
   const today = isoToday(0), weekEnd = isoToday(7);
   const live = state.jobs;
@@ -1527,83 +1579,105 @@ function renderToday(){
   const due = live.map(j => ({ j, d: dueInfo(j) })).filter(x => x.d).sort((a,b) => a.d.due - b.d.due);
   const overdue = due.filter(x => x.d.late).length;
   const awaitingSig = live.filter(j => j.status === "sent" && j.type === "ICI").sort(byTime);
-  const toInvoice = live.filter(needsInvoice);
-  const unpaid = live.filter(j => j.invoice === "invoiced");
+  const toInvoice = live.filter(needsInvoice).sort(byTime);
+  const unpaid = live.filter(j => j.invoice === "invoiced").sort(byTime);
   if (!state.amend && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) setTimeout(loadAmendments, 0);
   const now = new Date();
   const timesToAgree = active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
   const photosMissing = active.filter(j => ["processing","completed"].includes(j.status) && !j.photoLink && visitTime(j) && visitTime(j) <= now && visitTime(j) > addDays(now, -30)).sort(byTime);
   const windows = live.filter(j => j.type==="ICI" && j.sentAt && j.status!=="archived").map(j => ({ j, closes: windowClose(j), st: windowState(j) }))
     .filter(x => x.st==="open" || x.st==="hold" || x.st==="due" || x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
+  const openWin = windows.filter(x => x.st==="open" || x.st==="hold" || x.st==="due").length;
+  const remindersDue = windows.filter(x => x.st==="open" && x.j.status==="sent" && !x.j.reminderAt && Math.ceil((x.closes-now)/86400000) <= REMINDER_DAYS_LEFT).length;
   const sentNoDate = live.filter(j => j.type==="ICI" && j.status==="sent" && !j.sentAt).length;
   const wkStats = turnaroundStats(live, addDays(now, -7));
   const moStats = turnaroundStats(live, new Date(now.getFullYear(), now.getMonth(), 1));
   const route = routeUrl(todays);
   const queueN = pendingQueue().length;
-  const sheetId = lsGet(LS_SHEET_ID);
-  const links = TODAY_LINKS.concat(sheetId ? [["Job Log Sheet", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
-  const list = (arr, fn, empty, max) => arr.length ? arr.slice(0, max||50).map(fn).join("") + (arr.length > (max||50) ? `<div class="t-empty">+ ${arr.length-(max||50)} more</div>` : "") : `<div class="t-empty">${empty}</div>`;
-  return `<div class="today-grid">
-    <div class="t-card wide">
-      <h3>Today's jobs <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" style="text-decoration:none;margin-right:12px;padding:5px 10px;border-radius:6px;background:var(--brand);color:#fff;font-size:12.5px;font-weight:600">Today's route</a>` : ""}${todays.length}</span></h3>
-      ${list(todays, j => tJobRow(j), "Nothing booked for today.")}
-    </div>
-    ${renderWeekStrip(active, coming.length)}
-    <div class="t-card">
-      <h3>Reports due <span class="count" style="${overdue?'color:#B42318':''}">${overdue ? overdue+" overdue" : due.length+" due"}</span></h3>
-      ${list(due, x => tJobRow(x.j, {showDate:true, showDue:true}), "No reports waiting to be written.", 8)}
-    </div>
-    <div class="t-card">
-      <h3>New bookings <span class="count">${state.queueChecked ? queueN+" to review" : "not checked yet"}</span></h3>
-      ${queueN ? `<div class="t-empty" style="color:var(--ink)">${queueN} booking${queueN===1?"":"s"} waiting in the To review tray above.</div>` : `<div class="t-empty">${state.queueChecked ? "Nothing new." : "Click below to read the latest scan."}</div>`}
-      <button class="btn btn-sm" style="margin-top:8px" onclick="checkForBookings()">Check for new bookings</button>
-    </div>
-    <div class="t-card">
-      <h3>Out for signature <span class="count">${awaitingSig.length}</span></h3>
-      ${list(awaitingSig, j => tJobRow(j, {showDate:true}), "No check-in reports waiting for signatures.", 8)}
-      <div class="t-empty" style="font-size:12px">Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back.</div>
-    </div>
-    <div class="t-card">
-      <h3>Times to agree <span class="count">${timesToAgree.length}</span></h3>
-      ${list(timesToAgree, j => tJobRow(j, {showDate:true}), "Every booked job has a time.", 8)}
-      <div class="t-empty" style="font-size:12px">Booked jobs with no time set. Add the time once the tenant confirms.</div>
-    </div>
-    <div class="t-card">
-      <h3>Photos not done <span class="count">${photosMissing.length}</span></h3>
-      ${list(photosMissing, j => tJobRow(j, {showDate:true}), "Every visited job has its photo link.", 8)}
-      <div class="t-empty" style="font-size:12px">Visited in the last 30 days, report not sent yet, and no photo link saved. Run the Photo Tool for these.</div>
-    </div>
-    <div class="t-card">
-      <h3>Comment windows <span class="count">7 days from sent</span></h3>
-      ${windows.length ? windows.map(x => windowRow(x, now)).join("")
-        : `<div class="t-empty">No inventory & check-in windows open.</div>`}
-      ${state.amend && state.amend.loaded ? "" : `<div class="t-empty" style="font-size:12px">Load amendments (card below) so closed windows can move to Deemed agreed.</div>`}
-      ${sentNoDate ? `<div class="t-empty" style="font-size:12px">${sentNoDate} check-in report${sentNoDate===1?"":"s"} marked Sent before dates were recorded, so not shown.</div>` : ""}
-    </div>
-    <div class="t-card">
-      <h3>Turnaround <span class="count">visit to report sent</span></h3>
-      <div style="display:flex;gap:28px;margin:4px 0 8px">
-        ${[["Last 7 days", wkStats], ["This month", moStats]].map(([lbl, s]) => `<div><div class="t-big" style="color:${!s?'var(--stone)':s.pct>=80?'#2E6B45':s.pct>=50?'#8A5A00':'#B42318'}">${s ? s.pct+"%" : "–"}</div>
-          <div class="sub" style="color:var(--ink-soft);font-size:12.5px">${lbl}${s ? " · on time · avg "+s.avg+"h · "+s.n+" report"+(s.n===1?"":"s") : " · no reports yet"}</div></div>`).join("")}
+  const am = state.amend || {};
+  const amN = am.loaded ? am.jobs.length : null;
+
+  // Tiles: [key, label, number shown, sub line, tone]
+  const tc = s => !s ? "var(--stone)" : s.pct>=80 ? "#2E6B45" : s.pct>=50 ? "#8A5A00" : "#B42318";
+  const tiles = [
+    ["due", "Reports due", due.length, overdue ? overdue+" overdue" : "", overdue ? "late" : due.length ? "warn" : ""],
+    ["book", "New bookings", state.queueChecked ? queueN : "–", state.queueChecked ? "" : "not checked", queueN ? "warn" : ""],
+    ["sig", "Out for signature", awaitingSig.length, "", ""],
+    ["win", "Comment windows", openWin, remindersDue ? remindersDue+" reminder"+(remindersDue===1?"":"s")+" due" : "", remindersDue ? "warn" : ""],
+    ["amend", "Amendments", amN==null ? "–" : amN, amN==null ? "click to load" : "", amN ? "late" : ""],
+    ["times", "Times to agree", timesToAgree.length, "", timesToAgree.length ? "warn" : ""],
+    ["photos", "Photos not done", photosMissing.length, "", photosMissing.length ? "warn" : ""],
+    ["inv", "To invoice", toInvoice.length, "", toInvoice.length ? "coral" : ""],
+    ["paid", "Awaiting payment", unpaid.length, "", ""],
+    ["turn", "On time (7 days)", wkStats ? wkStats.pct+"%" : "–", wkStats ? "avg "+wkStats.avg+"h" : "no reports yet", ""],
+  ];
+  const countOf = k => { const t = tiles.find(x => x[0]===k); return typeof t[2]==="number" ? t[2] : 0; };
+  // Default panel: the most urgent thing with something in it
+  let panel = state.dashPanel;
+  if (!panel) panel = overdue ? "due" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
+  const toneCol = { late:"#B42318", warn:"#8A5A00", coral:"var(--coral-dark)" };
+  const tileHtml = tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile${panel===k?' on':''}" onclick="setDashPanel('${k}')">
+      <span class="d-num" style="color:${k==='turn' ? tc(wkStats) : (toneCol[tone] || (n && n!=='–' ? 'var(--brand)' : 'var(--stone)'))}">${n}</span>
+      <span class="d-lbl">${lbl}</span>${sub ? `<span class="d-sub"${tone==='late'?' style="color:#B42318"':''}>${esc(sub)}</span>` : ""}
+    </button>`).join("");
+
+  const MAX = 7;
+  const rows = (arr, fn, empty) => {
+    if (!arr.length) return `<div class="t-empty">${empty}</div>`;
+    const shown = state.dashAll ? arr : arr.slice(0, MAX);
+    return shown.map(fn).join("") + (arr.length > MAX ? `<button class="t-link d-more" onclick="toggleDashAll()">${state.dashAll ? "Show fewer" : "Show all "+arr.length}</button>` : "");
+  };
+  const note = t => `<div class="d-note">${t}</div>`;
+  let title = "", body = "";
+  switch (panel){
+    case "due": title = "Reports due"; body = rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;
+    case "book": title = "New bookings";
+      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" booking"+(queueN===1?"":"s")+" waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()">Check for new bookings</button>`; break;
+    case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
+    case "win": title = "Comment windows (7 days from sent)"; body = rows(windows, x => windowRow(x, now), "No inventory & check-in windows open.")
+      + (am.loaded ? "" : note("Load amendments so closed windows can move to Deemed agreed."))
+      + (sentNoDate ? note(sentNoDate+" check-in report"+(sentNoDate===1?"":"s")+" marked Sent before dates were recorded, so not shown.") : ""); break;
+    case "amend": title = "Amendments"; body = renderAmendCard(true); break;
+    case "times": title = "Times to agree"; body = rows(timesToAgree, j => cRow(j, {noTime:true}), "Every booked job has a time.") + note("Booked jobs with no time set. Add the time once the tenant confirms."); break;
+    case "photos": title = "Photos not done"; body = rows(photosMissing, j => cRow(j), "Every visited job has its photo link.") + note("Visited in the last 30 days, report not sent, no photo link saved. Run the Photo Tool for these."); break;
+    case "inv": title = "To invoice"; body = rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
+    case "paid": title = "Awaiting payment"; body = rows(unpaid, j => cRow(j, {extra: j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}</span>` : ""}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
+    case "turn": title = "Turnaround: visit to report sent";
+      body = `<div style="display:flex;gap:36px;margin:2px 0 6px">${[["Last 7 days", wkStats], ["This month", moStats]].map(([lbl, s]) => `<div><div class="t-big" style="color:${tc(s)}">${s ? s.pct+"%" : "–"}</div><div class="c-dim" style="font-size:12.5px;margin-top:4px">${lbl}${s ? " · on time · avg "+s.avg+"h · "+s.n+" report"+(s.n===1?"":"s") : " · no reports yet"}</div></div>`).join("")}</div>` + note("Targets: check-outs 48h, everything else 72h. Counts reports moved to Sent from 11 Oct on."); break;
+  }
+
+  // Next 7 days, compact
+  const days = [];
+  for (let i=1; i<=7; i++){ const iso = isoToday(i); days.push({ iso, d: new Date(iso+"T00:00:00"), jobs: active.filter(j => j.date === iso).sort(byTime) }); }
+  const week = days.map(x => { const wk = x.d.getDay()===0 || x.d.getDay()===6;
+    return `<div class="wk-day d-wk${wk?' wk-end':''}">
+      <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()}<button class="wk-add d-add" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">+</button></div>
+      ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job d-wkjob" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" title="${esc(j.jobNo||"")} · ${esc(fullAddress(j))}${j.client ? " · "+esc(j.client) : ""}">
+          <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
+    </div>`; }).join("");
+
+  return `<div class="d-tiles">${tileHtml}</div>
+    <div class="d-row">
+      <div class="t-card d-card">
+        <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route">Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
+        ${todays.length ? todays.map(j => cRow(j, {timeOnly:true})).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
       </div>
-      <div class="t-empty" style="font-size:12px">Targets: check-outs 48h, everything else 72h. Counts reports moved to Sent from now on.</div>
-    </div>
-    <div class="t-card">
-      <h3>Money</h3>
-      <div style="display:flex;gap:24px;margin:4px 0 10px">
-        <button class="t-link" onclick="goFilter('toinvoice')"><div class="t-big" style="color:${toInvoice.length?'var(--coral-dark)':'var(--stone)'}">${toInvoice.length}</div><div class="sub" style="color:var(--ink-soft);font-size:12.5px">To invoice</div></button>
-        <button class="t-link" onclick="goFilter('unpaid')"><div class="t-big" style="color:${unpaid.length?'#8A5A00':'var(--stone)'}">${unpaid.length}</div><div class="sub" style="color:var(--ink-soft);font-size:12.5px">Awaiting payment</div></button>
+      <div class="t-card d-card">
+        <h3>Next 7 days <span class="count">${coming.length} job${coming.length===1?"":"s"}</span></h3>
+        <div class="wk-strip">${week}</div>
       </div>
-      <div class="t-empty" style="font-size:12px">Click a number to see the jobs.</div>
     </div>
-    ${renderAmendCard()}
-    <div class="t-card wide">
-      <h3>Quick links</h3>
-      <div class="t-links">${links.map(l => `<a href="${l[1]}"${l[1].startsWith("http")?' target="_blank" rel="noopener"':''}>${esc(l[0])}</a>`).join("")}</div>
-    </div>
-  </div>`;
+    <div class="t-card d-card d-panel">
+      <h3>${esc(title)}</h3>
+      ${body}
+    </div>`;
 }
 
+function renderSideLinks(){
+  const sheetId = lsGet(LS_SHEET_ID);
+  const links = TODAY_LINKS.filter(l => l[1] !== "photos.html").concat(sheetId ? [["Job Log Sheet", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
+  return `<div class="side-links"><div class="side-label">LINKS</div>${links.map(l => `<a href="${l[1]}"${l[1].startsWith("http")?' target="_blank" rel="noopener"':''}>${esc(l[0])}</a>`).join("")}</div>`;
+}
 function renderSidebar(){
   return `<aside class="sidebar">
     ${WPS_LOGO}
@@ -1612,6 +1686,7 @@ function renderSidebar(){
       <a href="#" class="${state.view!=='today'?'active':''}" onclick="setView('table');return false;">${ICON_CAL} Job Log</a>
       <a href="photos.html">${ICON_CAM} Photo Tool</a>
     </nav>
+    ${state.view === "today" ? renderSideLinks() : ""}
     <div class="side-tools">
       <div class="side-label">TOOLS</div>
       ${renderUtilityRow()}
