@@ -297,6 +297,7 @@ const STATUSES = [
   { code:"completed",  label:"Completed",  fg:"var(--peri)",       bg:"var(--peri-bg)" },
   { code:"sent",       label:"Sent",       fg:"var(--brand)",      bg:"var(--sky)" },
   { code:"signed",     label:"Signed",     fg:"#2E6B45",           bg:"#E0F0E6" },
+  { code:"deemed",     label:"Deemed agreed", fg:"#2E6B45",        bg:"#E0F0E6" },
   { code:"archived",   label:"Archived",   fg:"var(--stone)",      bg:"var(--stone-bg)" },
 ];
 // Report turnaround targets (hours from the visit) — change these to match what you promise agents
@@ -307,7 +308,7 @@ const INVOICE_STATES = [
   { code:"invoiced", label:"Invoiced",     fg:"#8A5A00",      bg:"#FFF1D0" },
   { code:"paid",     label:"Paid",         fg:"#2E6B45",      bg:"#E0F0E6" },
 ];
-const REPORT_OUT = ["sent","signed","archived"];   // report has gone out, so it should be invoiced
+const REPORT_OUT = ["sent","signed","deemed","archived"];   // report has gone out, so it should be invoiced
 function invoiceMeta(c){ return INVOICE_STATES.find(s=>s.code===(c||"")) || INVOICE_STATES[0]; }
 function needsInvoice(j){ return REPORT_OUT.includes(j.status) && !j.invoice; }
 const DUE_STATUSES = ["booked","processing","completed"];   // report not yet sent
@@ -385,7 +386,7 @@ function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.cl
 const SHEET_JOB_COLS = [
   ["Job no","jobNo"],["Type","type"],["Status","status"],["Date","date"],["Time","time"],
   ["Address","address"],["Town","town"],["Postcode","postcode"],["Client","client"],
-  ["Tenants","tenants"],["Invoice","invoice"],["Invoice no","invoiceNo"],
+  ["Tenants","tenants"],["Tenant emails","tenantEmails"],["Agent email","agentEmail"],["Invoice","invoice"],["Invoice no","invoiceNo"],
   ["Photo link","photoLink"],["Notes","notes"],["ID","id"]
 ];
 let cloudSaveTimer = null;
@@ -616,7 +617,79 @@ function setJobStatus(j, code){
   if (code==="booked") delete j.processingAt;
   // report sent date: starts the 7-day comment window and the turnaround score
   if (REPORT_OUT.includes(code) && !j.sentAt) j.sentAt = new Date().toISOString();
-  if (!REPORT_OUT.includes(code)) delete j.sentAt;
+  if (!REPORT_OUT.includes(code)){ delete j.sentAt; delete j.reissuedAt; delete j.reissues; delete j.reminderAt; }
+  if (code==="deemed" && !j.deemedAt) j.deemedAt = new Date().toISOString();
+  if (code!=="deemed") delete j.deemedAt;
+}
+// ---------------------------------------------------------------- 7-day comment window (inventory & check-in)
+// Window starts when the report is sent; a re-issue after amendments restarts it (changed items only).
+// After 7 days with no open amendments the job moves to "Deemed agreed" by itself.
+const COMMENT_DAYS = 7, REMINDER_DAYS_LEFT = 2;
+function windowStart(j){ const s = j.reissuedAt || j.sentAt; return s ? new Date(s) : null; }
+function windowClose(j){ const s = windowStart(j); return s ? addDays(s, COMMENT_DAYS) : null; }
+function normJobNo(s){ return String(s||"").toUpperCase().replace(/\s+/g,""); }
+function amendOpenFor(j){
+  const a = state.amend; if (!a || !a.loaded) return null;          // unknown until the Amendments Sheet is read
+  return a.jobs.some(g => normJobNo(g.job) === normJobNo(j.jobNo));
+}
+function windowState(j){
+  // open | hold (amendments open, window passed) | due (passed, amendments not checked yet) | deemed | signed
+  if (j.status==="signed") return "signed";
+  if (j.status==="deemed") return "deemed";
+  const c = windowClose(j); if (!c) return null;
+  if (c > new Date()) return "open";
+  const open = amendOpenFor(j);
+  if (open === true) return "hold";
+  return "due";
+}
+function autoDeem(){
+  // Only runs once the Amendments Sheet has been read, so a job with open comments is never deemed agreed.
+  if (!state.amend || !state.amend.loaded) return 0;
+  let n = 0;
+  state.jobs.forEach(j => {
+    if (j.type!=="ICI" || j.status!=="sent") return;
+    const c = windowClose(j); if (!c || c > new Date()) return;
+    if (amendOpenFor(j)) return;
+    j.status = "deemed"; j.deemedAt = c.toISOString(); n++;
+  });
+  if (n){ saveJobs(); console.log("[WPS] deemed agreed:", n); }
+  return n;
+}
+function reissueJob(id){
+  // Report re-issued after amendments: restart the 7-day window from now (changed items only).
+  captureFormValues();
+  const now = new Date().toISOString();
+  const apply = j => { if (!j) return; j.reissuedAt = now; j.reissues = (j.reissues||0) + 1; j.status = "sent"; if (!j.sentAt) j.sentAt = now; delete j.deemedAt; delete j.reminderAt; };
+  apply(state.jobs.find(x=>x.id===id));
+  apply(state.editing);
+  saveJobs();
+  render();
+}
+function cleanEmails(v){
+  // tidy a typed/pasted list: split on commas, semicolons or spaces, keep what looks like an email
+  return String(v||"").split(/[,;\s]+/).map(x=>x.trim().replace(/^<|>$/g,"")).filter(x=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)).join(", ");
+}
+function reminderUrl(j){
+  const c = windowClose(j);
+  const when = c ? c.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}) : "[date]";
+  const re = j.reissuedAt ? " (re-issued version)" : "";
+  const su = "Reminder: "+(j.jobNo||"")+" - Inventory and Check In - "+fullAddress(j)+" - comments close "+(c ? c.toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "");
+  const body = "Hi [first name],\n\n"
+    + "Just a reminder that the 7-day window for comments on the Inventory and Check In report"+re+" for "+fullAddress(j)+" closes on "+when+".\n\n"
+    + (j.reissuedAt ? "This covers the items we changed in the re-issued report only.\n\n" : "")
+    + "If you find anything not recorded in the report, or disagree with anything in it, please use our comments form: open the report and click \"click here to open our comments form\" (page 8, or the Please note page near the end). You will need the job number at the top of the report and the item numbers.\n\n"
+    + "If we don't hear from you by then, the report will be deemed agreed by all parties.\n\nKind regards,";
+  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"+(j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")+"&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
+}
+function sendReminder(id){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  window.open(reminderUrl(j), "_blank", "noopener");
+  markReminder(id, true);
+}
+function markReminder(id, on){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  if (on) j.reminderAt = new Date().toISOString(); else delete j.reminderAt;
+  saveJobs(); render();
 }
 function typeMeta(c){ return TYPES.find(t=>t.code===c) || TYPES[TYPES.length-1]; }
 function esc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -643,7 +716,7 @@ function baseFilteredJobs(){
       const q = state.search.toLowerCase();
       return (j.address||"").toLowerCase().includes(q) || (j.town||"").toLowerCase().includes(q) ||
              (j.postcode||"").toLowerCase().includes(q) || (j.client||"").toLowerCase().includes(q) ||
-             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q);
+             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.tenantEmails||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q);
     });
 }
 function filteredJobs(){
@@ -743,6 +816,8 @@ function captureFormValues(){
   setIf('bedrooms','f_bedrooms');
   setIf('extraAreas','f_extraAreas');
   setIf('tenants','f_tenants');
+  setIf('tenantEmails','f_tenantEmails');
+  setIf('agentEmail','f_agentEmail');
   setIf('notes','f_notes');
   setIf('invoice','f_invoice');
   setIf('invoiceNo','f_invoiceNo');
@@ -813,6 +888,8 @@ function submitForm(){
     extraAreas: g("f_extraAreas").value,
     propertyType: g("f_propertyType").value,
     tenants: g("f_tenants").value,
+    tenantEmails: cleanEmails(g("f_tenantEmails").value),
+    agentEmail: cleanEmails(g("f_agentEmail").value),
     notes: g("f_notes").value,
     invoice: g("f_invoice").value,
     invoiceNo: g("f_invoiceNo").value.trim(),
@@ -844,10 +921,10 @@ function deleteJob(id){
 function cycleStatus(id){
   const j = state.jobs.find(x=>x.id===id);
   if (!j) return;
-  const order = STATUSES.map(s=>s.code);
-  const idx = order.indexOf(j.status);
-  if (idx >= order.length-1) return;               // archived is the end
-  setJobStatus(j, order[idx+1]);
+  const NEXT = { booked:"processing", processing:"completed", completed:"sent", sent:"signed", signed:"archived", deemed:"archived" };
+  const next = NEXT[j.status];
+  if (!next) return;                               // archived is the end
+  setJobStatus(j, next);
   saveJobs();
   render();
 }
@@ -962,6 +1039,8 @@ function gcalEventBody(j){
   const descParts = [];
   if (j.client) descParts.push("Agent: "+j.client);
   if (j.tenants) descParts.push("Tenant/contact: "+j.tenants);
+  if (j.tenantEmails) descParts.push("Tenant emails: "+j.tenantEmails);
+  if (j.agentEmail) descParts.push("Agent email: "+j.agentEmail);
   if (j.notes) descParts.push("Notes: "+j.notes);
   return { summary: gcalEventSummary(j), location: fullAddress(j), description: descParts.join("\n"), start, end };
 }
@@ -1349,6 +1428,7 @@ function loadAmendments(){
         if (row[iSub] && (!g.first || row[iSub] < g.first)) g.first = row[iSub];
       });
       state.amend = { loaded:true, at:new Date(), jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
+      autoDeem();
     } catch(e){
       console.log("[WPS] amendments read failed", e);
       state.amend = { error: "Couldn't read the WPS Amendments Sheet" };
@@ -1399,7 +1479,7 @@ function renderWeekStrip(active, total){
       <div class="wk-strip">${days.map(cell).join("")}</div>
     </div>`;
 }
-const VISIT_DONE = ["processing","completed","sent","signed"];
+const VISIT_DONE = ["processing","completed","sent","signed","deemed"];
 function routeUrl(jobs){
   const stops = jobs.map(fullAddress).filter(Boolean);
   if (!stops.length) return "";
@@ -1419,6 +1499,24 @@ function turnaroundStats(jobs, since){
   });
   return { n: done.length, avg: Math.round(total/done.length), pct: Math.round(onTime*100/done.length) };
 }
+function windowRow(x, now){
+  const j = x.j, open = x.st==="open", days = Math.ceil((x.closes - now)/86400000);
+  const started = j.reissuedAt ? `Re-issued ${esc(shortDay(new Date(j.reissuedAt)))} (changed items only)` : `Sent ${esc(shortDay(new Date(j.sentAt)))}`;
+  let line, tag, cls;
+  if (open){ line = `closes ${esc(shortDay(x.closes))}`; tag = days<=1 ? "closes within a day" : days+" days left"; cls = days<=REMINDER_DAYS_LEFT ? "due-soon" : "due-ok"; }
+  else if (x.st==="hold"){ line = `window closed ${esc(shortDay(x.closes))} · comments waiting, re-issue to restart`; tag = "On hold: amendments"; cls = "due-late"; }
+  else if (x.st==="due"){ line = `window closed ${esc(shortDay(x.closes))} · checking amendments first`; tag = "Deemed agreed (pending)"; cls = "due-soon"; }
+  else if (x.st==="signed"){ line = `window ${x.closes > now ? "closes" : "closed"} ${esc(shortDay(x.closes))}`; tag = "Signed"; cls = "due-ok"; }
+  else { line = `deemed agreed ${esc(shortDay(new Date(j.deemedAt || x.closes)))}`; tag = "Deemed agreed"; cls = "due-ok"; }
+  let rem = "";
+  if (open && j.status==="sent"){
+    if (j.reminderAt) rem = `<div class="sub">Reminder sent ${esc(shortDay(new Date(j.reminderAt)))} · <button class="t-link" style="font-size:12px" onclick="markReminder('${j.id}', false)">undo</button></div>`;
+    else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')" style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
+  }
+  return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
+    <div class="sub">${started} · ${line}</div>${rem}</div>
+    <span class="due ${cls}" style="white-space:nowrap">${tag}</span></div>`;
+}
 function renderToday(){
   const today = isoToday(0), weekEnd = isoToday(7);
   const live = state.jobs;
@@ -1435,8 +1533,8 @@ function renderToday(){
   const now = new Date();
   const timesToAgree = active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
   const photosMissing = active.filter(j => ["processing","completed"].includes(j.status) && !j.photoLink && visitTime(j) && visitTime(j) <= now && visitTime(j) > addDays(now, -30)).sort(byTime);
-  const windows = live.filter(j => j.type==="ICI" && j.sentAt).map(j => ({ j, closes: addDays(new Date(j.sentAt), 7) }))
-    .filter(x => x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
+  const windows = live.filter(j => j.type==="ICI" && j.sentAt && j.status!=="archived").map(j => ({ j, closes: windowClose(j), st: windowState(j) }))
+    .filter(x => x.st==="open" || x.st==="hold" || x.st==="due" || x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
   const sentNoDate = live.filter(j => j.type==="ICI" && j.status==="sent" && !j.sentAt).length;
   const wkStats = turnaroundStats(live, addDays(now, -7));
   const moStats = turnaroundStats(live, new Date(now.getFullYear(), now.getMonth(), 1));
@@ -1477,11 +1575,9 @@ function renderToday(){
     </div>
     <div class="t-card">
       <h3>Comment windows <span class="count">7 days from sent</span></h3>
-      ${windows.length ? windows.map(x => { const open = x.closes > now; const days = Math.ceil((x.closes - now)/86400000);
-        return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${x.j.id}')">${esc(x.j.jobNo||"")} · ${esc(fullAddress(x.j)||"")}</button>
-          <div class="sub">Sent ${esc(shortDay(new Date(x.j.sentAt)))} · ${open ? `closes ${esc(shortDay(x.closes))}` : `deemed agreed ${esc(shortDay(x.closes))}`}</div></div>
-          <span class="due ${open ? (days<=2 ? 'due-soon' : 'due-ok') : 'due-ok'}" style="white-space:nowrap">${open ? (days<=1 ? "closes within a day" : days+" days left") : "Deemed agreed"}</span></div>`; }).join("")
+      ${windows.length ? windows.map(x => windowRow(x, now)).join("")
         : `<div class="t-empty">No inventory & check-in windows open.</div>`}
+      ${state.amend && state.amend.loaded ? "" : `<div class="t-empty" style="font-size:12px">Load amendments (card below) so closed windows can move to Deemed agreed.</div>`}
       ${sentNoDate ? `<div class="t-empty" style="font-size:12px">${sentNoDate} check-in report${sentNoDate===1?"":"s"} marked Sent before dates were recorded, so not shown.</div>` : ""}
     </div>
     <div class="t-card">
@@ -1751,6 +1847,8 @@ function renderForm(){
         <select id="f_status">
           ${STATUSES.map(s=>`<option value="${s.code}" ${f.status===s.code?"selected":""}>${s.label}</option>`).join("")}
         </select>
+        ${!isNew && f.type==="ICI" && f.sentAt && ["sent","deemed"].includes(f.status) ? `<span class="field-hint">${f.reissuedAt ? "Re-issued "+esc(shortDay(new Date(f.reissuedAt)))+(f.reissues>1?" ("+f.reissues+" times)":"")+". " : ""}Window ${windowClose(f) > new Date() ? "closes" : "closed"} ${esc(shortDay(windowClose(f)))}.</span>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="reissueJob('${f.id}')">Re-issued today (restart 7 days)</button>` : ""}
       </label>
       <label class="field">Invoice
         <select id="f_invoice">
@@ -1827,6 +1925,14 @@ function renderForm(){
 
       <label class="field wide">Tenant name(s) / contact
         <input type="text" id="f_tenants" value="${esc(f.tenants)}" placeholder="Who to liaise with for access" />
+      </label>
+      <label class="field wide">Tenant emails
+        <input type="text" id="f_tenantEmails" value="${esc(f.tenantEmails||"")}" placeholder="e.g. jo@gmail.com, sam@outlook.com" />
+        <span class="field-hint">Separate two tenants with a comma. Used for the 7-day reminder.</span>
+      </label>
+      <label class="field wide">Agent email (for this job)
+        <input type="text" id="f_agentEmail" value="${esc(f.agentEmail||"")}" placeholder="${esc(((state.clients.find(c=>c.name===f.client)||{}).contactEmail)||"e.g. manny@winkworth.co.uk")}" />
+        <span class="field-hint">Who gets report updates. Leave blank on private landlord jobs.</span>
       </label>
 
       <label class="field wide">Notes
