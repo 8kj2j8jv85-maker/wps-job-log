@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Wellington Property Services — Job Log</title>
+<title>Wellington Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -602,6 +602,9 @@ function setJobStatus(j, code){
   j.status = code;
   if (code==="processing" && !j.processingAt) j.processingAt = new Date().toISOString();
   if (code==="booked") delete j.processingAt;
+  // report sent date: starts the 7-day comment window and the turnaround score
+  if (REPORT_OUT.includes(code) && !j.sentAt) j.sentAt = new Date().toISOString();
+  if (!REPORT_OUT.includes(code)) delete j.sentAt;
 }
 function typeMeta(c){ return TYPES.find(t=>t.code===c) || TYPES[TYPES.length-1]; }
 function esc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -646,7 +649,7 @@ function filteredJobs(){
 function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
 function firstWeekdayMonIdx(y,m){ const jsDay = new Date(y, m-1, 1).getDay(); return (jsDay+6)%7; }
 function isoDate(y,m,d){ return y+"-"+pad2(m)+"-"+pad2(d); }
-function setView(v){ state.view = v; render(); }
+function setView(v){ state.view = v; document.title = v === "today" ? "Wellington Dashboard" : "Wellington Property Services — Job Log"; render(); }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -1384,6 +1387,26 @@ function renderWeekStrip(active, total){
       <div class="wk-strip">${days.map(cell).join("")}</div>
     </div>`;
 }
+const VISIT_DONE = ["processing","completed","sent","signed"];
+function routeUrl(jobs){
+  const stops = jobs.map(fullAddress).filter(Boolean);
+  if (!stops.length) return "";
+  const dest = stops[stops.length-1], way = stops.slice(0,-1);
+  return "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination="+encodeURIComponent(dest)+(way.length ? "&waypoints="+encodeURIComponent(way.join("|")) : "");
+}
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function shortDay(d){ return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
+function turnaroundStats(jobs, since){
+  const done = jobs.filter(j => j.sentAt && new Date(j.sentAt) >= since && visitTime(j));
+  if (!done.length) return null;
+  let total = 0, onTime = 0;
+  done.forEach(j => {
+    const hrs = (new Date(j.sentAt) - visitTime(j)) / 3600000;
+    total += Math.max(0, hrs);
+    if (hrs <= (TURNAROUND_HOURS[j.type] || 48)) onTime++;
+  });
+  return { n: done.length, avg: Math.round(total/done.length), pct: Math.round(onTime*100/done.length) };
+}
 function renderToday(){
   const today = isoToday(0), weekEnd = isoToday(7);
   const live = state.jobs;
@@ -1397,13 +1420,22 @@ function renderToday(){
   const toInvoice = live.filter(needsInvoice);
   const unpaid = live.filter(j => j.invoice === "invoiced");
   if (!state.amend && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) setTimeout(loadAmendments, 0);
+  const now = new Date();
+  const timesToAgree = active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
+  const photosMissing = active.filter(j => ["processing","completed"].includes(j.status) && !j.photoLink && visitTime(j) && visitTime(j) <= now && visitTime(j) > addDays(now, -30)).sort(byTime);
+  const windows = live.filter(j => j.type==="ICI" && j.sentAt).map(j => ({ j, closes: addDays(new Date(j.sentAt), 7) }))
+    .filter(x => x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
+  const sentNoDate = live.filter(j => j.type==="ICI" && j.status==="sent" && !j.sentAt).length;
+  const wkStats = turnaroundStats(live, addDays(now, -7));
+  const moStats = turnaroundStats(live, new Date(now.getFullYear(), now.getMonth(), 1));
+  const route = routeUrl(todays);
   const queueN = pendingQueue().length;
   const sheetId = lsGet(LS_SHEET_ID);
   const links = TODAY_LINKS.concat(sheetId ? [["Job Log Sheet", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
   const list = (arr, fn, empty, max) => arr.length ? arr.slice(0, max||50).map(fn).join("") + (arr.length > (max||50) ? `<div class="t-empty">+ ${arr.length-(max||50)} more</div>` : "") : `<div class="t-empty">${empty}</div>`;
   return `<div class="today-grid">
     <div class="t-card wide">
-      <h3>Today's jobs <span class="count">${todays.length}</span></h3>
+      <h3>Today's jobs <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" style="text-decoration:none;margin-right:12px;padding:5px 10px;border-radius:6px;background:var(--brand);color:#fff;font-size:12.5px;font-weight:600">Today's route</a>` : ""}${todays.length}</span></h3>
       ${list(todays, j => tJobRow(j), "Nothing booked for today.")}
     </div>
     ${renderWeekStrip(active, coming.length)}
@@ -1420,6 +1452,33 @@ function renderToday(){
       <h3>Out for signature <span class="count">${awaitingSig.length}</span></h3>
       ${list(awaitingSig, j => tJobRow(j, {showDate:true}), "No check-in reports waiting for signatures.", 8)}
       <div class="t-empty" style="font-size:12px">Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back.</div>
+    </div>
+    <div class="t-card">
+      <h3>Times to agree <span class="count">${timesToAgree.length}</span></h3>
+      ${list(timesToAgree, j => tJobRow(j, {showDate:true}), "Every booked job has a time.", 8)}
+      <div class="t-empty" style="font-size:12px">Booked jobs with no time set. Add the time once the tenant confirms.</div>
+    </div>
+    <div class="t-card">
+      <h3>Photos not done <span class="count">${photosMissing.length}</span></h3>
+      ${list(photosMissing, j => tJobRow(j, {showDate:true}), "Every visited job has its photo link.", 8)}
+      <div class="t-empty" style="font-size:12px">Visited in the last 30 days, report not sent yet, and no photo link saved. Run the Photo Tool for these.</div>
+    </div>
+    <div class="t-card">
+      <h3>Comment windows <span class="count">7 days from sent</span></h3>
+      ${windows.length ? windows.map(x => { const open = x.closes > now; const days = Math.ceil((x.closes - now)/86400000);
+        return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${x.j.id}')">${esc(x.j.jobNo||"")} · ${esc(fullAddress(x.j)||"")}</button>
+          <div class="sub">Sent ${esc(shortDay(new Date(x.j.sentAt)))} · ${open ? `closes ${esc(shortDay(x.closes))}` : `deemed agreed ${esc(shortDay(x.closes))}`}</div></div>
+          <span class="due ${open ? (days<=2 ? 'due-soon' : 'due-ok') : 'due-ok'}" style="white-space:nowrap">${open ? (days<=1 ? "closes within a day" : days+" days left") : "Deemed agreed"}</span></div>`; }).join("")
+        : `<div class="t-empty">No inventory & check-in windows open.</div>`}
+      ${sentNoDate ? `<div class="t-empty" style="font-size:12px">${sentNoDate} check-in report${sentNoDate===1?"":"s"} marked Sent before dates were recorded, so not shown.</div>` : ""}
+    </div>
+    <div class="t-card">
+      <h3>Turnaround <span class="count">visit to report sent</span></h3>
+      <div style="display:flex;gap:28px;margin:4px 0 8px">
+        ${[["Last 7 days", wkStats], ["This month", moStats]].map(([lbl, s]) => `<div><div class="t-big" style="color:${!s?'var(--stone)':s.pct>=80?'#2E6B45':s.pct>=50?'#8A5A00':'#B42318'}">${s ? s.pct+"%" : "–"}</div>
+          <div class="sub" style="color:var(--ink-soft);font-size:12.5px">${lbl}${s ? " · on time · avg "+s.avg+"h · "+s.n+" report"+(s.n===1?"":"s") : " · no reports yet"}</div></div>`).join("")}
+      </div>
+      <div class="t-empty" style="font-size:12px">Targets: check-outs 48h, everything else 72h. Counts reports moved to Sent from now on.</div>
     </div>
     <div class="t-card">
       <h3>Money</h3>
@@ -1441,7 +1500,7 @@ function renderSidebar(){
   return `<aside class="sidebar">
     ${WPS_LOGO}
     <nav class="side-nav">
-      <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;">${ICON_HOME} Today</a>
+      <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;">${ICON_HOME} Dashboard</a>
       <a href="#" class="${state.view!=='today'?'active':''}" onclick="setView('table');return false;">${ICON_CAL} Job Log</a>
       <a href="photos.html">${ICON_CAM} Photo Tool</a>
     </nav>
@@ -1455,7 +1514,7 @@ function renderPageHead(){
   const today = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
   const n = pendingQueue().length;
   return `<div class="page-head">
-    <div><h1 class="page-title">Job Log</h1><div class="page-sub">${today}</div></div>
+    <div><h1 class="page-title">${state.view === "today" ? "Wellington Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
     <div class="page-actions">
       <button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>
       <button class="btn btn-coral" onclick="openNew()">+ New job</button>
