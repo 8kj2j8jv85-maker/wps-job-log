@@ -288,10 +288,14 @@
     .side-more .side-links a, .side-more .side-tools .btn-link{ padding:10px 14px; font-size:15px; }
     .side-more .side-tools{ flex-direction:column; }
     .page-actions .phone-only{ display:inline-flex; }
+    .page-actions .sync-msg.phone-only{ display:block; }
   }
   .side-menu-btn{ display:none; }
   .side-more{ display:contents; }
   .phone-only{ display:none; }
+  .btn.sync-ok{ border-color:#2E6B45; color:#2E6B45; background:#E0F0E6; }
+  .btn.sync-bad{ border-color:var(--coral); color:var(--coral-dark); background:var(--coral-bg); }
+  .sync-msg{ width:100%; font-size:13px; color:var(--coral-dark); }
   .empty-device{ background:var(--coral-bg); border:1px solid var(--coral); border-radius:10px; padding:12px 14px; margin:12px 0; font-size:14px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
   .empty-device .d-note{ width:100%; margin:0; }
   @media (max-width:600px){
@@ -511,6 +515,10 @@ function setCloud(status, msg){
   if (status==="saved") state.cloudAt = new Date();
   const el = document.getElementById("cloudPill");
   if (el) el.outerHTML = renderCloudPill();
+  const sm = document.getElementById("syncMsg");
+  if (sm) sm.remove();
+  const sb = document.getElementById("syncBtn");
+  if (sb) sb.outerHTML = renderSyncBtn();
 }
 function sheetsGranted(resp){
   try { return google.accounts.oauth2.hasGrantedAllScopes(resp, SHEETS_SCOPE, AMEND_SCOPE); } catch(e){ return false; }
@@ -602,6 +610,7 @@ async function cloudSave(){
 }
 async function cloudSyncNow(){
   // Called from the "Sync now" click: loads the Sheet if it's newer, otherwise pushes this browser's copy.
+  setCloud("saving");   // show "Syncing…" straight away, while Google signs in
   ensureSheetsToken(async function(){
     setCloud("saving");
     try {
@@ -644,6 +653,15 @@ async function cloudSyncNow(){
       setCloud("error","Sync failed — check connection");
     }
   });
+}
+function renderSyncBtn(){
+  // phone/tablet: the Sync button itself says what's happening
+  const s = state.cloudStatus || "idle";
+  const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
+  const label = s==="saving" ? "Syncing…" : s==="saved" ? "Synced ✓ "+t : (s==="error"||s==="conflict") ? "Sync again ⚠" : "Sync now";
+  const cls = s==="saved" ? " sync-ok" : (s==="error"||s==="conflict") ? " sync-bad" : "";
+  return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}>${esc(label)}</button>`
+    + ((s==="error"||s==="conflict") && state.cloudMsg ? `<div id="syncMsg" class="phone-only sync-msg">${esc(state.cloudMsg)}</div>` : "");
 }
 function rememberGoogleConnected(){
   // so later changes on this device save to the Sheet (same flag as "Connect Google Calendar")
@@ -1088,7 +1106,11 @@ function initGCal(){
   gcalTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: GCAL_SCOPE + " " + GMAIL_SCOPE + " " + SHEETS_SCOPE + " " + AMEND_SCOPE,
-    callback: function(){}
+    callback: function(){},
+    // Google pop-up closed or blocked: don't leave "Syncing…" showing forever
+    error_callback: function(err){
+      if (state.cloudStatus === "saving") setCloud("error", (err && err.type === "popup_failed_to_open") ? "Google sign-in pop-up was blocked — allow pop-ups and tap Sync again" : "Google sign-in was closed — tap Sync again");
+    }
   });
 }
 function connectGCal(){
@@ -1774,7 +1796,7 @@ function renderPageHead(){
   return `<div class="page-head">
     <div><h1 class="page-title">${state.view === "today" ? "Wellington Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
     <div class="page-actions">
-      <button class="btn btn-ghost phone-only" onclick="cloudSyncNow()">Sync now</button>
+      ${renderSyncBtn()}
       <button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>
       <button class="btn btn-coral" onclick="openNew()">+ New job</button>
     </div>
