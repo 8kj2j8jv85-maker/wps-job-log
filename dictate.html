@@ -21,7 +21,11 @@ header{background:var(--navy);color:#fff;padding:calc(env(safe-area-inset-top) +
 header .door{width:22px;height:30px;border:2.5px solid #fff;border-radius:11px 11px 2px 2px;position:relative;flex:none}
 header .door:after{content:"";position:absolute;right:4px;top:13px;width:4px;height:4px;border-radius:50%;background:var(--coral)}
 header h1{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:25px;margin:0 0 0 4px;flex:1;line-height:1}
-header button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 12px;font:inherit;font-size:14px}
+header a.home{color:#fff;text-decoration:none;font-size:13px;opacity:.85;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 10px}
+.hint{display:none;font-size:12px;color:#8A5A00;margin-top:4px;line-height:1.35}
+.help-on .hint{display:block}
+.help-on footer .hint{color:#8A5A00}
+header buttonbackground:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 12px;font:inherit;font-size:14px}
 main{padding:12px 16px;max-width:640px;margin:0 auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
 .row{display:flex;gap:8px}
@@ -78,12 +82,16 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
 <header>
   <div class="door" aria-hidden="true"></div>
   <h1>Dictation</h1>
-  <button id="jobsBtn">Jobs</button>
-  <button id="setBtn">Settings</button>
+  <a class="home" href="./" title="Back to the Dashboard">Home</a>
+  <button id="helpBtn" title="Turns the hint lines on or off">?</button>
+  <button id="jobsBtn" title="Your saved dictations. Start a new job here.">Jobs</button>
+  <button id="setBtn" title="Word fixes, room list, audio backup">Settings</button>
 </header>
 
 <main>
   <div class="warn" id="warn"></div>
+
+  <section class="card tip hint" style="display:none" id="helpCard"><b>How this works:</b> fill in the job, tap a <b>room</b>, tap the <b>microphone</b> and talk. Tap the mic again to stop. Tap the next room and carry on. At the end tap <b>Copy for Claude</b> and paste into the WPS project chat. <b>Jobs</b> (top) starts a new job or opens an old one. Tap <b>?</b> to hide these hints.</section>
 
   <section class="card" id="jobCard">
     <div class="row">
@@ -105,12 +113,13 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
   </section>
 
   <section class="card" id="roomCard">
-    <div class="roomhead"><h2 id="roomName">Pick a room</h2><button class="mini" id="clearRoom">Clear</button></div>
+    <div class="roomhead"><h2 id="roomName">Pick a room</h2><button class="mini" id="clearRoom" title="Clears this room's text (asks first). Audio backups are kept.">Clear</button></div>
     <div class="micwrap">
       <button class="mic" id="mic" aria-label="Start dictating">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
       </button>
       <div class="status" id="status">Tap to dictate this room</div>
+      <div class="hint" style="text-align:center">Pick a room above first. You can also type or fix words in the box below.</div>
     </div>
     <div class="interim" id="interim"></div>
     <textarea id="roomText" rows="7" placeholder="Your notes for this room appear here. You can type or fix words too."></textarea>
@@ -124,8 +133,8 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
 
 <footer>
   <div class="sum" id="sum"></div>
-  <button class="btn ghost" id="shareBtn">Share</button>
-  <button class="btn primary" id="copyBtn">Copy for Claude</button>
+  <button class="btn ghost" id="shareBtn" title="Send the notes to another app, e.g. WhatsApp or email">Share</button>
+  <button class="btn primary" id="copyBtn" title="Copies every room, ready to paste into the WPS project chat">Copy for Claude</button>
 </footer>
 
 <div class="sheet" id="jobsSheet">
@@ -502,6 +511,17 @@ function renderJobs(){
       esc(j.address || 'No address') + '<br>' + d + ' · ' + n + ' room' + (n===1?'':'s') + '</div><button class="mini" data-deljob="' + j.id + '">Delete</button></div>';
   }).join('') || '<div class="tip">No jobs yet.</div>';
 }
+function applyHelp(){
+  var on = true; try{ on = localStorage.getItem('wps_help_on_v1') !== '0'; }catch(e){}
+  document.body.classList.toggle('help-on', on);
+  $('helpCard').style.display = on ? 'block' : 'none';
+}
+$('helpBtn').addEventListener('click', function(){
+  var on = !document.body.classList.contains('help-on');
+  try{ localStorage.setItem('wps_help_on_v1', on ? '1' : '0'); }catch(e){}
+  applyHelp();
+});
+applyHelp();
 $('jobsBtn').addEventListener('click', function(){ if(want) stop(); renderJobs(); openSheet('jobsSheet'); });
 $('newJob').addEventListener('click', function(){ newJob(); render(); $('jobsSheet').classList.remove('open'); $('jobNo').focus(); });
 $('jobList').addEventListener('click', function(e){

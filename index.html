@@ -291,6 +291,17 @@
     .page-actions .sync-msg.phone-only{ display:block; }
   }
   .side-menu-btn{ display:none; }
+  /* Help hints (11 Oct): hover titles everywhere; with Help on, short hint text shows under key buttons */
+  .help-on [data-hint]::after{ content:attr(data-hint); display:block; margin-top:3px; font-family:'Jost',Arial,sans-serif; font-size:11px; font-weight:400; font-style:normal; line-height:1.3; letter-spacing:0; color:#8A5A00; white-space:normal; text-align:left; }
+  .help-on .btn[data-hint]{ flex-direction:column; align-items:flex-start; }
+  .help-on .btn-coral[data-hint]::after{ color:var(--brand-dark); opacity:.8; }
+  .help-on .sidebar [data-hint]::after{ color:#F2B8A8; }
+  .help-on .side-tools .btn-link[data-hint]{ display:grid; grid-template-columns:17px 1fr; column-gap:12px; align-items:center; }
+  .help-on .side-tools .btn-link[data-hint]::after{ grid-column:2; margin-top:0; }
+  .side-logo{ flex-shrink:0; }   /* never squash the logo when the sidebar is taller than the screen */
+  .help-box{ background:#FFF8E6; border:1px solid #F0D58C; border-radius:10px; padding:10px 14px; margin:12px 0; font-size:13.5px; line-height:1.5; color:var(--ink); }
+  .help-box b{ font-weight:600; color:var(--brand); }
+  .help-box .hb-t{ font-size:11px; font-weight:600; letter-spacing:.12em; color:#8A5A00; margin-bottom:2px; }
   .side-more{ display:contents; }
   .phone-only{ display:none; }
   .btn.sync-ok{ border-color:#2E6B45; color:#2E6B45; background:#E0F0E6; }
@@ -422,6 +433,12 @@ const DEFAULT_CLIENTS = [
   { name:"Move Lettings",   contactName:"", contactPhone:"", contactEmail:"" },
 ];
 const ADD_NEW = "__add_new__";
+// ---- help hints
+const LS_HELP = "wps_help_on_v1";   // shared with the Photo Tool and Dictation (same site)
+function hint(t){ return ` title="${esc(t)}" data-hint="${esc(t)}"`; }   // hover title + text shown under the button when Help is on
+function tip(t){ return ` title="${esc(t)}"`; }                          // hover title only (small buttons, pills)
+function helpBox(html){ return state.helpOn ? `<div class="help-box"><div class="hb-t">HOW THIS WORKS</div>${html}</div>` : ""; }
+function toggleHelp(){ state.helpOn = !state.helpOn; lsSet(LS_HELP, state.helpOn ? "1" : "0"); render(); }
 
 const TODAY = new Date();
 let state = {
@@ -449,6 +466,7 @@ let state = {
   queueMsg: "",
   queueCheckedAt: null,
   fromQueueId: null,
+  helpOn: true,
 };
 
 // ---------------------------------------------------------------- storage
@@ -468,6 +486,8 @@ function load(){
     if (c){ const norm = normalizeClients(JSON.parse(c)); if (norm) state.clients = norm; }
   } catch(e){}
   try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
+  try { state.helpOn = localStorage.getItem(LS_HELP) !== "0"; } catch(e){}
+  if (location.hash === "#log") state.view = "table";
   try { const q = localStorage.getItem(LS_QUEUE_DONE); if (q) state.queueDone = JSON.parse(q) || {}; } catch(e){}
 }
 function getJobNoHigh(){ try { return JSON.parse(localStorage.getItem(LS_JOBNO_HIGH)||"{}")||{}; } catch(e){ return {}; } }
@@ -660,7 +680,7 @@ function renderSyncBtn(){
   const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
   const label = s==="saving" ? "Syncing…" : s==="saved" ? "Synced ✓ "+t : (s==="error"||s==="conflict") ? "Sync again ⚠" : "Sync now";
   const cls = s==="saved" ? " sync-ok" : (s==="error"||s==="conflict") ? " sync-bad" : "";
-  return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}>${esc(label)}</button>`
+  return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}${hint("Tap after changes on the phone: saves to Google and loads changes from the PC")}>${esc(label)}</button>`
     + ((s==="error"||s==="conflict") && state.cloudMsg ? `<div id="syncMsg" class="phone-only sync-msg">${esc(state.cloudMsg)}</div>` : "");
 }
 function rememberGoogleConnected(){
@@ -1450,15 +1470,15 @@ function renderQueueTray(){
     if (dup) warn = `<div class="qwarn">Possible duplicate of <span class="mono">${esc(dup.jobNo)}</span> (${formatDate(dup.date)}).</div>`;
     let actions = "";
     if (it.kind==="new" || !match){
-      actions = `<button class="btn btn-coral btn-sm" onclick="qAdd('${esc(it.id)}')">Add to log</button>
-                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')">Edit &amp; add</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qAdd('${esc(it.id)}')"${hint("Adds it as a new job straight away")}>Add to log</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
     } else if (it.kind==="update"){
-      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')">Apply change</button>
-                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')">Edit first</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')"${hint("Changes the date and time on the matching job")}>Apply change</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')"${hint("Opens the matching job with the change filled in, to check first")}>Edit first</button>`;
     } else {
-      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')">Delete cancelled job</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')"${hint("Removes the matching job and its calendar entry (asks first)")}>Delete cancelled job</button>`;
     }
-    actions += `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')">Dismiss</button>`;
+    actions += `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
     return `<div class="qcard">
       <div class="qtop"><span class="qkind ${k[1]}">${k[0]}</span><span class="type-badge">${esc(tm.label)}</span><span>${esc(it.client)||"Client not clear"}</span></div>
       <div class="qaddr">${esc(addr)||"Address not clear"}</div>
@@ -1477,8 +1497,9 @@ function renderQueueTray(){
         <h3>To review${items.length ? " ("+items.length+")" : ""}</h3>
         <div class="tray-sub">${state.queueBusy ? "Checking Gmail…" : ("Bookings Claude found in your inbox"+(when ? " · checked "+when : ""))}</div>
       </div>
-      <button class="btn btn-text btn-sm" onclick="qCloseTray()">Hide</button>
+      <button class="btn btn-text btn-sm" onclick="qCloseTray()"${tip("Hide this tray. Anything not handled shows again next check.")}>Hide</button>
     </div>
+    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b> or a <b>cancellation</b>. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click.`)}
     ${state.queueMsg ? `<div class="qwarn" style="margin-top:10px;">${esc(state.queueMsg)}</div>` : ""}
     ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing new to review ✓</div>` : ""}
     ${cards}
@@ -1488,13 +1509,14 @@ function renderQueueTray(){
 // ---------------------------------------------------------------- rendering
 function render(){
   const app = document.getElementById("app");
+  document.body.classList.toggle("help-on", !!state.helpOn);
   app.innerHTML = `
     <div class="shell">
     ${renderSidebar()}
     <main class="main">
     <div class="wrap${state.view === "today" ? " wrap-dash" : ""}">
       ${renderPageHead()}
-      ${state.view === "today" ? "" : renderStatusStrip()}
+      ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>click the stage pill</b> to move the job on one step, <b>click the invoice pill</b> for Not invoiced → Invoiced → Paid, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : renderToolbar() + (state.view === "calendar" ? renderCalendar() : renderTable())}
@@ -1512,6 +1534,12 @@ const ICON_CAM = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" st
 const ICON_HOME = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>';
 
 // ---------------------------------------------------------------- Today dashboard
+const LINK_TIPS = {
+  "Photo Tool":"Turn a day's photos into named, watermarked zips", "Dictation":"Phone notes by voice, room by room",
+  "Amendments review":"Work through tenant comments point by point", "Amendments form":"The comments form tenants use",
+  "Acrobat (e-sign)":"Send reports out for signature", "Gmail (info@)":"The info@ inbox", "Google Calendar":"The info@ calendar",
+  "Dropbox (WPS)":"WPS files", "Website":"wellington-ps.co.uk", "Job Log Sheet":"The Google Sheet copy of the Job Log (don't edit it there)"
+};
 const TODAY_LINKS = [
   ["Photo Tool", "photos.html"],
   ["Dictation", "dictate.html"],
@@ -1538,7 +1566,7 @@ function tJobRow(j, opts){
       <div class="sub">${esc(j.client||"")}${j.tenants ? " · "+esc(j.tenants) : ""} ${maps}</div>
       ${opts.showDue && di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}
     </div>
-    <button class="pill" title="Click to move to the next stage" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
+    <button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
   </div>`;
 }
 function loadAmendments(){
@@ -1587,7 +1615,7 @@ function renderAmendCard(inner){
   let body;
   if (a.busy) body = `<div class="t-empty">Reading the Amendments Sheet…</div>`;
   else if (a.error) body = `<div class="t-empty" style="color:var(--coral-dark)">${esc(a.error)}</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()">Try again</button>`;
-  else if (!a.loaded) body = `<div class="t-empty">Click to load tenant comments waiting to be worked.</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()">Load amendments</button>`;
+  else if (!a.loaded) body = `<div class="t-empty">Click to load tenant comments waiting to be worked.</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()"${hint("Reads the Amendments Sheet. Google may ask you to sign in.")}>Load amendments</button>`;
   else if (!a.jobs.length) body = `<div class="t-empty">No open amendments.</div>`;
   else body = a.jobs.map(g => `<div class="t-row"><div class="t-main"><strong>${esc(g.job)}</strong> · ${esc(g.address)}<div class="sub">${g.points} point${g.points===1?"":"s"}${g.decided?" · "+g.decided+" decided":""} · first sent ${esc(String(g.first).slice(0,16))}${g.names.size ? " · "+esc([...g.names].join(", ")) : ""}</div><div class="sub">Say "review amendments ${esc(g.job)}" to Claude</div></div></div>`).join("");
   const n = a.loaded ? a.jobs.length : null;
@@ -1657,7 +1685,7 @@ function windowRow(x, now){
   if (open && j.status==="sent"){
     if (j.reminderAt) rem = `<div class="sub">Reminder sent ${esc(shortDay(new Date(j.reminderAt)))} · <button class="t-link" style="font-size:12px" onclick="markReminder('${j.id}', false)">undo</button></div>`;
     else if (autoReminder(j)) rem = `<div class="sub">Reminder sent automatically ${esc(shortDay(autoReminder(j)))}</div>`;
-    else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')" style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
+    else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')"${hint("Opens a ready-written reminder in Gmail. Check it, then send.")} style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
   }
   return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
     <div class="sub">${started} · ${line}</div>${rem}</div>
@@ -1673,7 +1701,7 @@ function cRow(j, opts){
     <button class="c-job" onclick="openEdit('${j.id}')" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(tm.code)} · ${esc(addr)}<span class="c-dim"> · ${esc(j.client||"")}</span></button>
     ${opts.extra || ""}
     ${di ? `<span class="due ${di.cls}" style="margin:0">${di.text}</span>` : ""}
-    <button class="pill" title="Click to move to the next stage" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
+    <button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
   </div>`;
 }
 function setDashPanel(k){ state.dashPanel = k; state.dashAll = false; render(); }
@@ -1725,7 +1753,14 @@ function renderToday(){
   let panel = state.dashPanel;
   if (!panel) panel = overdue ? "due" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
   const toneCol = { late:"#B42318", warn:"#8A5A00", coral:"var(--coral-dark)" };
-  const tileHtml = tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile${panel===k?' on':''}" onclick="setDashPanel('${k}')">
+  const TILE_TIPS = {
+    due:"Visited jobs whose report hasn't been sent yet, soonest due first", book:"Bookings Claude found in Gmail, waiting for you to check",
+    sig:"Check-in reports sent and waiting for signatures in Acrobat", win:"The 7-day comment window on each sent check-in report",
+    amend:"Tenant comments from the amendments form that are still open", times:"Booked jobs with no time agreed yet",
+    photos:"Visited jobs with no photo link saved yet", inv:"Reports sent but not invoiced yet", paid:"Invoiced but not paid yet",
+    turn:"How many reports went out on time over the last 7 days"
+  };
+  const tileHtml = tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile${panel===k?' on':''}" onclick="setDashPanel('${k}')"${tip(TILE_TIPS[k]+". Click to see the list below.")}>
       <span class="d-num" style="color:${k==='turn' ? tc(wkStats) : (toneCol[tone] || (n && n!=='–' ? 'var(--brand)' : 'var(--stone)'))}">${n}</span>
       <span class="d-lbl">${lbl}</span>${sub ? `<span class="d-sub"${tone==='late'?' style="color:#B42318"':''}>${esc(sub)}</span>` : ""}
     </button>`).join("");
@@ -1741,7 +1776,7 @@ function renderToday(){
   switch (panel){
     case "due": title = "Reports due"; body = rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;
     case "book": title = "New bookings";
-      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" booking"+(queueN===1?"":"s")+" waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()">Check for new bookings</button>`; break;
+      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" booking"+(queueN===1?"":"s")+" waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
     case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
     case "win": title = "Comment windows (7 days from sent)"; body = rows(windows, x => windowRow(x, now), "No inventory & check-in windows open.")
       + (am.loaded ? "" : note("Load amendments so closed windows can move to Deemed agreed."))
@@ -1765,10 +1800,10 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`The <b>tiles</b> count what needs doing. <b>Click a tile</b> to see its list in the panel at the bottom. <b>Click a job</b> to open it. <b>Click a coloured stage pill</b> to move that job on one step (Booked → Processing → Completed → Sent → Signed). The <b>+</b> on a day adds a job on that day. Hover over anything on a PC for a short explanation.`)}<div class="d-tiles">${tileHtml}</div>
     <div class="d-row">
       <div class="t-card d-card">
-        <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route">Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
+        <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route"${tip("Opens Google Maps with today's jobs as stops, in time order")}>Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
         ${todays.length ? todays.map(j => cRow(j, {timeOnly:true})).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
       </div>
       <div class="t-card d-card">
@@ -1785,15 +1820,15 @@ function renderToday(){
 function renderSideLinks(){
   const sheetId = lsGet(LS_SHEET_ID);
   const links = TODAY_LINKS.filter(l => l[1] !== "photos.html").concat(sheetId ? [["Job Log Sheet", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
-  return `<div class="side-links"><div class="side-label">LINKS</div>${links.map(l => `<a href="${l[1]}"${l[1].startsWith("http")?' target="_blank" rel="noopener"':''}>${esc(l[0])}</a>`).join("")}</div>`;
+  return `<div class="side-links"><div class="side-label">LINKS</div>${links.map(l => `<a href="${l[1]}"${l[1].startsWith("http")?' target="_blank" rel="noopener"':''}${LINK_TIPS[l[0]] ? tip(LINK_TIPS[l[0]]) : ""}>${esc(l[0])}</a>`).join("")}</div>`;
 }
 function renderSidebar(){
   return `<aside class="sidebar">
     ${WPS_LOGO}
     <nav class="side-nav">
-      <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;">${ICON_HOME} Dashboard</a>
-      <a href="#" class="${state.view!=='today'?'active':''}" onclick="setView('table');return false;">${ICON_CAL} Job Log</a>
-      <a href="photos.html">${ICON_CAM} Photo Tool</a>
+      <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;"${tip("Today's overview: what needs doing")}>${ICON_HOME} Dashboard</a>
+      <a href="#" class="${state.view!=='today'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
+      <a href="photos.html"${tip("Turn a day's photos into named, watermarked zips")}>${ICON_CAM} Photo Tool</a>
     </nav>
     <button class="side-menu-btn" onclick="toggleMenu()">${state.menuOpen ? "Close ✕" : "Menu ☰"}</button>
     <div class="side-more${state.menuOpen ? " open" : ""}">
@@ -1812,10 +1847,10 @@ function renderPageHead(){
     <div><h1 class="page-title">${state.view === "today" ? "Wellington Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
     <div class="page-actions">
       ${renderSyncBtn()}
-      <button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>
-      <button class="btn btn-coral" onclick="openNew()">+ New job</button>
+      <button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>
+      <button class="btn btn-coral" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
     </div>
-  </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()">Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
+  </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
 }
 
 function renderHeader(){
@@ -1846,23 +1881,31 @@ function renderHeader(){
 function renderUtilityRow(){
   return `<div class="side-tool-list" style="display:flex;flex-direction:column;gap:2px;">
     ${renderCloudPill()}
-    <button class="btn-link" onclick="cloudSyncNow()">
+    <button class="btn-link" onclick="cloudSyncNow()"${hint("Saves to Google, loads other devices' changes")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></svg>
       Sync now (Google Sheet)
     </button>
-    <button class="btn-link" onclick="exportData()">
+    <button class="btn-link" onclick="exportData()"${hint("Saves a copy of every job to this computer")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Export backup
     </button>
-    <label class="btn-link" style="cursor:pointer;">
+    <label class="btn-link" style="cursor:pointer;"${hint("Replaces this browser's jobs with a backup file. Careful.")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Import backup
       <input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])" />
     </label>
-    <button class="btn-link" onclick="${state.gcalConnected ? 'disconnectGCal()' : 'connectGCal()'}">
+    <button class="btn-link" onclick="${state.gcalConnected ? 'disconnectGCal()' : 'connectGCal()'}"${hint(state.gcalConnected ? "Jobs go on the info@ calendar when saved. Click to disconnect." : "Puts each job on the info@ calendar when you save it")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       ${state.gcalConnected ? "Calendar connected ✓" : "Connect Google Calendar"}
     </button>
+    <button class="btn-link" onclick="toggleHelp()"${tip("Turns the hint text under buttons on or off. Hover hints always work on a PC.")}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
+    </button>
+    <a class="btn-link" href="manual.pdf" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+      Manual
+    </a>
   </div>`;
 }
 
@@ -1876,19 +1919,19 @@ function renderStatusStrip(){
   return `<div class="status-strip">
     ${STATUSES.map(s=>`
       <button class="status-card" style="border-color:${state.statusFilter===s.code?s.fg:'var(--line)'}; background:${state.statusFilter===s.code?s.bg:'var(--white)'};"
-        onclick="setStatusFilter('${s.code}')">
+        onclick="setStatusFilter('${s.code}')"${tip("Show only "+s.label+" jobs. Click again to show all.")}>
         <div class="num" style="color:${s.fg}">${counts[s.code]||0}</div>
         <div class="lbl">${s.label}</div>
       </button>`).join("")}
-      <button class="status-card" style="border-color:${state.statusFilter==='overdue'?'#B42318':'var(--line)'}; background:${state.statusFilter==='overdue'?'#FDF0EE':'var(--white)'};" onclick="setStatusFilter('overdue')">
+      <button class="status-card" style="border-color:${state.statusFilter==='overdue'?'#B42318':'var(--line)'}; background:${state.statusFilter==='overdue'?'#FDF0EE':'var(--white)'};" onclick="setStatusFilter('overdue')"${tip("Show only jobs whose report is late. Click again to show all.")}>
       <div class="num" style="color:${overdue?'#B42318':'var(--stone)'}">${overdue}</div>
       <div class="lbl">Reports overdue</div>
     </button>
-    <button class="status-card" style="border-color:${state.statusFilter==='toinvoice'?'var(--coral-dark)':'var(--line)'}; background:${state.statusFilter==='toinvoice'?'var(--coral-bg)':'var(--white)'};" onclick="setStatusFilter('toinvoice')">
+    <button class="status-card" style="border-color:${state.statusFilter==='toinvoice'?'var(--coral-dark)':'var(--line)'}; background:${state.statusFilter==='toinvoice'?'var(--coral-bg)':'var(--white)'};" onclick="setStatusFilter('toinvoice')"${tip("Show only jobs with the report sent but no invoice. Click again to show all.")}>
       <div class="num" style="color:${toInvoice?'var(--coral-dark)':'var(--stone)'}">${toInvoice}</div>
       <div class="lbl">To invoice</div>
     </button>
-    <button class="status-card" style="border-color:${state.statusFilter==='unpaid'?'#8A5A00':'var(--line)'}; background:${state.statusFilter==='unpaid'?'#FFF1D0':'var(--white)'};" onclick="setStatusFilter('unpaid')">
+    <button class="status-card" style="border-color:${state.statusFilter==='unpaid'?'#8A5A00':'var(--line)'}; background:${state.statusFilter==='unpaid'?'#FFF1D0':'var(--white)'};" onclick="setStatusFilter('unpaid')"${tip("Show only invoiced jobs not yet paid. Click again to show all.")}>
       <div class="num" style="color:${unpaid?'#8A5A00':'var(--stone)'}">${unpaid}</div>
       <div class="lbl">Awaiting payment</div>
     </button>
@@ -1898,8 +1941,8 @@ function renderStatusStrip(){
 function renderToolbar(){
   return `<div class="toolbar">
     <div class="view-toggle">
-      <button class="${state.view==='table'?'active':''}" onclick="setView('table')">List</button>
-      <button class="${state.view==='calendar'?'active':''}" onclick="setView('calendar')">Calendar</button>
+      <button class="${state.view==='table'?'active':''}" onclick="setView('table')"${tip("Show jobs as a list")}>List</button>
+      <button class="${state.view==='calendar'?'active':''}" onclick="setView('calendar')"${tip("Show jobs on a month calendar")}>Calendar</button>
     </div>
     <div class="search-wrap">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1935,7 +1978,7 @@ function renderCalendar(){
   const todayIso = TODAY.getFullYear()+"-"+pad2(TODAY.getMonth()+1)+"-"+pad2(TODAY.getDate());
   const monthName = new Date(y,m-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
   const weekdayLabels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-  return `<div class="cal-wrap">
+  return `${helpBox(`<b>Click an empty part of a day</b> to add a job on that date. <b>Click a job</b> to open it. The colour shows its stage. Prev / Next change month, Today comes back.`)}<div class="cal-wrap">
     <div class="cal-nav">
       <button class="btn btn-ghost btn-sm" onclick="calNav(-1)">&larr; Prev</button>
       <div class="cal-title">${monthName}</div>
@@ -2012,12 +2055,13 @@ function renderForm(){
   const isNew = !state.jobs.some(j=>j.id===f.id);
   return `<div class="form-card">
     <h3>${isNew ? "New job" : "Edit job"}</h3>
+    ${helpBox(`Paste the agent's booking email into the box and click <b>Extract job details</b>, or fill the fields by hand. Always check what Extract fills in. The job number fills itself. <b>Tenant emails</b> are used for the 7-day reminder. Click <b>${isNew ? "Save job" : "Save changes"}</b> at the bottom when done.`)}
 
     <div class="extract-box">
       <textarea id="extractRaw" placeholder="Paste a works-order email here and click Extract — it'll try to pull the date and address/postcode into the fields below."></textarea>
       <div class="extract-row">
         <span class="extract-hint">Offline pattern-matching — always double-check what it fills in.</span>
-        <button class="btn btn-ghost btn-sm" onclick="runExtract()">Extract job details</button>
+        <button class="btn btn-ghost btn-sm" onclick="runExtract()"${hint("Fills date, address, postcode and type from the pasted email. Check it.")}>Extract job details</button>
       </div>
     </div>
 
@@ -2036,7 +2080,7 @@ function renderForm(){
           ${STATUSES.map(s=>`<option value="${s.code}" ${f.status===s.code?"selected":""}>${s.label}</option>`).join("")}
         </select>
         ${!isNew && f.type==="ICI" && f.sentAt && ["sent","deemed"].includes(f.status) ? `<span class="field-hint">${f.reissuedAt ? "Re-issued "+esc(shortDay(new Date(f.reissuedAt)))+(f.reissues>1?" ("+f.reissues+" times)":"")+". " : ""}Window ${windowClose(f) > new Date() ? "closes" : "closed"} ${esc(shortDay(windowClose(f)))}.</span>
-        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="reissueJob('${f.id}')">Re-issued today (restart 7 days)</button>` : ""}
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="reissueJob('${f.id}')"${hint("Use after sending a corrected report: the 7-day window starts again, changed items only")}>Re-issued today (restart 7 days)</button>` : ""}
       </label>
       <label class="field">Invoice
         <select id="f_invoice">
@@ -2129,8 +2173,8 @@ function renderForm(){
     </div>
 
     <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeForm()">Cancel</button>
-      <button class="btn btn-coral" onclick="submitForm()">${isNew ? "Save job" : "Save changes"}</button>
+      <button class="btn btn-ghost" onclick="closeForm()"${tip("Close without saving")}>Cancel</button>
+      <button class="btn btn-coral" onclick="submitForm()"${hint("Saves the job, and puts it on the calendar if connected")}>${isNew ? "Save job" : "Save changes"}</button>
     </div>
   </div>`;
 }
@@ -2155,15 +2199,15 @@ function renderTable(){
             <td class="jt-addr" style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
             <td class="jt-date">${formatDate(j.date)}</td>
             <td class="jt-time">${esc(j.time)||"—"}</td>
-            <td class="jt-status"><button class="pill" title="Click to move to the next stage" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
+            <td class="jt-status"><button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
             <td class="jt-inv">${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
                 return `<button class="pill" title="Click: Not invoiced, then Invoiced, then Paid" style="color:${need?'var(--coral-dark)':im.fg}; background:${need?'var(--coral-bg)':im.bg};" onclick="cycleInvoice('${j.id}')">${need?'To invoice':im.label}</button>${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
             <td class="jt-act">
               <div class="row-actions">
-                <button class="icon-btn" title="Edit" onclick="openEdit('${j.id}')">
+                <button class="icon-btn" title="Open and edit this job" onclick="openEdit('${j.id}')">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 </button>
-                <button class="icon-btn" title="Delete" onclick="deleteJob('${j.id}')">
+                <button class="icon-btn" title="Delete this job (asks first, can't be undone)" onclick="deleteJob('${j.id}')">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
                 ${state.gcalConnected ? `<button class="icon-btn" title="${j.gcalEventId ? 'Update calendar event' : 'Add to calendar'}" onclick="syncJobToCalendar(state.jobs.find(x=>x.id==='${j.id}'))">
@@ -2177,6 +2221,16 @@ function renderTable(){
     </table>
   </div>`;
 }
+
+// ---------------------------------------------------------------- other tabs (11 Oct)
+// The Photo Tool saves the photo link straight into this browser's storage. If this page is already open,
+// reload the jobs so the next save here doesn't overwrite the link, then push it to the Google Sheet.
+window.addEventListener("storage", function(e){
+  if (e.key !== LS_JOBS || !e.newValue) return;
+  try { state.jobs = JSON.parse(e.newValue) || []; } catch(x){ return; }
+  if (state.gcalConnected && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) scheduleCloudSave();
+  if (!state.editing) render();
+});
 
 // ---------------------------------------------------------------- init
 load();
