@@ -2366,6 +2366,11 @@ function actionSentAt(a){
   if (d > new Date(Date.now()+5*60000)) return { err: "Sent date is in the future" };
   return { iso: d.toISOString() };
 }
+function sameEmails(x, y){
+  // same addresses in any order / case counts as no change
+  const norm = v => cleanEmails(v).toLowerCase().split(", ").filter(Boolean).sort().join(",");
+  return norm(x) === norm(y);
+}
 function checkUrlAction(a){
   // returns { job, problem, notes[] } against the current jobs
   if (a.doWhat !== "sent") return { problem: "Unknown link action \""+a.doWhat+"\". Only do=sent is supported." };
@@ -2380,8 +2385,8 @@ function checkUrlAction(a){
   if (a.copyto === "" ) return { job: j, problem: "The copy-to list has no valid email address." };
   const notes = [];
   if (j.status === "sent") notes.push(j.sentAt ? "Already at Sent ("+shortDay(new Date(j.sentAt))+"). Send date kept." : "Already at Sent with no send date. Send date will be set.");
-  if (a.tenants && j.tenantEmails && j.tenantEmails !== a.tenants) notes.push("Replaces tenant emails: "+j.tenantEmails);
-  if (a.copyto && j.agentEmail && j.agentEmail !== a.copyto) notes.push("Replaces copy to: "+j.agentEmail);
+  if (a.tenants && j.tenantEmails && !sameEmails(j.tenantEmails, a.tenants)) notes.push("Replaces tenant emails: "+j.tenantEmails);
+  if (a.copyto && j.agentEmail && !sameEmails(j.agentEmail, a.copyto)) notes.push("Replaces copy to: "+j.agentEmail);
   return { job: j, sentIso: t.iso, notes };
 }
 function renderUrlAction(){
@@ -2411,8 +2416,8 @@ function urlActionFail(msg){ const a = state.urlAction; if (!a) return; a.stage 
 function applyUrlAction(a, j, c){
   if (!j.sentAt) j.sentAt = c.sentIso;          // set first so setJobStatus keeps the link's date, not "now"
   if (j.status !== "sent") setJobStatus(j, "sent");
-  if (a.tenants !== null) j.tenantEmails = a.tenants;
-  if (a.copyto !== null) j.agentEmail = a.copyto;
+  if (a.tenants !== null && !sameEmails(j.tenantEmails, a.tenants)) j.tenantEmails = a.tenants;   // same set: keep as stored
+  if (a.copyto !== null && !sameEmails(j.agentEmail, a.copyto)) j.agentEmail = a.copyto;
 }
 function confirmUrlAction(){
   const a = state.urlAction; if (!a) return;
