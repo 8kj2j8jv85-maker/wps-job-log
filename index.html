@@ -548,6 +548,7 @@ function scheduleCloudSave(){
 }
 function setCloud(status, msg){
   state.cloudStatus = status; state.cloudMsg = msg || "";
+  if ((status==="error"||status==="conflict") && state.urlAction && state.urlAction.stage==="working") urlActionFail("Not saved: "+(msg||status)+". Nothing changed in Google.");
   if (status==="saved") state.cloudAt = new Date();
   const el = document.getElementById("cloudPill");
   if (el) el.outerHTML = renderCloudPill();
@@ -644,6 +645,26 @@ async function cloudSave(){
     setCloud("error","Not saved to Google — will retry on next change");
   }
 }
+async function cloudLoad(id, meta){
+  // Replace this browser's copy with the Sheet's (used by Sync now and by link actions). Returns false if cancelled.
+  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs!A:Z&ranges=Clients!A:Z");
+  const parse = (vr) => {
+    const rows = (vr && vr.values) || [];
+    if (rows.length < 2) return [];
+    const di = rows[0].indexOf("Data (do not edit)");
+    return rows.slice(1).map(row => { try { return JSON.parse(row[di]); } catch(e){ return null; } }).filter(Boolean);
+  };
+  const jobs = parse(r.valueRanges[0]);
+  const clients = normalizeClients(parse(r.valueRanges[1]));
+  if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return false; }
+  state.jobs = jobs; if (clients) state.clients = clients;
+  try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
+  localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
+  localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
+  lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
+  lsSet(LS_LOCAL_SAVED_AT, meta.savedAt);
+  return true;
+}
 async function cloudSyncNow(){
   // Called from the "Sync now" click: loads the Sheet if it's newer, otherwise pushes this browser's copy.
   setCloud("saving");   // show "Syncing…" straight away, while Google signs in
@@ -660,22 +681,7 @@ async function cloudSyncNow(){
         lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt); await cloudSave(); return;
       }
       if (cloudNewer){
-        const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs!A:Z&ranges=Clients!A:Z");
-        const parse = (vr) => {
-          const rows = (vr && vr.values) || [];
-          if (rows.length < 2) return [];
-          const di = rows[0].indexOf("Data (do not edit)");
-          return rows.slice(1).map(row => { try { return JSON.parse(row[di]); } catch(e){ return null; } }).filter(Boolean);
-        };
-        const jobs = parse(r.valueRanges[0]);
-        const clients = normalizeClients(parse(r.valueRanges[1]));
-        if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return; }
-        state.jobs = jobs; if (clients) state.clients = clients;
-        try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
-        localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
-        localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
-        lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
-        lsSet(LS_LOCAL_SAVED_AT, meta.savedAt);
+        if (!(await cloudLoad(id, meta))) return;
         rememberGoogleConnected();
         setCloud("saved");
         render();
@@ -1571,6 +1577,7 @@ function render(){
     <main class="main">
     <div class="wrap${state.view === "today" ? " wrap-dash" : ""}">
       ${renderPageHead()}
+      ${renderUrlAction()}
       ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>click the stage pill</b> to move the job on one step, <b>click the invoice pill</b> for Not invoiced → Invoiced → Paid, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
@@ -2328,8 +2335,124 @@ function autoRefresh(){
 setInterval(autoRefresh, 3*60*1000);
 document.addEventListener("visibilitychange", function(){ if (!document.hidden) autoRefresh(); });
 
+// ---------------------------------------------------------------- link actions (tracker item 22)
+// A link such as ?do=sent&job=WPS260916&tenants=a@x.com,b@y.com&copyto=c@z.com&sent=2026-10-12T15:48
+// opens the Job Log with a panel showing the change. Nothing changes until "Confirm and save" is clicked.
+// On confirm: load the Sheet if it's newer, re-check the job, apply, save to the Sheet, update the calendar.
+const LATER_THAN_SENT = ["signed","deemed","archived"];
+function parseUrlAction(){
+  let q; try { q = new URLSearchParams(location.search); } catch(e){ return null; }
+  if (!q.get("do")) return null;
+  return {
+    doWhat: String(q.get("do")||"").toLowerCase(),
+    jobNo: normJobNo(q.get("job")),
+    tenants: q.has("tenants") ? cleanEmails(q.get("tenants")) : null,
+    copyto: q.has("copyto") ? cleanEmails(q.get("copyto")) : null,
+    sentRaw: q.get("sent") || "",
+    stage: "ask", msg: ""
+  };
+}
+function actionSentAt(a){
+  // "2026-10-12" (noon that day; now if it's today), "2026-10-12T15:48", or nothing (now)
+  const r = a.sentRaw.trim();
+  if (!r) return { iso: new Date().toISOString() };
+  let d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(r)){
+    d = (r === isoToday(0)) ? new Date() : new Date(r+"T12:00:00");
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(r)){
+    d = new Date(r);
+  } else return { err: "Sent date \""+r+"\" not understood — use 2026-10-12 or 2026-10-12T15:48" };
+  if (isNaN(d)) return { err: "Sent date \""+r+"\" not understood" };
+  if (d > new Date(Date.now()+5*60000)) return { err: "Sent date is in the future" };
+  return { iso: d.toISOString() };
+}
+function checkUrlAction(a){
+  // returns { job, problem, notes[] } against the current jobs
+  if (a.doWhat !== "sent") return { problem: "Unknown link action \""+a.doWhat+"\". Only do=sent is supported." };
+  if (!/^WPS\d{6,}$/.test(a.jobNo)) return { problem: "Job number \""+a.jobNo+"\" isn't a WPS job number." };
+  const matches = state.jobs.filter(j => normJobNo(j.jobNo) === a.jobNo);
+  if (!matches.length) return { problem: a.jobNo+" isn't in the Job Log. Nothing changed." };
+  if (matches.length > 1) return { problem: a.jobNo+" appears "+matches.length+" times in the Job Log. Fix the duplicate first; nothing changed." };
+  const j = matches[0];
+  if (LATER_THAN_SENT.includes(j.status)) return { job: j, problem: a.jobNo+" is already at "+statusMeta(j.status).label+". Left as it is; nothing changed." };
+  const t = actionSentAt(a); if (t.err) return { job: j, problem: t.err };
+  if (a.tenants === "" ) return { job: j, problem: "The tenants list has no valid email address." };
+  if (a.copyto === "" ) return { job: j, problem: "The copy-to list has no valid email address." };
+  const notes = [];
+  if (j.status === "sent") notes.push(j.sentAt ? "Already at Sent ("+shortDay(new Date(j.sentAt))+"). Send date kept." : "Already at Sent with no send date. Send date will be set.");
+  if (a.tenants && j.tenantEmails && j.tenantEmails !== a.tenants) notes.push("Replaces tenant emails: "+j.tenantEmails);
+  if (a.copyto && j.agentEmail && j.agentEmail !== a.copyto) notes.push("Replaces copy to: "+j.agentEmail);
+  return { job: j, sentIso: t.iso, notes };
+}
+function renderUrlAction(){
+  const a = state.urlAction; if (!a) return "";
+  const box = (inner, col) => `<div id="urlAction" class="help-box" style="background:${col||"#EEF4FF"};border-color:${col?"#E3B5A8":"#B9CBEA"}">${inner}</div>`;
+  if (a.stage === "done") return box(`<b>${esc(a.msg)}</b> <button class="btn btn-ghost" onclick="dismissUrlAction()">Close</button>`, "#E0F0E6");
+  if (a.stage === "working") return box(`Saving ${esc(a.jobNo)}… (Google may ask you to sign in)`);
+  const c = checkUrlAction(a);
+  if (a.stage === "error" || c.problem) return box(`<b>Link action not done.</b> ${esc(a.msg || c.problem)} <button class="btn btn-ghost" onclick="dismissUrlAction()">Close</button>`, "#FDECE7");
+  const j = c.job;
+  const rows = [
+    ["Job", j.jobNo+" · "+(j.type||"")+" · "+fullAddress(j)],
+    ["Stage", statusMeta(j.status).label+" → Sent"],
+    ["Send date", j.sentAt ? shortDay(new Date(j.sentAt))+" (kept)" : new Date(c.sentIso).toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})],
+  ];
+  if (a.tenants !== null) rows.push(["Tenant emails", a.tenants]);
+  if (a.copyto !== null) rows.push(["Copy to", a.copyto]);
+  return box(`<div class="hb-t">LINK ACTION — CHECK, THEN CONFIRM</div>
+    ${rows.map(r=>`<div><span style="display:inline-block;min-width:110px;color:var(--stone)">${esc(r[0])}</span>${esc(r[1])}</div>`).join("")}
+    ${c.notes.map(n=>`<div style="color:var(--coral-dark)">${esc(n)}</div>`).join("")}
+    <div style="margin-top:8px"><button id="urlActionGo" class="btn btn-coral" onclick="confirmUrlAction()">Confirm and save</button>
+    <button class="btn btn-ghost" onclick="dismissUrlAction()">Cancel</button></div>`);
+}
+function clearActionUrl(){ try { history.replaceState(null, "", location.pathname + location.hash); } catch(e){} }
+function dismissUrlAction(){ state.urlAction = null; clearActionUrl(); render(); }
+function urlActionFail(msg){ const a = state.urlAction; if (!a) return; a.stage = "error"; a.msg = msg; clearActionUrl(); render(); }
+function applyUrlAction(a, j, c){
+  if (!j.sentAt) j.sentAt = c.sentIso;          // set first so setJobStatus keeps the link's date, not "now"
+  if (j.status !== "sent") setJobStatus(j, "sent");
+  if (a.tenants !== null) j.tenantEmails = a.tenants;
+  if (a.copyto !== null) j.agentEmail = a.copyto;
+}
+function confirmUrlAction(){
+  const a = state.urlAction; if (!a) return;
+  a.stage = "working"; render();
+  setCloud("saving");   // so a closed/blocked Google pop-up reports back (initGCal error_callback)
+  ensureSheetsToken(async function(){
+    try {
+      const id = await findOrCreateSheet();
+      const meta = await readCloudMeta(id);
+      const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
+      const localAt = lsGet(LS_LOCAL_SAVED_AT) || "";
+      const cloudNewer = meta.savedAt && meta.savedAt > synced;
+      const localChanged = localAt && synced && localAt > synced && state.jobs.length > 0;
+      if (cloudNewer && localChanged){ urlActionFail("This browser and the Google copy were both changed since the last sync. Click Sync now first, then open the link again."); return; }
+      if (cloudNewer){ if (!(await cloudLoad(id, meta))){ urlActionFail("Sync cancelled; nothing changed."); return; } }
+      const c = checkUrlAction(a);                       // re-check against the fresh copy
+      if (c.problem){ urlActionFail(c.problem); return; }
+      applyUrlAction(a, c.job, c);
+      mergeJobNoHigh();
+      localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
+      lsSet(LS_LOCAL_SAVED_AT, new Date().toISOString());
+      await cloudSave();
+      rememberGoogleConnected();
+      if (state.cloudStatus !== "saved"){ urlActionFail("Changed in this browser but NOT saved to Google ("+(state.cloudMsg||"unknown")+"). Click Sync now."); return; }
+      try { syncJobToCalendar(c.job); } catch(e){}
+      const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
+      a.stage = "done";
+      a.msg = c.job.jobNo+" marked Sent ("+shortDay(new Date(c.job.sentAt))+"), emails saved, saved to Google ✓ "+t;
+      clearActionUrl();
+      render();
+    } catch(e){
+      console.log("[WPS] link action failed", e);
+      urlActionFail("Couldn't reach Google ("+(e && e.message ? e.message.slice(0,80) : "error")+"). Nothing saved to Google.");
+    }
+  });
+}
+
 // ---------------------------------------------------------------- init
 load();
+state.urlAction = parseUrlAction();
 render();
 initGCal();
 </script>
