@@ -1323,7 +1323,7 @@ function rrLongDay(iso){ return iso ? new Date(iso+"T00:00:00").toLocaleDateStri
 function rrShortDay(iso){ return iso ? new Date(iso+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","") : ""; }
 function rrTenantNames(j){
   const n = (j.tenantList||[]).map(t => (t.name||"").trim()).filter(Boolean);
-  if (!n.length) return "[tenant name(s)]";
+  if (!n.length) return "Tenants";
   return n.length === 1 ? n[0] : n.slice(0,-1).join(", ")+" and "+n[n.length-1];
 }
 function rearrangeEmailUrl(j, kind, missedIso){
