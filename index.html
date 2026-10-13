@@ -937,8 +937,13 @@ function splitTenants(text){
   marks.sort((a,b)=>a.i-b.i);
   const tokens = [];
   let pos = 0;
-  const pushNames = chunk => chunk.split(/[,;|&\/\n]+|\s+and\s+|\s+-\s+|\s{3,}/i).forEach(part => {
-    const n = part.replace(/[<>()\[\]"':]/g," ").replace(/\s+/g," ").trim();
+  // 13 Oct (booking scan): agents' emails carry labels round the details ("Tenant 1", "Email / Mobile",
+  // "Email:", "Full Name:", "• Lead Tenant •"). Labels are dropped so they don't become extra tenants.
+  const LABEL_RE = /^(?:full\s+name|name|e-?mail(?:\s+address)?|phone|mobile|mob|tel|telephone|number|contact(?:\s+details)?|details|lead\s+tenant|tenants?(?:\s*\d+)?|tenant\s+name)\b\s*/i;
+  const pushNames = chunk => chunk.split(/[,;|&\/\n•·]+|\s+and\s+|\s+-\s+|\s{3,}/i).forEach(part => {
+    let n = part.replace(/[<>()\[\]"':*]/g," ").replace(/\s+/g," ").trim();
+    for (let k = 0; k < 4 && LABEL_RE.test(n); k++) n = n.replace(LABEL_RE, "").trim();
+    n = n.replace(/\s+(?:e-?mail|phone|mobile|mob|tel|number|lead\s+tenant|tenant)$/i, "").trim();   // label just before a phone/email
     if (/[A-Za-z]{2,}/.test(n)) tokens.push({ kind:"name", v:n });
   });
   marks.forEach(m => { pushNames(s.slice(pos, m.i)); tokens.push(m); pos = m.end; });
@@ -1765,6 +1770,35 @@ function resolveClientName(name){
   saveClients();
   return name;
 }
+// ---- tenant rows and Copy to from the booking scan (13 Oct)
+// Queue items may carry tenantList [{name, phone, email}] and copyTo (the sender's email). Older items only
+// have the tenants text, which is split the same way the form splits old text.
+function itemTenantRows(it){
+  const list = Array.isArray(it.tenantList) ? it.tenantList : null;
+  const rows = list && list.length
+    ? list.map(t => ({ name:String((t&&t.name)||"").trim(), phone:String((t&&t.phone)||"").trim(), email:(cleanEmails(t&&t.email).split(", ")[0]||"") }))
+    : splitTenants(it.tenants||"");
+  return rows.filter(r => r.name || r.phone || r.email).slice(0, MAX_TENANTS);
+}
+function setTenantRows(j, rows){
+  j.tenantList = rows; j.tenants = tenantsText(rows); j.tenantEmails = tenantEmailsText(rows); j.tenantPhones = tenantPhonesText(rows);
+}
+function jobHasTenants(j){
+  return !!(String(j.tenants||"").trim() || String(j.tenantEmails||"").trim() || (Array.isArray(j.tenantList) && j.tenantList.length));
+}
+function itemCopyTo(it){ return cleanEmails(it.copyTo||""); }
+function rememberItemContact(it, client){
+  // the sender's address goes into saved contacts (named from the email) so it shows as a tick in Copy to
+  const email = itemCopyTo(it).split(", ")[0];
+  if (!email || contactByEmail(email)) return;
+  const name = String(it.copyToName || String(it.sourceFrom||"").replace(/\s*\(.*$/,"")).trim();
+  state.contacts.push({ name, email, client: client||"" });
+  saveContacts();
+}
+function itemTenantsLine(it){
+  const rows = itemTenantRows(it);
+  return rows.map(r => [r.name, r.phone, r.email].filter(Boolean).join(" · ")).join("; ");
+}
 function jobFromItem(it){
   const j = emptyJob();
   const src = it.sourceSubject ? "From email: "+it.sourceSubject+(it.sourceDate ? " ("+it.sourceDate+")" : "") : "";
@@ -1773,10 +1807,29 @@ function jobFromItem(it){
     client: resolveClientName(it.client),
     date: it.date||"", time: it.time||"",
     address: it.address||"", town: it.town||"", postcode: it.postcode||"",
-    tenants: it.tenants||"",
     notes: [it.notes, src].filter(Boolean).join("\n"),
   });
+  setTenantRows(j, itemTenantRows(it));
+  j.agentEmail = itemCopyTo(it);
+  rememberItemContact(it, j.client);
   return j;
+}
+function applyItemContacts(m, it){
+  // fills tenants and Copy to on an existing job only where it has none; never overwrites what Lex has
+  const rows = itemTenantRows(it);
+  const notes = [];
+  if (rows.length){
+    if (!jobHasTenants(m)) setTenantRows(m, rows);
+    else {
+      const have = cleanEmails(m.tenantEmails).toLowerCase();
+      const fresh = rows.filter(r => r.email && have.indexOf(r.email.toLowerCase()) === -1);
+      if (fresh.length) notes.push("Tenant details in email (not applied, job already has tenants): "+itemTenantsLine(it));
+    }
+  }
+  const ct = itemCopyTo(it);
+  if (ct && !cleanEmails(m.agentEmail)) m.agentEmail = ct;
+  if (ct) rememberItemContact(it, m.client);
+  return notes;
 }
 function qAdd(id){
   const it = queueItem(id); if (!it || it.kind==="invoice") return;
@@ -1794,10 +1847,11 @@ function qEdit(id){
   if (it.kind!=="new"){
     const m = findMatch(it);
     if (m){
-      state.editing = Object.assign({}, m, {
+      const copy = Object.assign({}, m);
+      const extraNotes = applyItemContacts(copy, it);   // on the copy only: nothing saved until Lex saves the form
+      state.editing = Object.assign(copy, {
         date: it.date || m.date, time: it.time || m.time,
-        tenants: m.tenants || it.tenants || "",
-        notes: [m.notes, it.summary ? "Update from email: "+it.summary : ""].filter(Boolean).join("\n"),
+        notes: [m.notes, it.summary ? "Update from email: "+it.summary : ""].concat(extraNotes).filter(Boolean).join("\n"),
       });
       state.fromQueueId = id; state.addingClient=false; state.editingAgentContact=false;
       render(); scrollToForm(); return;
@@ -1811,8 +1865,8 @@ function qApplyUpdate(id){
   const it = queueItem(id); const m = it && findMatch(it); if (!m) return;
   if (it.date) m.date = it.date;
   if (it.time) m.time = it.time;
-  if (it.tenants && !m.tenants) m.tenants = it.tenants;
-  if (it.summary) m.notes = [m.notes, "Update from email: "+it.summary].filter(Boolean).join("\n");
+  const extraNotes = applyItemContacts(m, it);
+  if (it.summary || extraNotes.length) m.notes = [m.notes, it.summary ? "Update from email: "+it.summary : ""].concat(extraNotes).filter(Boolean).join("\n");
   saveJobs(); markQueueDone(id,"updated"); render();
   syncJobToCalendar(m);
 }
@@ -1911,7 +1965,7 @@ function renderQueueTray(){
       actions = `<button class="btn btn-coral btn-sm" onclick="qAdd('${esc(it.id)}')"${hint("Adds it as a new job straight away")}>Add to log</button>
                  <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
     } else if (it.kind==="update"){
-      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')"${hint("Changes the date and time on the matching job")}>Apply change</button>
+      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')"${hint("Applies the change (date, time, tenants if the job has none) to the matching job")}>Apply change</button>
                  <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')"${hint("Opens the matching job with the change filled in, to check first")}>Edit first</button>`;
     } else {
       actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')"${hint("Removes the matching job and its calendar entry (asks first)")}>Delete cancelled job</button>`;
@@ -1920,8 +1974,9 @@ function renderQueueTray(){
     return `<div class="qcard">
       <div class="qtop"><span class="qkind ${k[1]}">${k[0]}</span><span class="type-badge">${esc(tm.label)}</span><span>${esc(it.client)||"Client not clear"}</span></div>
       <div class="qaddr">${esc(addr)||"Address not clear"}</div>
-      <div class="qmeta">${it.date ? formatDate(it.date) : "No date yet"}${it.time ? " · "+esc(it.time) : (it.date ? " · time TBC" : "")}</div>
-      ${it.tenants ? `<div class="qline">Contact: ${esc(it.tenants)}</div>` : ""}
+      <div class="qmeta">${it.date ? formatDate(it.date) : (it.kind==="update" ? "Date unchanged" : "No date yet")}${it.time ? " · "+esc(it.time) : (it.date ? " · time TBC" : "")}</div>
+      ${itemTenantsLine(it) ? `<div class="qline">Tenants: ${esc(itemTenantsLine(it))}</div>` : ""}
+      ${itemCopyTo(it) ? `<div class="qline">Copy to: ${esc(itemCopyTo(it))}</div>` : ""}
       ${it.notes ? `<div class="qline">Notes: ${esc(it.notes)}</div>` : ""}
       ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
       ${warn}
