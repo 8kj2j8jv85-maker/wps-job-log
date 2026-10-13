@@ -664,7 +664,7 @@ async function ensureContactsTab(id){
   return has;
 }
 async function readCloudMeta(id){
-  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values/Meta!A1:B10");
+  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values/Meta!A1:B20");
   const meta = {};
   (r.values||[]).forEach(row=>{ if (row[0]) meta[row[0]] = row[1]||""; });
   return meta;
@@ -692,14 +692,20 @@ async function cloudSave(){
     const savedAt = new Date().toISOString();
     const base = "https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values";
     await ensureContactsTab(id);
-    await gapi(base+":batchClear", { method:"POST", body: JSON.stringify({ ranges:["Jobs!A:Z","Clients!A:Z","Contacts!A:Z","Meta!A:B"] }) });
+    try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
+    // 13 Oct hardening: one write, no clear first. Blank rows overwrite any old rows below the new data,
+    // so a dropped connection can never leave the Sheet empty (the old way cleared it, then wrote it).
+    const prev = await gapi(base+":batchGet?ranges=Jobs!A:A&ranges=Clients!A:A&ranges=Contacts!A:A&ranges=Meta!A:A");
+    const prevLen = i => ((prev.valueRanges[i] && prev.valueRanges[i].values) || []).length;
+    const pad = (rows, oldLen) => { const w = rows[0].length, out = rows.slice(); while (out.length < oldLen) out.push(new Array(w).fill("")); return out; };
+    const metaRows = [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())]];
     await gapi(base+":batchUpdate", { method:"POST", body: JSON.stringify({
       valueInputOption: "RAW",
       data: [
-        { range:"Jobs!A1", values: jobsToRows() },
-        { range:"Clients!A1", values: clientsToRows() },
-        { range:"Contacts!A1", values: contactsToRows() },
-        { range:"Meta!A1", values: [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())]] }
+        { range:"Jobs!A1", values: pad(jobsToRows(), prevLen(0)) },
+        { range:"Clients!A1", values: pad(clientsToRows(), prevLen(1)) },
+        { range:"Contacts!A1", values: pad(contactsToRows(), prevLen(2)) },
+        { range:"Meta!A1", values: pad(metaRows, prevLen(3)) }
       ]
     })});
     lsSet(LS_CLOUD_SYNCED_AT, savedAt);
@@ -712,7 +718,7 @@ async function cloudSave(){
 async function cloudLoad(id, meta){
   // Replace this browser's copy with the Sheet's (used by Sync now and by link actions). Returns false if cancelled.
   const hasContacts = await ensureContactsTab(id);
-  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs!A:Z&ranges=Clients!A:Z&ranges=Contacts!A:Z");
+  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs&ranges=Clients&ranges=Contacts");
   const parse = (vr) => {
     const rows = (vr && vr.values) || [];
     if (rows.length < 2) return [];
@@ -728,6 +734,7 @@ async function cloudLoad(id, meta){
   fillContactsFromData();
   lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
+  try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
   localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
   localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
   lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
@@ -886,9 +893,11 @@ function windowState(j){
   if (open === true) return "hold";
   return "due";
 }
+const AMEND_FRESH_MS = 30*60*1000;   // 13 Oct hardening: only deem agreed from an amendments list read in the last 30 minutes
+function amendFresh(){ return !!(state.amend && state.amend.loaded && state.amend.at && (Date.now() - new Date(state.amend.at).getTime()) < AMEND_FRESH_MS); }
 function autoDeem(){
-  // Only runs once the Amendments Sheet has been read, so a job with open comments is never deemed agreed.
-  if (!state.amend || !state.amend.loaded) return 0;
+  // Only runs once the Amendments Sheet has been read recently, so a job with new comments is never deemed agreed.
+  if (!amendFresh()) return 0;
   let n = 0;
   state.jobs.forEach(j => {
     if (j.type!=="ICI" || j.status!=="sent") return;
@@ -1729,9 +1738,24 @@ function checkForBookings(){
     }
   });
 }
-function pendingQueue(){ return state.queue.filter(i=>!state.queueDone[i.id]); }
+const QUEUE_MAX_AGE_DAYS = 14;   // 13 Oct hardening: queue items older than this are not shown
+function queueItemAgeOk(i){ const g = Date.parse(i.generatedAt || ""); return isNaN(g) || (Date.now() - g) < QUEUE_MAX_AGE_DAYS*864e5; }
+function pendingQueue(){ return state.queue.filter(i=>!state.queueDone[i.id] && queueItemAgeOk(i)); }
 function markQueueDone(id, how){
   state.queueDone[id] = { how, at: new Date().toISOString() };
+  try{ localStorage.setItem(LS_QUEUE_DONE, JSON.stringify(state.queueDone)); }catch(e){}
+  markLocalChange();   // saves the handled list to the Sheet so other devices don't offer the item again
+}
+function queueDoneForSheet(){
+  // Keep the last 60 days only, so the Meta cell stays small.
+  const cut = Date.now() - 60*864e5, out = {};
+  Object.keys(state.queueDone||{}).forEach(k => { const v = state.queueDone[k]; if (v && Date.parse(v.at) > cut) out[k] = v; });
+  return out;
+}
+function mergeQueueDone(fromSheet){
+  if (!fromSheet || typeof fromSheet !== "object") return;
+  state.queueDone = state.queueDone || {};
+  Object.keys(fromSheet).forEach(k => { if (!state.queueDone[k]) state.queueDone[k] = fromSheet[k]; });
   try{ localStorage.setItem(LS_QUEUE_DONE, JSON.stringify(state.queueDone)); }catch(e){}
 }
 function queueItem(id){ return state.queue.find(i=>i.id===id); }
@@ -1880,7 +1904,6 @@ function qApplyCancel(id){
 }
 // ---- invoice queue items (13 Oct): Claude reads Tide's invoice emails and queues
 // { id, kind:"invoice", jobNo, invoiceNo, amount, client, sourceDate, sourceUrl, summary }
-function normJobNo(s){ return String(s||"").toUpperCase().replace(/\s+/g,""); }
 function invoiceJobs(it){ const n = normJobNo(it.jobNo); return n ? state.jobs.filter(j=>normJobNo(j.jobNo)===n) : []; }
 function invoiceState(it){
   const hits = invoiceJobs(it);
@@ -2085,11 +2108,11 @@ function refreshAll(){
     if (!state.gcalToken && state.cloudStatus === "error"){ clearInterval(watch); done(); } }, 500);
   setTimeout(() => { clearInterval(watch); if (state.refreshBusy && !state.gcalToken) done(); }, 60000);
 }
-function loadAmendments(){
+function loadAmendments(quiet){
   // Called from a click (or when a valid token already exists): reads the WPS Amendments Sheet, read-only.
+  // quiet = background refresh (auto-refresh): keep showing the last list until the new one arrives.
   ensureSheetsToken(async function(){
-    state.amend = { busy:true };
-    rerenderToday();
+    if (!quiet){ state.amend = { busy:true }; rerenderToday(); }
     try {
       const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/Amendments!A:P");
       const rows = r.values || [];
@@ -2119,7 +2142,7 @@ function loadAmendments(){
       autoDeem();
     } catch(e){
       console.log("[WPS] amendments read failed", e);
-      state.amend = { error: "Couldn't read the WPS Amendments Sheet" };
+      if (!quiet) state.amend = { error: "Couldn't read the WPS Amendments Sheet" };
     }
     rerenderToday();
   });
@@ -2867,6 +2890,10 @@ function renderTable(){
 // The Photo Tool saves the photo link straight into this browser's storage. If this page is already open,
 // reload the jobs so the next save here doesn't overwrite the link, then push it to the Google Sheet.
 window.addEventListener("storage", function(e){
+  // 13 Oct hardening: clients and contacts are shared between open tabs too, so an old tab can't save an old list over the Sheet.
+  if (e.key === LS_CLIENTS && e.newValue){ try { const c = normalizeClients(JSON.parse(e.newValue)); if (c) state.clients = c; } catch(x){} if (!state.editing) render(); return; }
+  if (e.key === LS_CONTACTS && e.newValue){ try { const k = normalizeContacts(JSON.parse(e.newValue)); if (k) state.contacts = k; } catch(x){} if (!state.editing) render(); return; }
+  if (e.key === LS_QUEUE_DONE && e.newValue){ try { state.queueDone = JSON.parse(e.newValue) || {}; } catch(x){} if (!state.editing) render(); return; }
   if (e.key !== LS_JOBS || !e.newValue) return;
   try { state.jobs = JSON.parse(e.newValue) || []; } catch(x){ return; }
   if (state.gcalConnected && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) scheduleCloudSave();
@@ -2883,6 +2910,8 @@ function autoRefresh(){
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
+  // Re-read the amendments in the background when the list is stale and Google is already signed in (no pop-up).
+  if (state.amend && state.amend.loaded && !amendFresh() && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) loadAmendments(true);
   autoDeem();
   const y = window.scrollY;
   render();
