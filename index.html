@@ -189,6 +189,32 @@
   .agent-contact-edit-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px; }
   .agent-contact-actions{ display:flex; gap:8px; }
   .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:6px; border-top:1px solid var(--line-soft); padding-top:16px; }
+  /* job form: tenant rows, Copy to picker, delete (13 Oct) */
+  .btn-danger{ background:#fff; border:1px solid #C0392B; color:#A93226; }
+  .btn-danger:hover{ background:#FDEDEC; }
+  .fa-gap{ flex:1; }
+  .tenant-block, .copyto-block{ gap:6px; }
+  .tb-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; }
+  .tb-head .field-hint{ margin:0; }
+  .tb-check{ font-size:12px; font-weight:400; color:var(--ink); background:var(--coral-bg); border-radius:6px; padding:6px 9px; }
+  .tb-orig{ font-style:italic; }
+  .tenant-row{ display:grid; grid-template-columns:22px 1.2fr 1fr 1.4fr 30px; gap:8px; align-items:center; }
+  .tenant-row input{ min-width:0; }
+  .tr-num{ font-size:12px; color:var(--ink-soft); text-align:center; }
+  .tr-x{ justify-content:center; font-size:13px; }
+  .tenant-block > .btn-text, .ct-actions .btn-text{ align-self:flex-start; padding:4px 0; }
+  .ct-group{ display:flex; flex-wrap:wrap; gap:6px; }
+  .ct-group > .ct-label{ width:100%; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:default; }
+  details.ct-group > summary{ cursor:pointer; list-style-position:inside; }
+  .ct-item{ display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; background:#fff; font-weight:500; color:var(--ink); cursor:pointer; font-size:13px; max-width:100%; }
+  .ct-item.on{ border-color:var(--peri); background:#EEF1FB; }
+  .ct-item input{ margin:0; width:auto; }
+  .ct-mail{ font-size:11.5px; color:var(--ink-soft); font-weight:400; overflow-wrap:anywhere; }
+  .ct-del{ border:none; background:none; color:#A93226; cursor:pointer; font-size:12px; padding:0 2px; }
+  .ct-status{ font-size:12px; font-weight:400; color:var(--ink-soft); overflow-wrap:anywhere; }
+  .ct-add{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .ct-add input{ flex:1 1 160px; min-width:0; }
+  .ct-actions{ display:flex; gap:16px; }
 
   /* table */
   .tablewrap{ border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--white); overflow-x:auto; }
@@ -356,6 +382,14 @@
     .field input, .field select, .field textarea, .form-card input, .form-card select, .form-card textarea{ width:100%; min-width:0; max-width:100%; font-size:16px; }
     .extract-row{ flex-wrap:wrap; }
     .form-actions .btn{ flex:1; justify-content:center; }
+    .form-actions{ flex-wrap:wrap; }
+    .form-actions .btn-danger{ flex:1 1 100%; order:3; }
+    .fa-gap{ display:none; }
+    .tenant-row{ grid-template-columns:18px minmax(0,1fr) minmax(0,1fr) 28px; row-gap:6px; padding-bottom:8px; border-bottom:1px solid var(--line-soft); }
+    .tenant-row input[type=email]{ grid-column:2 / 4; grid-row:2; }
+    .ct-item{ width:100%; flex-wrap:wrap; }
+    .form-card .ct-item input[type=checkbox]{ width:18px; height:18px; flex:0 0 auto; }
+    .ct-mail{ width:100%; padding-left:22px; }
     /* Job Log: each job as a card instead of a wide table */
     .tablewrap{ overflow-x:visible; }
     .tablewrap table, .tablewrap tbody{ display:block; width:100%; margin:0; }
@@ -460,6 +494,7 @@ const TODAY = new Date();
 let state = {
   jobs: [],
   clients: DEFAULT_CLIENTS.slice(),
+  contacts: [],              // saved Copy to contacts (13 Oct)
   editing: null,             // job being added/edited, or null
   addingClient: false,
   editingAgentContact: false,
@@ -501,6 +536,8 @@ function load(){
     const c = localStorage.getItem(LS_CLIENTS);
     if (c){ const norm = normalizeClients(JSON.parse(c)); if (norm) state.clients = norm; }
   } catch(e){}
+  try { const k = normalizeContacts(JSON.parse(localStorage.getItem(LS_CONTACTS)||"null")); state.contacts = k || SEED_CONTACTS.map(c=>Object.assign({},c)); } catch(e){ state.contacts = SEED_CONTACTS.map(c=>Object.assign({},c)); }
+  if (fillContactsFromData()) lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
   try { state.helpOn = localStorage.getItem(LS_HELP) !== "0"; } catch(e){}
   if (location.hash === "#log") state.view = "table";
@@ -525,7 +562,7 @@ function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.cl
 const SHEET_JOB_COLS = [
   ["Job no","jobNo"],["Type","type"],["Status","status"],["Date","date"],["Time","time"],
   ["Address","address"],["Town","town"],["Postcode","postcode"],["Client","client"],
-  ["Tenants","tenants"],["Tenant emails","tenantEmails"],["Agent email","agentEmail"],["Invoice","invoice"],["Invoice no","invoiceNo"],
+  ["Tenants","tenants"],["Tenant emails","tenantEmails"],["Tenant phones","tenantPhones"],["Agent email","agentEmail"],["Invoice","invoice"],["Invoice no","invoiceNo"],
   ["Photo link","photoLink"],["Notes","notes"],["ID","id"]
 ];
 let cloudSaveTimer = null;
@@ -601,6 +638,14 @@ async function findOrCreateSheet(){
   lsSet(LS_SHEET_ID, made.spreadsheetId);
   return made.spreadsheetId;
 }
+async function ensureContactsTab(id){
+  // Sheets made before 13 Oct have no Contacts tab: add it once, so save and load can use it.
+  const info = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"?fields=sheets.properties.title");
+  const has = (info.sheets||[]).some(x => x.properties && x.properties.title === "Contacts");
+  if (!has) await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+":batchUpdate", { method:"POST", body: JSON.stringify({
+    requests: [{ addSheet: { properties: { title:"Contacts", gridProperties:{ frozenRowCount:1 } } } }] }) });
+  return has;
+}
 async function readCloudMeta(id){
   const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values/Meta!A1:B10");
   const meta = {};
@@ -629,12 +674,14 @@ async function cloudSave(){
     }
     const savedAt = new Date().toISOString();
     const base = "https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values";
-    await gapi(base+":batchClear", { method:"POST", body: JSON.stringify({ ranges:["Jobs!A:Z","Clients!A:Z","Meta!A:B"] }) });
+    await ensureContactsTab(id);
+    await gapi(base+":batchClear", { method:"POST", body: JSON.stringify({ ranges:["Jobs!A:Z","Clients!A:Z","Contacts!A:Z","Meta!A:B"] }) });
     await gapi(base+":batchUpdate", { method:"POST", body: JSON.stringify({
       valueInputOption: "RAW",
       data: [
         { range:"Jobs!A1", values: jobsToRows() },
         { range:"Clients!A1", values: clientsToRows() },
+        { range:"Contacts!A1", values: contactsToRows() },
         { range:"Meta!A1", values: [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())]] }
       ]
     })});
@@ -647,7 +694,8 @@ async function cloudSave(){
 }
 async function cloudLoad(id, meta){
   // Replace this browser's copy with the Sheet's (used by Sync now and by link actions). Returns false if cancelled.
-  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs!A:Z&ranges=Clients!A:Z");
+  const hasContacts = await ensureContactsTab(id);
+  const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs!A:Z&ranges=Clients!A:Z&ranges=Contacts!A:Z");
   const parse = (vr) => {
     const rows = (vr && vr.values) || [];
     if (rows.length < 2) return [];
@@ -658,6 +706,10 @@ async function cloudLoad(id, meta){
   const clients = normalizeClients(parse(r.valueRanges[1]));
   if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return false; }
   state.jobs = jobs; if (clients) state.clients = clients;
+  const contacts = hasContacts ? normalizeContacts(parse(r.valueRanges[2])) : null;
+  if (contacts && contacts.length) state.contacts = contacts;   // a Sheet without a Contacts tab keeps this browser's list
+  fillContactsFromData();
+  lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
   localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
   localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
@@ -844,6 +896,106 @@ function cleanEmails(v){
   // tidy a typed/pasted list: split on commas, semicolons or spaces, keep what looks like an email
   return String(v||"").split(/[,;\s]+/).map(x=>x.trim().replace(/^<|>$/g,"")).filter(x=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)).join(", ");
 }
+// ---------------------------------------------------------------- tenants as separate rows (13 Oct, tracker item 27)
+// Each job keeps tenantList = [{name, phone, email}]. The old text fields are still filled from it, because the
+// calendar, dashboard, Sheet columns and the process emails (Apps Script reads tenantEmails) all use them:
+//   tenants      = "Name phone; Name phone"   tenantEmails = "a@x.com, b@y.com"
+// If another device or the link action changed the text fields, the rows are rebuilt from them.
+const MAX_TENANTS = 6;
+const EMAIL_RE_G = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+const TPHONE_RE_G = /(?:\+\d{1,3}[\s-]?|\b0)\d(?:[\s-]?\d){8,11}\b/g;
+function tenantsText(list){
+  return (list||[]).map(t => [t.name, t.phone].map(s=>String(s||"").trim()).filter(Boolean).join(" ")).filter(Boolean).join("; ");
+}
+function tenantEmailsText(list){ return cleanEmails((list||[]).map(t=>t.email||"").join(", ")); }
+function tenantPhonesText(list){ return (list||[]).map(t=>String(t.phone||"").trim()).filter(Boolean).join(", "); }
+function splitTenants(text){
+  // Free text such as "Ms Jo Bloggs - 07700 900000 | jo@x.com & Sam Lee 07700 900001 sam@y.com" or
+  // "Lily Stevens, Omar Radwan, <omar@x.com>" -> rows in the order they appear. A name starts a new row
+  // once the current row has a name; a phone or email starts one if the current row already has that field.
+  const s = String(text||"");
+  const marks = [];
+  s.replace(EMAIL_RE_G, (m, i) => { marks.push({ i, end:i+m.length, kind:"email", v:m }); return m; });
+  s.replace(TPHONE_RE_G, (m, i) => { if (!marks.some(k => i < k.end && i+m.length > k.i)) marks.push({ i, end:i+m.length, kind:"phone", v:m.trim() }); return m; });
+  marks.sort((a,b)=>a.i-b.i);
+  const tokens = [];
+  let pos = 0;
+  const pushNames = chunk => chunk.split(/[,;|&\/\n]+|\s+and\s+|\s+-\s+|\s{3,}/i).forEach(part => {
+    const n = part.replace(/[<>()\[\]"':]/g," ").replace(/\s+/g," ").trim();
+    if (/[A-Za-z]{2,}/.test(n)) tokens.push({ kind:"name", v:n });
+  });
+  marks.forEach(m => { pushNames(s.slice(pos, m.i)); tokens.push(m); pos = m.end; });
+  pushNames(s.slice(pos));
+  const rows = [];
+  let cur = null;
+  tokens.forEach(t => {
+    if (!cur || cur[t.kind]) { cur = { name:"", phone:"", email:"" }; rows.push(cur); }
+    cur[t.kind] = t.v;
+  });
+  return rows;
+}
+function addEmailsToRows(rows, emailsText){
+  // put each email not already on a row into the first row without an email, else a new row
+  const have = rows.map(r => (r.email||"").toLowerCase());
+  cleanEmails(emailsText).split(", ").filter(Boolean).forEach(e => {
+    if (have.indexOf(e.toLowerCase()) !== -1) return;
+    const free = rows.find(r => !r.email);
+    if (free) free.email = e; else rows.push({ name:"", phone:"", email:e });
+    have.push(e.toLowerCase());
+  });
+  return rows;
+}
+function tenantRowsFor(j){
+  const list = Array.isArray(j.tenantList) ? j.tenantList.map(t => ({ name:t.name||"", phone:t.phone||"", email:t.email||"" })) : null;
+  if (list && tenantsText(list) === String(j.tenants||"").trim()){
+    // rows still match the text: only bring the emails in line (the link action may have changed them)
+    const want = cleanEmails(j.tenantEmails).toLowerCase().split(", ").filter(Boolean);
+    list.forEach(r => { if (r.email && want.indexOf(r.email.toLowerCase()) === -1) r.email = ""; });
+    return addEmailsToRows(list, j.tenantEmails).filter(r => r.name || r.phone || r.email);
+  }
+  return addEmailsToRows(splitTenants(j.tenants), j.tenantEmails);
+}
+function tenantsNeedCheck(j){
+  // true when the rows were worked out from old free text (shown to Lex until he saves)
+  return !!String(j.tenants||"").trim() && !(Array.isArray(j.tenantList) && tenantsText(j.tenantList) === String(j.tenants||"").trim());
+}
+
+// ---------------------------------------------------------------- saved contacts for "Copy to" (13 Oct, tracker item 27)
+// state.contacts = [{name, email, client}] saved in this browser and on the Sheet's Contacts tab.
+// Ticking contacts fills the job's Copy to (agentEmail), which the process emails read.
+const LS_CONTACTS = "wps_job_log_contacts_v1";
+const SEED_CONTACTS = [
+  { name:"Emmanuel Sarpong", email:"esarpong@winkworth.co.uk", client:"Winkworth - Bow" },
+  { name:"Property management (Riley)", email:"bowpropman@winkworth.co.uk", client:"Winkworth - Bow" },
+  { name:"Pre-tenancy", email:"pretenancy@movelettings.co.uk", client:"Move Lettings" },
+  { name:"Property management", email:"propertymanagement@movelettings.co.uk", client:"Move Lettings" },
+  { name:"Josh", email:"josh@jagspropertygroup.com", client:"JAGS Property Group" },
+  { name:"Aran", email:"aran@jagspropertygroup.com", client:"JAGS Property Group" },
+  { name:"Jamal Gormati", email:"jamal.gormati@mcqueens.london", client:"McQueens" },
+  { name:"Jacquie Mathieson", email:"jacquie_mathieson@sky.com", client:"Jacquie Mathieson" },
+  { name:"Dilshan Wijesinghe", email:"shan311277@gmail.com", client:"DIlshan Wijesinghe" }
+];
+function normalizeContacts(arr){
+  if (!Array.isArray(arr)) return null;
+  const seen = {};
+  return arr.map(c => ({ name:String(c.name||"").trim(), email:cleanEmails(c.email), client:String(c.client||"").trim() }))
+    .filter(c => c.email && c.email.indexOf(",") === -1 && !seen[c.email.toLowerCase()] && (seen[c.email.toLowerCase()] = true));
+}
+function contactByEmail(e){ e = String(e||"").toLowerCase(); return state.contacts.find(c => c.email.toLowerCase() === e); }
+function fillContactsFromData(){
+  // any Copy to address or client email not yet in the list is added, so nothing used before is missing
+  let added = false;
+  const add = (email, client, name) => { cleanEmails(email).split(", ").filter(Boolean).forEach(e => {
+    if (!contactByEmail(e)){ state.contacts.push({ name:name||"", email:e, client:client||"" }); added = true; } }); };
+  state.clients.forEach(c => add(c.contactEmail, c.name, c.contactName));
+  state.jobs.forEach(j => add(j.agentEmail, j.client, ""));
+  return added;
+}
+function saveContacts(){ lsSet(LS_CONTACTS, JSON.stringify(state.contacts)); markLocalChange(); }
+function contactsToRows(){
+  return [["Name","Email","Client","Data (do not edit)"]].concat(state.contacts.map(c => [c.name, c.email, c.client, JSON.stringify(c)]));
+}
+
 function reminderUrl(j){
   const c = windowClose(j);
   const when = c ? c.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}) : "[date]";
@@ -991,9 +1143,7 @@ function captureFormValues(){
   setIf('postcode','f_postcode');
   setIf('bedrooms','f_bedrooms');
   setIf('extraAreas','f_extraAreas');
-  setIf('tenants','f_tenants');
-  setIf('tenantEmails','f_tenantEmails');
-  setIf('agentEmail','f_agentEmail');
+  if (f.tenantRows) f.tenantRows = f.tenantRows.map((t,i) => ({ name: grab('t_name_'+i) ?? t.name, phone: grab('t_phone_'+i) ?? t.phone, email: grab('t_email_'+i) ?? t.email }));
   setIf('notes','f_notes');
   setIf('invoice','f_invoice');
   setIf('invoiceNo','f_invoiceNo');
@@ -1063,13 +1213,19 @@ function submitForm(){
     bedrooms: g("f_bedrooms").value,
     extraAreas: g("f_extraAreas").value,
     propertyType: g("f_propertyType").value,
-    tenants: g("f_tenants").value,
-    tenantEmails: cleanEmails(g("f_tenantEmails").value),
-    agentEmail: cleanEmails(g("f_agentEmail").value),
+    // tenant rows and Copy to ticks (13 Oct); the text fields are filled from them
+    tenantList: [], tenants: "", tenantEmails: "", tenantPhones: "",
+    agentEmail: cleanEmails((state.editing.copyTo||[]).join(", ")),
     notes: g("f_notes").value,
     invoice: g("f_invoice").value,
     invoiceNo: g("f_invoiceNo").value.trim(),
   };
+  captureFormValues();
+  const rows = (state.editing.tenantRows||[]).map(t => ({ name:t.name.trim(), phone:t.phone.trim(), email:(cleanEmails(t.email).split(", ")[0]||"") })).filter(t => t.name || t.phone || t.email);
+  const badEmail = (state.editing.tenantRows||[]).find(t => t.email.trim() && !cleanEmails(t.email));
+  if (badEmail){ alert("This tenant email doesn't look right: "+badEmail.email.trim()+"\n\nFix it or clear it, then save."); return; }
+  job.tenantList = rows; job.tenants = tenantsText(rows); job.tenantEmails = tenantEmailsText(rows); job.tenantPhones = tenantPhonesText(rows);
+  if (state.editing.tenantsFromText) job.tenantsOriginal = state.editing.tenantsFromText;   // the old free text is kept in the data, nothing lost
   const idx = state.jobs.findIndex(x=>x.id===job.id);
   const prev = idx>=0 ? state.jobs[idx] : {};
   if (job.invoice && job.invoice!==prev.invoice){ if (job.invoice==="invoiced" && !prev.invoicedAt) job.invoicedAt = new Date().toISOString(); if (job.invoice==="paid") job.paidAt = new Date().toISOString(); }
@@ -1085,13 +1241,15 @@ function submitForm(){
 }
 
 function deleteJob(id){
-  if (!confirm("Delete this job? This can't be undone.")) return;
   const job = state.jobs.find(j=>j.id===id);
+  if (!job) return false;
+  if (!confirm("Delete "+(job.jobNo||"this job")+(job.address ? " ("+job.address+")" : "")+"?\n\nIt's removed from the Job Log, the Google Sheet and the calendar. This can't be undone. Archive keeps it instead.")) return false;
   deleteJobCalendarEvent(job);
   mergeJobNoHigh();   // remember its number so it's never reused
   state.jobs = state.jobs.filter(j=>j.id!==id);
   saveJobs();
   render();
+  return true;
 }
 
 function cycleStatus(id){
@@ -2135,12 +2293,114 @@ function renderAgentContactPanel(f){
   </div>`;
 }
 
+function ensureFormLists(f){
+  if (!f.tenantRows){
+    f.tenantRows = tenantRowsFor(f);
+    f.tenantsFromText = tenantsNeedCheck(f) ? String(f.tenants||"") : "";
+    if (!f.tenantRows.length) f.tenantRows.push({ name:"", phone:"", email:"" });
+  }
+  if (!f.copyTo) f.copyTo = cleanEmails(f.agentEmail).split(", ").filter(Boolean);
+}
+function renderTenantRows(f){
+  const rows = f.tenantRows;
+  return `<div class="field wide tenant-block">
+    <div class="tb-head"><span>Tenants</span><span class="field-hint">Name, phone and email for each tenant. Emails get the 7-day reminder.</span></div>
+    ${f.tenantsFromText ? `<div class="tb-check">Split from the old text: <span class="tb-orig">${esc(f.tenantsFromText)}</span>. Check the rows, then save.</div>` : ""}
+    ${rows.map((t,i)=>`<div class="tenant-row">
+      <span class="tr-num">${i+1}</span>
+      <input type="text" id="t_name_${i}" value="${esc(t.name)}" placeholder="Name" aria-label="Tenant ${i+1} name" />
+      <input type="tel" id="t_phone_${i}" value="${esc(t.phone)}" placeholder="Phone" aria-label="Tenant ${i+1} phone" />
+      <input type="email" id="t_email_${i}" value="${esc(t.email)}" placeholder="Email" aria-label="Tenant ${i+1} email" />
+      <button type="button" class="icon-btn tr-x" title="Remove this tenant" onclick="removeTenantRow(${i})">✕</button>
+    </div>`).join("")}
+    ${rows.length < MAX_TENANTS ? `<button type="button" class="btn-text" onclick="addTenantRow()">+ Add tenant</button>` : `<span class="field-hint">Up to ${MAX_TENANTS} tenants.</span>`}
+  </div>`;
+}
+function renderCopyToPicker(f){
+  const ticked = f.copyTo.map(e=>e.toLowerCase());
+  const isT = c => ticked.indexOf(c.email.toLowerCase()) !== -1;
+  const own = state.contacts.filter(c => f.client && c.client === f.client);
+  const others = state.contacts.filter(c => !(f.client && c.client === f.client))
+    .sort((a,b)=> (a.client||"~").localeCompare(b.client||"~") || (a.name||a.email).localeCompare(b.name||b.email));
+  const extra = f.copyTo.filter(e => !contactByEmail(e));   // typed before contacts existed
+  const box = c => `<label class="ct-item${isT(c)?" on":""}">
+      <input type="checkbox" ${isT(c)?"checked":""} onchange="toggleCopyTo('${esc(c.email)}')" />
+      <span class="ct-name">${esc(c.name||c.email)}</span>${c.name ? `<span class="ct-mail">${esc(c.email)}</span>` : ""}
+      ${f.manageContacts ? `<button type="button" class="ct-del" title="Remove from saved contacts" onclick="event.preventDefault(); removeContact('${esc(c.email)}')">✕</button>` : ""}
+    </label>`;
+  const clientEmail = ((clientByName(f.client)||{}).contactEmail)||"";
+  const othersOpen = others.some(isT) || !own.length;
+  return `<div class="field wide copyto-block">
+    <div class="tb-head"><span>Copy to (agent / landlord)</span><span class="field-hint">Tick who gets the amendments, signed and deemed agreed emails.</span></div>
+    ${own.length ? `<div class="ct-group"><div class="ct-label">${esc(f.client)}</div>${own.map(box).join("")}</div>` : ""}
+    ${others.length ? `<details class="ct-group ct-others"${othersOpen?" open":""}><summary class="ct-label">${own.length ? "Other contacts" : "Saved contacts"} (${others.length})</summary>${others.map(box).join("")}</details>` : ""}
+    ${extra.map(e=>`<label class="ct-item on"><input type="checkbox" checked onchange="toggleCopyTo('${esc(e)}')" /><span class="ct-name">${esc(e)}</span></label>`).join("")}
+    <div class="ct-status">${f.copyTo.length ? "Copy to: "+esc(f.copyTo.join(", ")) : (clientEmail ? "None ticked: emails go to the client's email ("+esc(clientEmail)+")." : "None ticked and no client email saved: process emails will have no address.")}</div>
+    ${f.addingContact ? `<div class="ct-add">
+        <input type="text" id="nc_name" placeholder="Name" />
+        <input type="email" id="nc_email" placeholder="Email" />
+        <button type="button" class="btn btn-coral btn-sm" onclick="addContactFromForm()">Add and tick</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="setFormFlag('addingContact', false)">Cancel</button>
+      </div>` : `<div class="ct-actions"><button type="button" class="btn-text" onclick="setFormFlag('addingContact', true)">+ Add contact</button>
+        <button type="button" class="btn-text" onclick="setFormFlag('manageContacts', ${!f.manageContacts})">${f.manageContacts ? "Done" : "Remove contacts"}</button></div>`}
+  </div>`;
+}
+function setFormFlag(k, v){ captureFormValues(); state.editing[k] = v; render(); }
+function addTenantRow(){
+  captureFormValues();
+  const r = state.editing.tenantRows;
+  if (r.length < MAX_TENANTS) r.push({ name:"", phone:"", email:"" });
+  render();
+  const el = document.getElementById("t_name_"+(r.length-1)); if (el) el.focus();
+}
+function removeTenantRow(i){
+  captureFormValues();
+  const r = state.editing.tenantRows;
+  r.splice(i,1);
+  if (!r.length) r.push({ name:"", phone:"", email:"" });
+  render();
+}
+function toggleCopyTo(email){
+  captureFormValues();
+  const f = state.editing, lo = email.toLowerCase();
+  const i = f.copyTo.findIndex(e => e.toLowerCase() === lo);
+  if (i === -1) f.copyTo.push(email); else f.copyTo.splice(i,1);
+  render();
+}
+function addContactFromForm(){
+  captureFormValues();
+  const f = state.editing;
+  const name = document.getElementById("nc_name").value.trim();
+  const email = cleanEmails(document.getElementById("nc_email").value).split(", ")[0] || "";
+  if (!email){ alert("Type a valid email address."); return; }
+  const have = contactByEmail(email);
+  if (have){ if (name) have.name = name; } else state.contacts.push({ name, email, client: f.client || "" });
+  saveContacts();
+  if (!f.copyTo.some(e => e.toLowerCase() === email.toLowerCase())) f.copyTo.push(email);
+  f.addingContact = false;
+  render();
+}
+function removeContact(email){
+  const c = contactByEmail(email);
+  if (!c || !confirm("Remove "+(c.name ? c.name+" ("+c.email+")" : c.email)+" from saved contacts?\n\nJobs that already copy to this address keep it.")) return;
+  captureFormValues();
+  state.contacts = state.contacts.filter(x => x !== c);
+  saveContacts();
+  render();
+}
+function deleteJobFromForm(){
+  const id = state.editing && state.editing.id;
+  if (!id) return;
+  if (deleteJob(id)){ state.fromQueueId = null; state.editing = null; render(); }
+}
+
 function renderForm(){
   const f = state.editing;
+  ensureFormLists(f);
   const isNew = !state.jobs.some(j=>j.id===f.id);
   return `<div class="form-card">
     <h3>${isNew ? "New job" : "Edit job"}</h3>
-    ${helpBox(`Paste the agent's booking email into the box and click <b>Extract job details</b>, or fill the fields by hand. Always check what Extract fills in. The job number fills itself. <b>Tenant emails</b> are used for the 7-day reminder. Click <b>${isNew ? "Save job" : "Save changes"}</b> at the bottom when done.`)}
+    ${helpBox(`Paste the agent's booking email into the box and click <b>Extract job details</b>, or fill the fields by hand. Always check what Extract fills in. The job number fills itself. Add each tenant on their own row; their emails get the 7-day reminder. Tick who the report emails are copied to. Click <b>${isNew ? "Save job" : "Save changes"}</b> at the bottom when done.`)}
 
     <div class="extract-box">
       <textarea id="extractRaw" placeholder="Paste a works-order email here and click Extract — it'll try to pull the date and address/postcode into the fields below."></textarea>
@@ -2240,17 +2500,8 @@ function renderForm(){
         <input type="text" id="f_postcode" value="${esc(f.postcode)}" placeholder="e.g. E3 2UE" />
       </label>
 
-      <label class="field wide">Tenant name(s) / contact
-        <input type="text" id="f_tenants" value="${esc(f.tenants)}" placeholder="Who to liaise with for access" />
-      </label>
-      <label class="field wide">Tenant emails
-        <input type="text" id="f_tenantEmails" value="${esc(f.tenantEmails||"")}" placeholder="e.g. jo@gmail.com, sam@outlook.com" />
-        <span class="field-hint">Separate two tenants with a comma. Used for the 7-day reminder.</span>
-      </label>
-      <label class="field wide">Copy to (agent / landlord)
-        <input type="text" id="f_agentEmail" value="${esc(f.agentEmail||"")}" placeholder="${esc(((state.clients.find(c=>c.name===f.client)||{}).contactEmail)||"e.g. manny@winkworth.co.uk")}" />
-        <span class="field-hint">Gets the amendments, signed and deemed agreed emails. Agent and/or landlord, separated by a comma. Blank = the client's email.</span>
-      </label>
+      ${renderTenantRows(f)}
+      ${renderCopyToPicker(f)}
 
       <label class="field wide">Notes
         <textarea id="f_notes" placeholder="Access details, anything else worth flagging">${esc(f.notes)}</textarea>
@@ -2258,6 +2509,7 @@ function renderForm(){
     </div>
 
     <div class="form-actions">
+      ${isNew ? "" : `<button class="btn btn-danger" onclick="deleteJobFromForm()"${tip("Delete this job and its calendar event (asks first, can't be undone)")}>Delete job</button><span class="fa-gap"></span>`}
       <button class="btn btn-ghost" onclick="closeForm()"${tip("Close without saving")}>Cancel</button>
       <button class="btn btn-coral" onclick="submitForm()"${hint("Saves the job, and puts it on the calendar if connected")}>${isNew ? "Save job" : "Save changes"}</button>
     </div>
