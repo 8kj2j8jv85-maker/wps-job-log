@@ -137,6 +137,16 @@
   .d-sect{ margin:2px 0 6px; font-size:12.5px; font-weight:600; color:var(--coral-dark); letter-spacing:.02em; }
   .d-mv{ white-space:nowrap; border:1px solid var(--coral); background:#fff; color:var(--coral-dark); border-radius:6px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; }
   .d-mv:hover{ background:var(--coral-bg); }
+  .d-acts{ display:inline-flex; gap:6px; flex-wrap:wrap; }
+  .rr-box{ margin:4px 0 10px; padding:10px 12px; border:1px solid #E3B5A8; border-radius:8px; background:#FFF8F5; font-size:13px; }
+  .rr-box .rr-t{ font-weight:600; color:var(--coral-dark); margin-bottom:6px; }
+  .rr-box .rr-f{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:6px 0; }
+  .rr-box label{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--stone); }
+  .rr-box input[type=date], .rr-box input[type=time]{ font:inherit; padding:5px 7px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); }
+  .rr-box .rr-chk{ flex-direction:row; align-items:center; gap:6px; color:var(--ink); font-size:13px; margin:4px 0 8px; }
+  .rr-box .rr-b{ display:flex; gap:8px; flex-wrap:wrap; }
+  .rr-warn{ color:#B42318; font-size:12px; margin-top:4px; }
+  .rr-tag{ white-space:nowrap; font-size:11.5px; color:var(--coral-dark); background:var(--coral-bg); border-radius:5px; padding:2px 7px; }
   .d-ghead{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); padding:0 2px 2px; border-bottom:2px solid var(--line); margin-bottom:-2px; }
   .d-ghead.d-g-todo{ border-color:var(--coral); } .d-ghead.d-g-wait{ border-color:var(--peri); } .d-ghead.d-g-money{ border-color:var(--brand); } .d-ghead.d-g-perf{ border-color:#2E6B45; }
   .d-tile.zero{ opacity:.55; } .d-tile.zero:hover{ opacity:1; }
@@ -1233,7 +1243,10 @@ function submitForm(){
   if (idx>=0) state.jobs[idx] = merged; else state.jobs.push(merged);
   const saved = merged;
   setJobStatus(saved, saved.status);
+  let rrOffer = false;
+  if (prev.rearrangePending && saved.date){ delete saved.rearrangePending; rrOffer = true; }
   saveJobs();
+  if (rrOffer) setTimeout(() => showActionBar((saved.jobNo||"Job")+" new date saved.", "Write confirmation email", () => window.open(rearrangeEmailUrl(saved, "confirm"), "_blank", "noopener")), 0);
   if (state.fromQueueId){ markQueueDone(state.fromQueueId, "added"); state.fromQueueId = null; }
   state.editing = null;
   render();
@@ -1296,6 +1309,97 @@ function markVisited(id){
   saveJobs();
   render();
   showUndo(`${j.jobNo || "Job"} marked visited (Processing)`, before);
+}
+
+// ---------------------------------------------------------------- rearrange a missed visit (13 Oct)
+// Reports due rows (Booked past their date, or Processing) get a Rearrange button for visits that didn't
+// happen. New date known: job back to Booked on the new date, calendar event moved, confirmation email.
+// Not known: date and time cleared so it shows in Times to agree, calendar event removed, email asking
+// for a new date. A note goes on the job either way. Emails open in Gmail; nothing is sent from here.
+const RR_TYPE_WORDS = { ICI:"check-in", CO:"check-out", MTI:"mid-term inspection", SOC:"schedule of condition", CLN:"clean check" };
+const RR_MIDTERM_CC = "bowpropman@winkworth.co.uk";
+function rrLongDay(iso){ return iso ? new Date(iso+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}) : ""; }
+function rrShortDay(iso){ return iso ? new Date(iso+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","") : ""; }
+function rrTenantNames(j){
+  const n = (j.tenantList||[]).map(t => (t.name||"").trim()).filter(Boolean);
+  if (!n.length) return "[tenant name(s)]";
+  return n.length === 1 ? n[0] : n.slice(0,-1).join(", ")+" and "+n[n.length-1];
+}
+function rearrangeEmailUrl(j, kind, missedIso){
+  const tm = typeMeta(j.type), word = RR_TYPE_WORDS[j.type] || tm.label.toLowerCase();
+  const addr = fullAddress(j) || "[full address]", mid = j.type === "MTI";
+  const wa = "https://wa.me/447541345053?text="+encodeURIComponent("Hi, about "+(j.jobNo||"")+" at "+(j.address||""));
+  let su, body;
+  if (kind === "confirm"){
+    const when = rrLongDay(j.date) + (j.time ? " at "+j.time : "");
+    su = tm.label+" - "+addr+" - new appointment";
+    body = "Dear "+rrTenantNames(j)+",\n\nThank you. Your "+word+" at\n\n"+addr+"\n\nhas been rearranged to "+when+".\n\n"
+      + (mid ? "The inspection usually takes less than 15 minutes. If you won't be present, please reply to confirm you're happy for us to carry out the inspection using the access keys.\n\n" : "")
+      + "If anything changes, reply to this email, call 07541 345053, or message us on WhatsApp: "+wa+"\n\nKind regards,";
+  } else {
+    su = tm.label+" - "+addr+" - new date needed";
+    body = "Dear "+rrTenantNames(j)+",\n\nWe were unable to carry out the "+word+" at\n\n"+addr+"\n\n"+(missedIso ? "on "+rrLongDay(missedIso)+", so we" : "so we")+" need to arrange a new date.\n\n"
+      + "Please reply with a few days and times that suit you over the next two weeks.\n\n"
+      + (mid ? "The inspection usually takes less than 15 minutes. If you would rather not be present, let us know and we can arrange access in advance.\n\n" : "")
+      + "If you have any questions, reply to this email, call 07541 345053, or message us on WhatsApp: "+wa+"\n\nKind regards,";
+  }
+  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
+    + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
+    + (mid ? "&cc="+encodeURIComponent(RR_MIDTERM_CC) : "")
+    + "&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
+}
+function rearrangeBox(j){
+  if (state.rearrangeId !== j.id) return "";
+  const missed = j.date ? rrShortDay(j.date)+(j.time ? " "+j.time : "") : "no date";
+  return `<div class="rr-box" id="rr_box">
+    <div class="rr-t">Rearrange ${esc(j.jobNo||"")} (visit ${esc(missed)} didn't happen)</div>
+    <div>New date known? Enter it. Not known yet? Leave both blank and it goes to Times to agree.</div>
+    <div class="rr-f"><label>New date<input type="date" id="rr_date" min="${isoToday(0)}"></label><label>Time<input type="time" id="rr_time"></label></div>
+    <label class="rr-chk"><input type="checkbox" id="rr_email" checked> Open an email to the tenant in Gmail${j.type==="MTI" ? " (CC "+RR_MIDTERM_CC+")" : ""}</label>
+    ${j.tenantEmails ? "" : `<div class="rr-warn">No tenant email on this job: the email opens with To blank.</div>`}
+    <div class="rr-b"><button class="btn btn-coral btn-sm" onclick="saveRearrange('${j.id}')">Save</button><button class="btn btn-ghost btn-sm" onclick="closeRearrange()">Cancel</button></div>
+  </div>`;
+}
+function openRearrange(id){ state.rearrangeId = (state.rearrangeId === id) ? null : id; render(); const b = document.getElementById("rr_box"); if (b && b.scrollIntoView) b.scrollIntoView({block:"nearest"}); }
+function closeRearrange(){ state.rearrangeId = null; render(); }
+function saveRearrange(id){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  const newDate = (document.getElementById("rr_date")||{}).value || "";
+  const newTime = (document.getElementById("rr_time")||{}).value || "";
+  const wantEmail = !!(document.getElementById("rr_email")||{}).checked;
+  if (newTime && !newDate){ alert("Add the new date as well as the time, or clear the time."); return; }
+  if (newDate && newDate < isoToday(0)){ alert("The new date is in the past. Pick today or later."); return; }
+  const missedIso = j.date || "", missedTxt = missedIso ? rrShortDay(missedIso)+(j.time ? " "+j.time : "") : "no date";
+  const today = new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  const line = "Rearranged "+today+": visit "+missedTxt+" didn't happen. "+(newDate ? "New date "+rrShortDay(newDate)+(newTime ? " "+newTime : "")+"." : "New date to agree.");
+  j.notes = j.notes ? line+"\n"+j.notes : line;
+  j.rearranges = (j.rearranges||[]).concat([{ at:new Date().toISOString(), missedDate:missedIso, missedTime:j.time||"", newDate, newTime }]);
+  setJobStatus(j, "booked");
+  j.date = newDate; j.time = newTime;
+  let calMsg = "";
+  if (newDate){
+    delete j.rearrangePending;
+    if (state.gcalConnected) syncJobToCalendar(j); else calMsg = " Calendar not connected, so the event wasn't moved.";
+  } else {
+    j.rearrangePending = true;
+    if (state.gcalConnected && j.gcalEventId){ deleteJobCalendarEvent({ gcalEventId: j.gcalEventId }); delete j.gcalEventId; }
+    else if (j.gcalEventId) calMsg = " Calendar not connected, so the missed date is still on it.";
+  }
+  saveJobs();
+  state.rearrangeId = null;
+  if (wantEmail) window.open(rearrangeEmailUrl(j, newDate ? "confirm" : "ask", missedIso), "_blank", "noopener");
+  render();
+  showActionBar((j.jobNo||"Job")+(newDate ? " rearranged to "+rrShortDay(newDate)+(newTime ? " "+newTime : "") : " moved to Times to agree")+"."+calMsg);
+}
+// One-off bar like the undo bar, with an optional button (13 Oct)
+function showActionBar(msg, btnLabel, onBtn){
+  let bar = document.getElementById("undo-bar");
+  if (!bar){ bar = document.createElement("div"); bar.id = "undo-bar"; document.body.appendChild(bar); }
+  undoSnap = null; window._actionBarFn = onBtn || null;
+  bar.innerHTML = `<span>${esc(msg)}</span>${btnLabel ? `<button onclick="(window._actionBarFn||function(){})();hideUndo()">${esc(btnLabel)}</button>` : ""}<button class="undo-x" onclick="hideUndo()" aria-label="Close">✕</button>`;
+  bar.classList.add("show");
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndo, btnLabel ? 20000 : 8000);
 }
 
 function cycleInvoice(id){
@@ -1908,6 +2012,7 @@ function windowRow(x, now){
     <div class="sub">${started} · ${line}</div>${rem}</div>
     <span class="due ${cls}" style="white-space:nowrap">${tag}</span></div>`;
 }
+function rrBtn(j){ return `<button class="d-mv" onclick="openRearrange('${j.id}')"${tip("Visit didn't happen. Set a new date, or send it to Times to agree, and open an email to the tenant.")}>Rearrange</button>`; }
 function cRow(j, opts){
   opts = opts || {};
   const sm = statusMeta(j.status), tm = typeMeta(j.type), di = opts.due ? dueInfo(j) : null;
@@ -2012,10 +2117,10 @@ function renderToday(){
   switch (panel){
     case "due": title = "Reports due";
       body = (unconfirmed.length ? `<div class="d-sect">Visit time passed, still at Booked (${unconfirmed.length})</div>`
-          + rows(unconfirmed, x => cRow(x.j, {extra: `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>`}), "")
-          + note("If the report has already gone out, click the job and set its Status. Not visited? Change the date.")
+          + rows(unconfirmed, x => cRow(x.j, {extra: `<span class="d-acts"><button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${rrBtn(x.j)}</span>`}) + rearrangeBox(x.j), "")
+          + note("If the report has already gone out, click the job and set its Status. Not visited? Press Rearrange.")
           + `<div class="d-sect" style="margin-top:14px">Reports to write (${due.length})</div>` : "")
-        + rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;
+        + rows(due, x => cRow(x.j, {due:true, extra: x.j.status==="processing" ? `<span class="d-acts">${rrBtn(x.j)}</span>` : ""}) + rearrangeBox(x.j), "No reports waiting to be written."); break;
     case "book": title = "New bookings";
       body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" booking"+(queueN===1?"":"s")+" waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
     case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
@@ -2023,7 +2128,7 @@ function renderToday(){
       + (am.loaded ? "" : note("Load amendments so closed windows can move to Deemed agreed."))
       + (sentNoDate ? note(sentNoDate+" check-in report"+(sentNoDate===1?"":"s")+" marked Sent before dates were recorded, so not shown.") : ""); break;
     case "amend": title = "Amendments"; body = renderAmendCard(true); break;
-    case "times": title = "Times to agree"; body = rows(timesToAgree, j => cRow(j, {noTime:true}), "Every booked job has a time.") + note("Booked jobs with no time set. Add the time once the tenant confirms."); break;
+    case "times": title = "Times to agree"; body = rows(timesToAgree, j => cRow(j, {noTime:true, extra: j.rearrangePending ? `<span class="rr-tag"${tip("Rearranged after a missed visit. Waiting on the tenant for a new date. Open the job to set it.")}>Rearranged</span>` : ""}), "Every booked job has a time.") + note("Booked jobs with no time set. Add the time once the tenant confirms."); break;
     case "photos": title = "Photos not done"; body = rows(photosMissing, j => cRow(j), "Every visited job has its photo link.") + note("Visited in the last 30 days, report not sent, no photo link saved. Run the Photo Tool for these."); break;
     case "inv": title = "To invoice"; body = rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
     case "paid": title = "Awaiting payment"; body = rows(unpaid, j => cRow(j, {extra: j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}</span>` : ""}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
@@ -2575,7 +2680,7 @@ window.addEventListener("storage", function(e){
 // open or something is being typed, so nothing in progress is lost.
 let lastRefreshDay = isoToday(0);
 function autoRefresh(){
-  if (document.hidden || state.editing) return;
+  if (document.hidden || state.editing || state.rearrangeId) return;   // not while the Rearrange panel is open
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
