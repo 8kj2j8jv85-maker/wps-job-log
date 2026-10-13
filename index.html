@@ -275,6 +275,7 @@
   .qk-new{ background:var(--coral-bg); color:var(--coral-dark); }
   .qk-update{ background:var(--sky); color:var(--brand); }
   .qk-cancel{ background:var(--stone-bg); color:var(--stone); }
+  .qk-invoice{ background:#E6F2EA; color:#2E6B45; }
   .qaddr{ margin-top:6px; font-size:14.5px; }
   .qmeta{ margin-top:3px; font-size:13.5px; color:var(--ink-soft); }
   .qline{ margin-top:5px; font-size:13px; }
@@ -1768,7 +1769,7 @@ function jobFromItem(it){
   return j;
 }
 function qAdd(id){
-  const it = queueItem(id); if (!it) return;
+  const it = queueItem(id); if (!it || it.kind==="invoice") return;
   const dup = findDuplicate(it);
   if (dup && !confirm("Looks like this is already logged as "+dup.jobNo+" ("+formatDate(dup.date)+"). Add it anyway?")) return;
   const job = jobFromItem(it);
@@ -1779,7 +1780,7 @@ function qAdd(id){
   syncJobToCalendar(job);
 }
 function qEdit(id){
-  const it = queueItem(id); if (!it) return;
+  const it = queueItem(id); if (!it || it.kind==="invoice") return;
   if (it.kind!=="new"){
     const m = findMatch(it);
     if (m){
@@ -1813,6 +1814,69 @@ function qApplyCancel(id){
   state.jobs = state.jobs.filter(j => j.id !== m.id);
   saveJobs(); markQueueDone(id,"cancelled"); render();
 }
+// ---- invoice queue items (13 Oct): Claude reads Tide's invoice emails and queues
+// { id, kind:"invoice", jobNo, invoiceNo, amount, client, sourceDate, sourceUrl, summary }
+function normJobNo(s){ return String(s||"").toUpperCase().replace(/\s+/g,""); }
+function invoiceJobs(it){ const n = normJobNo(it.jobNo); return n ? state.jobs.filter(j=>normJobNo(j.jobNo)===n) : []; }
+function invoiceState(it){
+  const hits = invoiceJobs(it);
+  if (!normJobNo(it.jobNo)) return { st:"nojob" };
+  if (!hits.length) return { st:"notfound" };
+  if (hits.length > 1) return { st:"dup", hits };
+  const j = hits[0];
+  const same = j.invoiceNo && String(j.invoiceNo).trim().toUpperCase()===String(it.invoiceNo||"").trim().toUpperCase();
+  if (same && (j.invoice==="invoiced" || j.invoice==="paid")) return { st:"done", j };
+  return { st:"ok", j, other: (j.invoiceNo && !same) ? j.invoiceNo : "" };
+}
+function emailDateIso(s){
+  if (!s) return new Date().toISOString();
+  const d = new Date(s);
+  return isNaN(d) ? new Date().toISOString() : d.toISOString();
+}
+function qMarkInvoiced(id){
+  const it = queueItem(id); if (!it) return;
+  const r = invoiceState(it);
+  if (r.st!=="ok") return;
+  const j = r.j;
+  if (r.other && !confirm(j.jobNo+" already has invoice number "+r.other+". Replace it with "+(it.invoiceNo||"(none)")+"?")) return;
+  const before = snapJob(j);
+  if (j.invoice!=="paid") j.invoice = "invoiced";   // a Paid job stays Paid
+  if (it.invoiceNo) j.invoiceNo = String(it.invoiceNo).trim();
+  j.invoicedAt = emailDateIso(it.sourceDate);
+  saveJobs(); markQueueDone(id,"invoiced"); render();
+  showUndo(j.invoice==="paid" ? `${j.jobNo} invoice no. saved (${it.invoiceNo||""})` : `${j.jobNo} marked Invoiced${it.invoiceNo ? " ("+it.invoiceNo+")" : ""}`, before);
+}
+function renderInvoiceCard(it){
+  const r = invoiceState(it);
+  let jobLine = "", warn = "", main = "";
+  if (r.st==="nojob") warn = `<div class="qwarn">No WPS job number in the email. Find the job and set it by hand.</div>`;
+  else if (r.st==="notfound") warn = `<div class="qwarn">Couldn't find <span class="mono">${esc(it.jobNo)}</span> in your log. Check the number on the invoice.</div>`;
+  else if (r.st==="dup") warn = `<div class="qwarn"><span class="mono">${esc(it.jobNo)}</span> is on ${r.hits.length} jobs in your log. Sort the duplicate first, then set it by hand.</div>`;
+  else {
+    const j = r.j;
+    jobLine = `<div class="qaddr">${esc([j.address,j.town,j.postcode].filter(Boolean).join(", "))||"Address not set"}</div>
+      <div class="qmeta">Invoice now: ${esc(invoiceMeta(j.invoice).label)}${j.invoiceNo ? " · "+esc(j.invoiceNo) : ""}</div>`;
+    if (r.st==="done") warn = `<div class="qline">Already recorded ✓</div>`;
+    else {
+      if (r.other) warn = `<div class="qwarn">This job already has invoice number <span class="mono">${esc(r.other)}</span>. Mark invoiced will ask before replacing it.</div>`;
+      main = j.invoice==="paid"
+        ? `<button class="btn btn-coral btn-sm" onclick="qMarkInvoiced('${esc(it.id)}')"${hint("Job is already Paid. Saves this invoice number on it; stays Paid.")}>Save invoice no.</button>`
+        : `<button class="btn btn-coral btn-sm" onclick="qMarkInvoiced('${esc(it.id)}')"${hint("Sets this job to Invoiced with this invoice number and the email's date")}>Mark invoiced</button>`;
+    }
+  }
+  const dismiss = r.st==="done"
+    ? `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Clears the card. Nothing changes.")}>Clear</button>`
+    : `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
+  return `<div class="qcard">
+    <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}<span>${esc(it.client)||"Client not clear"}</span></div>
+    ${jobLine}
+    ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
+    ${warn}
+    <div class="qsrc">Tide${it.sourceDate ? " · "+esc(isNaN(new Date(it.sourceDate)) ? it.sourceDate : new Date(it.sourceDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})) : ""}${emailLink(it) ? ` · <a href="${esc(emailLink(it))}" target="_blank" rel="noopener">Open email</a>` : ""}</div>
+    <div class="qactions">${main}${dismiss}</div>
+  </div>`;
+}
+
 function qReject(id){ markQueueDone(id,"rejected"); render(); }
 function qCloseTray(){ state.queueChecked=false; state.queueMsg=""; render(); }
 
@@ -1822,6 +1886,7 @@ function renderQueueTray(){
   const when = state.queueCheckedAt ? state.queueCheckedAt.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}) : "";
   const KIND = { new:["New booking","qk-new"], update:["Change to a booking","qk-update"], cancel:["Cancellation","qk-cancel"] };
   const cards = items.map(it=>{
+    if (it.kind==="invoice") return renderInvoiceCard(it);
     const k = KIND[it.kind] || KIND.new;
     const tm = typeMeta(it.type);
     const addr = [it.address,it.town,it.postcode].filter(Boolean).join(", ");
@@ -1858,11 +1923,11 @@ function renderQueueTray(){
     <div class="tray-head">
       <div>
         <h3>To review${items.length ? " ("+items.length+")" : ""}</h3>
-        <div class="tray-sub">${state.queueBusy ? "Checking Gmail…" : ("Bookings Claude found in your inbox"+(when ? " · checked "+when : ""))}</div>
+        <div class="tray-sub">${state.queueBusy ? "Checking Gmail…" : ("Bookings and Tide invoices Claude found in your inbox"+(when ? " · checked "+when : ""))}</div>
       </div>
       <button class="btn btn-text btn-sm" onclick="qCloseTray()"${tip("Hide this tray. Anything not handled shows again next check.")}>Hide</button>
     </div>
-    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b> or a <b>cancellation</b>. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click.`)}
+    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b>, a <b>cancellation</b> or an <b>invoice sent</b> from Tide. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click.`)}
     ${state.queueMsg ? `<div class="qwarn" style="margin-top:10px;">${esc(state.queueMsg)}</div>` : ""}
     ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing new to review ✓</div>` : ""}
     ${cards}
@@ -2162,7 +2227,7 @@ function renderToday(){
           + `<div class="d-sect" style="margin-top:14px">Reports to write (${due.length})</div>` : "")
         + rows(due, x => cRow(x.j, {due:true, extra: x.j.status==="processing" ? `<span class="d-acts">${rrBtn(x.j)}</span>` : ""}) + rearrangeBox(x.j), "No reports waiting to be written."); break;
     case "book": title = "New bookings";
-      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" booking"+(queueN===1?"":"s")+" waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
+      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" item"+(queueN===1?"":"s")+" (bookings or Tide invoices) waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
     case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
     case "win": title = "Comment windows (7 days from sent)"; body = rows(windows, x => windowRow(x, now), "No inventory & check-in windows open.")
       + (am.loaded ? "" : note("Load amendments so closed windows can move to Deemed agreed."))
