@@ -1382,7 +1382,10 @@ function saveRearrange(id){
     if (state.gcalConnected) syncJobToCalendar(j); else calMsg = " Calendar not connected, so the event wasn't moved.";
   } else {
     j.rearrangePending = true;
-    if (state.gcalConnected && j.gcalEventId){ deleteJobCalendarEvent({ gcalEventId: j.gcalEventId }); delete j.gcalEventId; }
+    if (state.gcalConnected && j.gcalEventId){
+      // Keep the event id until Google confirms the delete, so a failure can be retried.
+      deleteJobCalendarEvent({ gcalEventId: j.gcalEventId, jobNo: j.jobNo }, function(ok){ if (ok && j.gcalEventId){ delete j.gcalEventId; saveJobs(); } });
+    }
     else if (j.gcalEventId) calMsg = " Calendar not connected, so the missed date is still on it.";
   }
   saveJobs();
@@ -1550,13 +1553,24 @@ function syncJobToCalendar(job){
     });
   });
 }
-function deleteJobCalendarEvent(job){
-  if (!state.gcalConnected || !job || !job.gcalEventId) return;
+// Removes a job's calendar event. Google's answer is checked (13 Oct): 404/410 means it was already gone.
+// On any other failure a message says so, so a missed visit doesn't silently stay on the calendar.
+function deleteJobCalendarEvent(job, onDone){
+  if (!state.gcalConnected || !job || !job.gcalEventId){ if (onDone) onDone(false); return; }
+  const label = job.jobNo || "this job";
+  const fail = function(why){
+    console.error("Calendar delete failed", label, job.gcalEventId, why);
+    showActionBar("Couldn't remove the calendar event for "+label+" ("+why+"). Delete it in Google Calendar by hand.");
+    if (onDone) onDone(false);
+  };
   ensureGCalToken(function(){
     fetch("https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(GCAL_CALENDAR_ID)+"/events/"+job.gcalEventId, {
       method: "DELETE",
       headers: { "Authorization": "Bearer "+state.gcalToken }
-    }).catch(function(err){ console.error("Calendar delete failed", err); });
+    }).then(function(r){
+      if (r.ok || r.status === 404 || r.status === 410){ if (onDone) onDone(true); }
+      else fail("Google said "+r.status);
+    }).catch(function(err){ fail(String(err && err.message || err)); });
   });
 }
 
