@@ -1561,12 +1561,22 @@ function syncJobToCalendar(job){
     const base = "https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(GCAL_CALENDAR_ID)+"/events";
     const isUpdate = !!job.gcalEventId;
     const url = isUpdate ? base+"/"+job.gcalEventId : base;
+    // PATCH merges with the existing event, so an all-day event changed to a timed one kept its old
+    // "date" alongside the new "dateTime" and Google refused it (13 Oct). Clear the other kind explicitly.
+    if (isUpdate){
+      if (body.start.dateTime){ body.start.date = null; body.end.date = null; }
+      else { body.start.dateTime = null; body.end.dateTime = null; body.start.timeZone = null; body.end.timeZone = null; }
+    }
     fetch(url, {
       method: isUpdate ? "PATCH" : "POST",
       headers: { "Authorization": "Bearer "+state.gcalToken, "Content-Type": "application/json" },
       body: JSON.stringify(body)
-    }).then(function(r){
-      if (!r.ok){ throw new Error("Calendar API error "+r.status); }
+    }).then(async function(r){
+      if (!r.ok){
+        let why = "";
+        try { const e = await r.json(); why = (e && e.error && e.error.message) || ""; } catch(x){}
+        throw new Error("Google said "+r.status+(why ? ": "+why : ""));
+      }
       return r.json();
     }).then(function(data){
       if (data.id && job.gcalEventId !== data.id){
@@ -1576,7 +1586,7 @@ function syncJobToCalendar(job){
       }
     }).catch(function(err){
       console.error("Calendar sync failed", err);
-      alert("Couldn't sync this job to Google Calendar. Try again in a moment.");
+      alert("Couldn't update the calendar for "+(job.jobNo||"this job")+". Your change to the job is still kept in the Job Log.\n\n"+err.message);
     });
   });
 }
