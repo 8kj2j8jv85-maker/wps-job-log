@@ -12,7 +12,8 @@ def serve():
 SEED="""(()=>{ if(localStorage.getItem('__seeded')) return;
  localStorage.setItem('wps_standalone_jobs_v1', JSON.stringify(%s));
  localStorage.setItem('wps_standalone_clients_v1', JSON.stringify(%s));
- localStorage.setItem('__seeded','1'); })();""" % (json.dumps(DATA["jobs"]), json.dumps(DATA["clients"]))
+ localStorage.setItem('wps_job_log_contacts_v1', JSON.stringify(%s));
+ localStorage.setItem('__seeded','1'); })();""" % (json.dumps(DATA["jobs"]), json.dumps(DATA["clients"]), json.dumps(DATA["contacts"]))
 def route(r):
     u=r.request.url
     if u.startswith(f"http://localhost:{PORT}") or u.startswith("data:") or u.startswith("blob:"): return r.continue_()
@@ -33,7 +34,7 @@ class H:
         s.ctx.route("**/*",route)
         if seed: s.ctx.add_init_script(SEED)
         s.pg=s.ctx.new_page()
-        s.pg.clock.install(time="2026-10-13T08:45:00+01:00")
+        s.pg.clock.install(time=os.environ.get("CLOCK","2026-10-13T08:45:00+01:00"))
         s.errors=[]; s.dialogs=[]
         s.pg.on("console", lambda m: m.type=="error" and s.errors.append(m.text))
         s.pg.on("pageerror", lambda e: s.errors.append("PAGEERROR "+str(e)))
