@@ -80,15 +80,23 @@
    "town": "London",
    "postcode": "E3 9ZD",
    "client": "Example Lettings",
-   "tenants": "Chris Demo",
+   "tenants": "Chris Demo 07700 900222",
    "tenantEmails": "chris.demo@example.com",
-   "agentEmail": "",
+   "agentEmail": "alex@example.com",
    "notes": "",
    "invoice": "",
    "invoiceNo": "",
    "bedrooms": "2",
    "extraAreas": "",
    "propertyType": "Flat",
+   "tenantPhones": "07700 900222",
+   "tenantList": [
+    {
+     "name": "Chris Demo",
+     "phone": "07700 900222",
+     "email": "chris.demo@example.com"
+    }
+   ],
    "sentAt": "2026-10-07T18:00:00Z",
    "processingAt": "2026-10-07T15:00:00Z"
   },
@@ -126,8 +134,8 @@
    "town": "London",
    "postcode": "E3 9ZF",
    "client": "Example Lettings",
-   "tenants": "Lee Specimen",
-   "tenantEmails": "",
+   "tenants": "Lee Specimen 07700 900333",
+   "tenantEmails": "lee.specimen@example.com",
    "agentEmail": "",
    "notes": "",
    "invoice": "",
@@ -135,6 +143,14 @@
    "bedrooms": "2",
    "extraAreas": "",
    "propertyType": "Flat",
+   "tenantList": [
+    {
+     "name": "Lee Specimen",
+     "phone": "07700 900333",
+     "email": "lee.specimen@example.com"
+    }
+   ],
+   "photoLink": "https://photos.example.com/photos/WPS261006.E39ZF.zip",
    "processingAt": "2026-10-12T15:00:00Z"
   },
   {
@@ -193,14 +209,27 @@
    "postcode": "E3 9ZJ",
    "client": "Example Lettings",
    "tenants": "Alex Test 07700 900111",
-   "tenantEmails": "",
-   "agentEmail": "",
-   "notes": "",
+   "tenantEmails": "alex.test@example.com, jamie.test@example.com",
+   "agentEmail": "alex@example.com",
+   "notes": "Keys from the office from 9am.",
    "invoice": "",
    "invoiceNo": "",
    "bedrooms": "2",
    "extraAreas": "",
-   "propertyType": "Flat"
+   "propertyType": "Flat",
+   "tenantList": [
+    {
+     "name": "Alex Test",
+     "phone": "07700 900111",
+     "email": "alex.test@example.com"
+    },
+    {
+     "name": "Jamie Test",
+     "phone": "07700 900112",
+     "email": "jamie.test@example.com"
+    }
+   ],
+   "tenantPhones": "07700 900111, 07700 900112"
   },
   {
    "id": "job_WPS261009",
@@ -342,6 +371,28 @@
    "contactName": "",
    "contactPhone": "",
    "contactEmail": "office@example.org"
+  }
+ ],
+ "contacts": [
+  {
+   "name": "Alex Sample",
+   "email": "alex@example.com",
+   "client": "Example Lettings"
+  },
+  {
+   "name": "Example Lettings office",
+   "email": "lettings@example.com",
+   "client": "Example Lettings"
+  },
+  {
+   "name": "Sample Estates office",
+   "email": "office@example.org",
+   "client": "Sample Estates"
+  },
+  {
+   "name": "Dana Landlord",
+   "email": "dana.landlord@example.net",
+   "client": ""
   }
  ]
 }
