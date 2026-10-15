@@ -106,6 +106,8 @@
   .chip{ border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:999px; padding:5px 11px; font-size:12.5px; cursor:pointer; font-family:inherit; }
   .chip:hover{ border-color:var(--peri); background:var(--peri-bg); }
   .chip.on{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .area-find input{ flex:1; min-width:200px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:14px; }
+  .chip.hidden{ display:none; }
   .prow{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
   .kbd{ font-family:'IBM Plex Mono',Consolas,monospace; font-size:11px; background:var(--stone-bg); border-radius:4px; padding:1px 5px; }
 
@@ -318,7 +320,7 @@ const DEFAULT_AREAS = [
 const DEFAULT_SETTINGS = {
   gap: 30, size: 1440, quality: 76, sizeVersion: 2, portrait: "canvas", canvas: "#222222",
   wmpos: "br", wmsize: 100, wmtext: "Wellington Property Services", wmVersion: 2, coverSize: 2400,
-  base: "http://www.wellingtonparker.com/photos/", stripGps: true, flatFix: true, areasVersion: 3,
+  base: "http://www.wellingtonparker.com/photos/", stripGps: true, flatFix: true, areasVersion: 4,
   areas: DEFAULT_AREAS
 };
 
@@ -393,6 +395,18 @@ function loadSettings(){
     add("Exterior", null, "Front exterior");
     add("Bedroom", "Bedroom 1", null);
     S.settings.areasVersion = 3;
+    saveSettingsLS();
+  }
+  // 15 Oct: names added on the job used to go to the bottom of the list. Move each one (once) next to its kind,
+  // e.g. "Bedroom 1 (1st LHS)" after the other bedrooms. The rest of the list keeps its order.
+  if (Array.isArray(s.areas) && (s.areasVersion || 1) < 4){
+    const kind = a => a.toLowerCase().split(/[\s(]+/)[0];
+    S.settings.areas.filter(a => !DEFAULT_AREAS.includes(a)).forEach(a => {
+      const A = S.settings.areas;
+      if (!A.some(b => b !== a && kind(b) === kind(a))) return;   // nothing of its kind: leave it where Lex put it
+      A.splice(A.indexOf(a), 1); insertAreaInOrder(a);
+    });
+    S.settings.areasVersion = 4;
     saveSettingsLS();
   }
   try {
@@ -669,6 +683,7 @@ async function addFiles(fileList){
   }
   render();
   makeThumbs();
+  scheduleSave();
 }
 let heicLib = null;
 async function convertHeic(f){
@@ -979,13 +994,14 @@ function openPanel(id, keep){
         <button class="btn btn-ghost btn-sm" data-pact="skip">Remove / put back</button>
         <button class="btn btn-ghost btn-sm" data-pact="clearsel">Clear selection</button></div>` : `<div class="small muted" style="margin-top:6px">Tip: Shift-click another photo to select a run of photos, Ctrl-click to pick several &mdash; then rotate them all at once.</div>`}
       <div class="small muted" style="margin-top:4px">${isStart ? `This photo starts <b>${esc(cur)}</b>.` : (cur ? `Part of <b>${esc(cur)}</b>. Pick an area to start a new room here.` : "Pick the area this room starts with:")}</div>
-      <div class="chips">
-        ${S.settings.areas.map(a => `<button class="chip ${isStart && cur===a ? "on":""}" data-area="${esc(a)}">${esc(a)}</button>`).join("")}
-      </div>
-      <div class="prow">
-        <input id="customArea" placeholder="Other area, e.g. Bedroom 1 (1st LHS)" style="flex:1;min-width:220px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;font-family:inherit" />
-        <button class="btn btn-navy btn-sm" data-pact="custom">Set</button>
+      <div class="prow area-find">
+        <input id="areaFilter" type="search" autocomplete="off" enterkeyhint="done" placeholder="Type to find an area, or a new name (e.g. Bedroom 1 (1st LHS))" />
+        <button class="btn btn-navy btn-sm hidden" id="areaAdd" data-pact="custom"></button>
         ${isStart ? `<button class="btn btn-ghost btn-sm" data-pact="unmark" title="This photo goes back to belonging to the room before it">Remove room start</button>` : ""}
+      </div>
+      <div class="chips" id="areaChips">
+        ${S.settings.areas.map(a => `<button class="chip ${isStart && cur===a ? "on":""}" data-area="${esc(a)}">${esc(a)}</button>`).join("")}
+        <span class="muted small hidden" id="areaNone">No area matches &mdash; press Enter or the button to add it.</span>
       </div>
       <div class="prow">
         <button class="btn btn-ghost btn-sm" data-pact="rotL">&#8634; Rotate left</button>
@@ -1006,10 +1022,48 @@ function moveSel(d){
   const i = S.photos.findIndex(p => p.id === S.sel);
   const n = S.photos[i + d]; if (n) openPanel(n.id);
 }
+// Area finder (15 Oct, Lex 14 Oct): type to narrow the area bubbles; a name that isn't in the list can be
+// added from the same box. New names go next to their kind in the walk-round order (e.g. "Bedroom 1 (1st LHS)"
+// after the other bedrooms), not at the bottom of the list.
+function areaMatches(a, q){
+  q = q.trim().toLowerCase(); if (!q) return true;
+  const al = a.toLowerCase();
+  return q.split(/\s+/).every(w => al.includes(w));
+}
+function exactArea(q){ q = q.trim().toLowerCase(); return S.settings.areas.find(a => a.toLowerCase() === q) || ""; }
+function filterAreas(){
+  const inp = $("areaFilter"); if (!inp) return;
+  const q = inp.value;
+  let shown = 0;
+  document.querySelectorAll("#areaChips .chip").forEach(c => { const ok = areaMatches(c.dataset.area, q); c.classList.toggle("hidden", !ok); if (ok) shown++; });
+  const add = $("areaAdd"), t = q.trim();
+  const showAdd = t && !exactArea(t);
+  add.classList.toggle("hidden", !showAdd);
+  if (showAdd) add.textContent = `Add "${t}"`;
+  $("areaNone").classList.toggle("hidden", shown > 0 || !t);
+}
+// Enter in the box: exact name -> that area; one bubble left -> that one; none left -> add the typed name.
+// Several bubbles left -> nothing (tap the one you want), so a half-typed word never becomes a new area.
+function areaFromBox(){
+  const t = ($("areaFilter") || {}).value || ""; if (!t.trim()) return "";
+  const ex = exactArea(t); if (ex) return ex;
+  const vis = [...document.querySelectorAll("#areaChips .chip:not(.hidden)")];
+  if (vis.length === 1) return vis[0].dataset.area;
+  if (vis.length === 0) return t.trim();
+  return "";
+}
+function insertAreaInOrder(area){
+  const A = S.settings.areas;
+  const first = area.toLowerCase().split(/[\s(]+/)[0];
+  let at = -1;
+  A.forEach((a, i) => { if (a.toLowerCase().split(/[\s(]+/)[0] === first) at = i; });
+  if (at >= 0) A.splice(at + 1, 0, area); else A.push(area);
+}
 function setArea(id, area){
   area = (area||"").trim(); if (!area) return;
+  const ex = exactArea(area); if (ex) area = ex;
   S.areaStart[id] = area;
-  if (!S.settings.areas.includes(area)){ S.settings.areas.push(area); saveSettingsLS(); }
+  if (!S.settings.areas.includes(area)){ insertAreaInOrder(area); saveSettingsLS(); }
   render();
   // jump to the next photo so the next room can be marked quickly
   const i = S.photos.findIndex(p => p.id === id);
@@ -1271,6 +1325,7 @@ function wire(){
     S.photos.forEach(p => p.thumb && URL.revokeObjectURL(p.thumb));
     S.photos = []; S.breaks = new Set(); S.areaStart = {}; S.multi.clear(); S.meta = {}; S.manualBreaks = []; S.removedBreaks = [];
     $("loadMsg").classList.add("hidden"); $("heicMsg").classList.add("hidden");
+    clearWork(); workNote("");
     closePanel(); render();
   };
   $("btnAll").onclick = processAll;
@@ -1361,7 +1416,7 @@ function wire(){
     const p = S.photos.find(x => x.id === S.sel); if (!p) return;
     const a = b.dataset.pact;
     if (a === "close") closePanel();
-    if (a === "custom") setArea(p.id, $("customArea").value);
+    if (a === "custom") setArea(p.id, ($("areaFilter") || {}).value || "");
     if (a === "unmark"){ delete S.areaStart[p.id]; render(); }
     const targets = S.multi.size > 1 ? S.photos.filter(x => S.multi.has(x.id)) : [p];
     const turn = d => { targets.forEach(x => { x.rot = (x.rot + d) % 360; x.autoTurned = false; }); render(); };
@@ -1372,7 +1427,12 @@ function wire(){
     if (a === "skip"){ const v = !targets[0].skip; targets.forEach(x => x.skip = v); render(); }
     if (a === "split"){ splitAt(p.id); }
   });
-  $("panel").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "customArea"){ setArea(S.sel, e.target.value); } });
+  $("panel").addEventListener("keydown", e => {
+    if (e.target.id !== "areaFilter") return;
+    if (e.key === "Enter"){ e.preventDefault(); const a = areaFromBox(); if (a) setArea(S.sel, a); }
+    if (e.key === "Escape"){ if (e.target.value){ e.target.value = ""; filterAreas(); } else { e.target.blur(); } e.stopPropagation(); }
+  });
+  $("panel").addEventListener("input", e => { if (e.target.id === "areaFilter") filterAreas(); });
   document.addEventListener("keydown", e => {
     if (!S.sel || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
     const p = S.photos.find(x => x.id === S.sel);
@@ -1405,11 +1465,127 @@ $("lnkHelp").onclick = e => { e.preventDefault(); const on = !document.body.clas
 window.addEventListener("storage", e => { if (e.key === LS_HELP) applyHelp(); });
 applyHelp();
 
+
+// ============================================================ keep work when you leave the page (15 Oct, Lex 14 Oct)
+// The Photo Tool is its own page, so clicking Dashboard or Job Log used to throw away everything loaded.
+// Now the photos and everything done to them (job matches, splits, areas, rotations, removals) are kept in
+// this browser's storage (IndexedDB) as you go, and put back when you come back to the Photo Tool.
+// Start again (Clear) removes the saved copy too. Nothing leaves the computer.
+const WORK_DB = "wps_photo_work_v1";
+let workDb = null, workSaved = new Set(), workTimer = null, workBusy = false, workAgain = false, workFailed = false, workRestoring = false;
+function openWorkDb(){
+  if (workDb) return Promise.resolve(workDb);
+  return new Promise((res, rej) => {
+    let rq; try { rq = indexedDB.open(WORK_DB, 1); } catch(e){ rej(e); return; }
+    rq.onupgradeneeded = () => { const db = rq.result; db.createObjectStore("photos", { keyPath: "id" }); db.createObjectStore("state"); };
+    rq.onsuccess = () => { workDb = rq.result; res(workDb); };
+    rq.onerror = () => rej(rq.error);
+  });
+}
+function idbDone(tx){ return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error || new Error("aborted")); }); }
+function idbReq(r){ return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+function workState(){
+  const per = {};
+  S.photos.forEach(p => { per[p.id] = { rot: p.rot, skip: !!p.skip, autoTurned: !!p.autoTurned, portrait: !!p.portrait }; });
+  return { v: 1, savedAt: Date.now(), uidN, ids: S.photos.map(p => p.id), per,
+           breaks: [...S.breaks], areaStart: S.areaStart, meta: S.meta,
+           manualBreaks: S.manualBreaks || [], removedBreaks: S.removedBreaks || [] };
+}
+function scheduleSave(){
+  if (workRestoring) return;
+  clearTimeout(workTimer); workTimer = setTimeout(saveWork, 500);
+}
+async function saveWork(){
+  if (workRestoring) return;
+  if (workBusy){ workAgain = true; return; }
+  workBusy = true;
+  try {
+    const db = await openWorkDb();
+    // new photos first (one transaction per photo keeps memory down on big batches)
+    for (const p of S.photos.slice()){
+      if (workSaved.has(p.id)) continue;
+      const tx = db.transaction("photos", "readwrite");
+      tx.objectStore("photos").put({ id: p.id, file: p.file, name: p.name, time: p.time, hasDate: p.hasDate, exif: p.exif, heic: !!p.heic, lat: p.lat, lon: p.lon });
+      await idbDone(tx);
+      workSaved.add(p.id);
+    }
+    const tx = db.transaction(["photos", "state"], "readwrite");
+    const keep = new Set(S.photos.map(p => p.id));
+    for (const id of [...workSaved]) if (!keep.has(id)){ tx.objectStore("photos").delete(id); workSaved.delete(id); }
+    tx.objectStore("state").put(workState(), "work");
+    await idbDone(tx);
+    if (workFailed){ workFailed = false; workNote(""); }
+  } catch(e){
+    console.warn("couldn't save work in progress", e);
+    if (!workFailed){ workFailed = true;
+      workNote(`Couldn't keep a copy of this work in the browser (${esc(e && e.name || "storage error")}). Finish this job before leaving the Photo Tool, or it will be lost.`); }
+  } finally {
+    workBusy = false;
+    if (workAgain){ workAgain = false; scheduleSave(); }
+  }
+}
+async function clearWork(){
+  clearTimeout(workTimer); workSaved = new Set();
+  try { const db = await openWorkDb(); const tx = db.transaction(["photos", "state"], "readwrite"); tx.objectStore("photos").clear(); tx.objectStore("state").clear(); await idbDone(tx); } catch(e){ console.warn(e); }
+}
+function workNote(html){
+  let el = $("workMsg");
+  if (!el){ el = document.createElement("div"); el.id = "workMsg"; el.className = "notice"; $("loadMsg").before(el); }
+  el.innerHTML = html; el.classList.toggle("hidden", !html);
+}
+async function restoreWork(){
+  let st = null, recs = [];
+  try {
+    const db = await openWorkDb();
+    st = await idbReq(db.transaction("state").objectStore("state").get("work"));
+    if (!st || !st.ids || !st.ids.length) return;
+    recs = await idbReq(db.transaction("photos").objectStore("photos").getAll());
+  } catch(e){ console.warn("couldn't read saved work", e); return; }
+  if (S.photos.length) return;   // photos were dropped in before the saved copy was read
+  workRestoring = true;
+  try {
+    const byId = {}; recs.forEach(r => byId[r.id] = r);
+    const photos = [];
+    st.ids.forEach(id => {
+      const r = byId[id]; if (!r || !r.file) return;
+      const x = st.per[id] || {};
+      photos.push({ id, file: r.file, name: r.name, time: r.time, hasDate: r.hasDate, exif: r.exif, heic: r.heic, lat: r.lat, lon: r.lon,
+                    rot: x.rot || 0, skip: !!x.skip, autoTurned: !!x.autoTurned, portrait: !!x.portrait, thumb: null });
+    });
+    if (!photos.length) return;
+    S.photos = photos;
+    S.breaks = new Set((st.breaks || []).filter(id => byId[id]));
+    S.areaStart = st.areaStart || {};
+    S.meta = st.meta || {};
+    S.manualBreaks = st.manualBreaks || []; S.removedBreaks = st.removedBreaks || [];
+    uidN = Math.max(uidN, st.uidN || 0);
+    workSaved = new Set(photos.map(p => p.id));
+    const missing = st.ids.length - photos.length;
+    const when = new Date(st.savedAt || Date.now());
+    const whenTxt = when.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" }) + " " + pad2(when.getHours()) + ":" + pad2(when.getMinutes());
+    const lm = $("loadMsg"); lm.classList.remove("hidden");
+    lm.innerHTML = `Carried on where you left off: <b>${photos.length} photo${photos.length===1?"":"s"}</b>, last changed ${esc(whenTxt)}.` +
+      (missing ? ` <b>${missing}</b> couldn't be brought back &mdash; add them again.` : "") +
+      ` Use <b>Start again</b> to clear it.`;
+  } finally { workRestoring = false; }
+  render();
+  makeThumbs();
+}
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+// save after anything you do in the tool, and straight away when leaving the page
+["click", "change", "keyup", "drop"].forEach(ev => document.addEventListener(ev, () => { if (S.photos.length || workSaved.size) scheduleSave(); }, true));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && (S.photos.length || workSaved.size)){ clearTimeout(workTimer); saveWork(); } });
+window.addEventListener("beforeunload", e => {
+  // only warn if the browser copy is known to be failing or still being written
+  if (S.photos.length && (workFailed || workBusy || workSaved.size < S.photos.length)){ e.preventDefault(); e.returnValue = ""; }
+});
+
 // ============================================================ start
 loadSettings();
 loadJobs();
 wire();
 render();
+restoreWork();
 </script>
 </body>
 </html>

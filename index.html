@@ -171,12 +171,12 @@
   .toolbar{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
   .search-wrap{ position:relative; flex:1 1 220px; }
   .search-wrap svg{ position:absolute; left:10px; top:11px; }
-  input[type=text], input[type=date], input[type=time], input[type=email], input[type=tel], select, textarea{
+  input[type=text], input[type=date], input[type=time], input[type=email], input[type=tel], select:where(:not(.sel-box)), textarea{
     font-family:inherit; font-size:14.5px; color:var(--ink) !important; background:var(--white) !important;
     border:1px solid var(--line); border-radius:6px; padding:8px 10px; outline:none; width:100%;
     color-scheme: light only;
   }
-  select{ background:var(--white) !important; }
+  select:where(:not(.sel-box)){ background:var(--white) !important; }
   select option{ color:var(--ink); background:var(--white); }
   ::placeholder{ color:#8B95A3; opacity:1; }
   .search-wrap input{ padding-left:32px; }
@@ -237,6 +237,10 @@
   td{ padding:12px; border-top:1px solid var(--line-soft); font-size:13.5px; vertical-align:top; }
   tr:hover td{ background:var(--paper); }
   .pill{ display:inline-block; white-space:nowrap; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; cursor:pointer; border:none; font-family:inherit; }
+  .sel-box{ -webkit-appearance:none; appearance:none; font-family:inherit; font-size:12px; font-weight:600; border:1px solid rgba(0,0,0,.12); border-radius:6px; padding:4px 24px 4px 9px; cursor:pointer; width:auto; min-width:0; color-scheme:light only;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23555' stroke-width='1.6' fill='none'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+  .sel-box:focus{ outline:2px solid var(--peri); outline-offset:1px; }
+  .sel-box option{ color:#222; background:#fff; }
   .type-badge{ display:inline-block; padding:3px 8px; border-radius:5px; font-size:11.5px; font-weight:600; background:var(--peri-bg); color:var(--peri); white-space:nowrap; }
   .row-actions{ display:flex; gap:6px; }
   .icon-btn{ background:none; border:none; cursor:pointer; padding:5px; border-radius:5px; color:var(--ink-soft); display:flex; }
@@ -385,9 +389,9 @@
     .c-row{ display:grid; grid-template-columns:auto 1fr auto; column-gap:8px; row-gap:3px; align-items:center; padding:9px 0; }
     .c-when{ grid-column:1; grid-row:1; min-width:0; }
     .c-row .due{ grid-column:2; grid-row:1; white-space:normal; }
-    .c-row .pill{ grid-column:3; grid-row:1; }
+    .c-row .pill, .c-row .sel-box{ grid-column:3; grid-row:1; }
     .c-job{ grid-column:1 / -1; grid-row:2; white-space:normal; font-size:14px; }
-    .c-row > *:not(.c-when):not(.due):not(.pill):not(.c-job){ grid-column:1 / -1; }
+    .c-row > *:not(.c-when):not(.due):not(.pill):not(.sel-box):not(.c-job){ grid-column:1 / -1; }
     .wk-strip{ gap:6px; }
     /* job form: two columns, nothing wider than the screen */
     .form-card{ padding:14px 12px; }
@@ -1459,6 +1463,43 @@ function cycleInvoice(id){
   render();
 }
 
+// ---------------------------------------------------------------- stage and invoice boxes (15 Oct, Lex)
+// Lex: pills that cycle on each click were fiddly (easy to overshoot). Now each is a dropdown box: pick the
+// stage or invoice state you want, in one go, forwards or backwards. Same undo bar as before.
+function stageSelect(j){
+  const sm = statusMeta(j.status);
+  return `<select class="sel-box" aria-label="Stage for ${esc(j.jobNo||"job")}" title="Pick the stage" style="color:${sm.fg};background-color:${sm.bg};" onclick="event.stopPropagation()" onchange="pickStatus('${j.id}', this.value)">
+    ${STATUSES.map(s => `<option value="${s.code}" ${s.code===j.status?"selected":""}>${s.label}</option>`).join("")}
+  </select>`;
+}
+function invoiceSelect(j){
+  const im = invoiceMeta(j.invoice), need = needsInvoice(j);
+  return `<select class="sel-box" aria-label="Invoice for ${esc(j.jobNo||"job")}" title="Pick the invoice state" style="color:${need?'var(--coral-dark)':im.fg};background-color:${need?'var(--coral-bg)':im.bg};" onclick="event.stopPropagation()" onchange="pickInvoice('${j.id}', this.value)">
+    ${INVOICE_STATES.map(s => `<option value="${s.code}" ${s.code===(j.invoice||"")?"selected":""}>${s.code==="" && need ? "To invoice" : s.label}</option>`).join("")}
+  </select>`;
+}
+function pickStatus(id, code){
+  const j = state.jobs.find(x=>x.id===id);
+  if (!j || !STATUSES.some(s=>s.code===code) || j.status === code) return;
+  const before = snapJob(j);
+  setJobStatus(j, code);
+  saveJobs();
+  render();
+  showUndo(`${j.jobNo || "Job"} moved to ${statusMeta(code).label}`, before);
+}
+function pickInvoice(id, code){
+  const j = state.jobs.find(x=>x.id===id);
+  if (!j || (j.invoice||"") === code) return;
+  const before = snapJob(j);
+  const now = new Date().toISOString();
+  if (code === "invoiced"){ j.invoice = "invoiced"; if (!j.invoicedAt) j.invoicedAt = now; delete j.paidAt; }
+  else if (code === "paid"){ j.invoice = "paid"; if (!j.invoicedAt) j.invoicedAt = now; j.paidAt = now; }
+  else { j.invoice = ""; delete j.paidAt; delete j.invoicedAt; }
+  saveJobs();
+  render();
+  showUndo(`${j.jobNo || "Job"} invoice: ${invoiceMeta(code).label}`, before);
+}
+
 function setStatusFilter(code){
   state.statusFilter = (state.statusFilter===code) ? "all" : code;
   render();
@@ -2023,8 +2064,26 @@ function renderQueueTray(){
 }
 
 // ---------------------------------------------------------------- rendering
+// Search box (15 Oct fix, Lex 14 Oct): typing used to redraw the whole page, which threw the cursor out of the box
+// after one letter. Now only the job list underneath is redrawn, and if anything else redraws the page
+// while you're typing (auto-refresh, sync), the cursor is put back where it was.
+function onSearchInput(el){
+  state.search = el.value;
+  const box = document.getElementById("jobResults");
+  if (!box){ render(); return; }
+  box.innerHTML = state.view === "calendar" ? renderCalendar() : renderTable();
+}
 function render(){
   const app = document.getElementById("app");
+  const ae = document.activeElement;
+  const keepSearch = ae && ae.id === "jobSearch" ? { s: ae.selectionStart, e: ae.selectionEnd } : null;
+  renderInner(app);
+  if (keepSearch){
+    const el = document.getElementById("jobSearch");
+    if (el){ el.focus(); try { el.setSelectionRange(keepSearch.s, keepSearch.e); } catch(e){} }
+  }
+}
+function renderInner(app){
   document.body.classList.toggle("help-on", !!state.helpOn);
   app.innerHTML = `
     <div class="shell">
@@ -2033,11 +2092,11 @@ function render(){
     <div class="wrap${state.view === "today" ? " wrap-dash" : ""}">
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>click the stage pill</b> to move the job on one step, <b>click the invoice pill</b> for Not invoiced → Invoiced → Paid, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
+      ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
-      ${state.view === "today" ? renderToday() : renderToolbar() + (state.view === "calendar" ? renderCalendar() : renderTable())}
-      ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed); click the invoice pill for Invoiced → Paid &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
+      ${state.view === "today" ? renderToday() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : renderTable()}</div>`}
+      ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; pick a job's stage or invoice state from its box &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
     </div>
@@ -2083,7 +2142,7 @@ function tJobRow(j, opts){
       <div class="sub">${esc(j.client||"")}${j.tenants ? " · "+esc(j.tenants) : ""} ${maps}</div>
       ${opts.showDue && di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}
     </div>
-    <button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
+    ${stageSelect(j)}
   </div>`;
 }
 // ---------------------------------------------------------------- refresh all (12 Oct)
@@ -2216,7 +2275,7 @@ function cRow(j, opts){
     <button class="c-job" onclick="openEdit('${j.id}')" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(tm.code)} · ${esc(addr)}<span class="c-dim"> · ${esc(j.client||"")}</span></button>
     ${opts.extra || ""}
     ${di ? `<span class="due ${di.cls}" style="margin:0">${di.text}</span>` : ""}
-    <button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg};background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>
+    ${stageSelect(j)}
   </div>`;
 }
 // Today rows (12 Oct): tenant contact and notes (keys, access) under each job, phone numbers tap-to-call
@@ -2339,7 +2398,7 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`The <b>tiles</b> count what needs doing. <b>Click a tile</b> to see its list in the panel at the bottom. <b>Click a job</b> to open it. <b>Click a coloured stage pill</b> to move that job on one step (Booked → Processing → Completed → Sent → Signed). The <b>+</b> on a day adds a job on that day. Hover over anything on a PC for a short explanation.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`The <b>tiles</b> count what needs doing. <b>Click a tile</b> to see its list in the panel at the bottom. <b>Click a job</b> to open it. <b>Pick a stage</b> from the coloured box on a job to move it to that stage. The <b>+</b> on a day adds a job on that day. Hover over anything on a PC for a short explanation.`)}<div class="d-tiles">${tileHtml}</div>
     <div class="d-row">
       <div class="t-card d-card">
         <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route"${tip("Opens Google Maps with today's jobs as stops, in time order")}>Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
@@ -2492,7 +2551,7 @@ function renderToolbar(){
     </div>
     <div class="search-wrap">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" placeholder="Search address, client, tenant, job no…" value="${esc(state.search)}" oninput="state.search=this.value; render();" />
+      <input type="text" id="jobSearch" autocomplete="off" placeholder="Search address, client, tenant, job no…" value="${esc(state.search)}" oninput="onSearchInput(this)" />
     </div>
     <select class="filter-select" onchange="state.typeFilter=this.value; render();">
       <option value="all">All job types</option>
@@ -2863,9 +2922,9 @@ function renderTable(){
             <td class="jt-addr" style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
             <td class="jt-date">${formatDate(j.date)}</td>
             <td class="jt-time">${esc(j.time)||"—"}</td>
-            <td class="jt-status"><button class="pill" title="Click to move to the next stage: Booked → Processing → Completed → Sent → Signed → Archived" style="color:${sm.fg}; background:${sm.bg};" onclick="cycleStatus('${j.id}')">${sm.label}</button>${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
+            <td class="jt-status">${stageSelect(j)}${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
             <td class="jt-inv">${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
-                return `<button class="pill" title="Click: Not invoiced, then Invoiced, then Paid" style="color:${need?'var(--coral-dark)':im.fg}; background:${need?'var(--coral-bg)':im.bg};" onclick="cycleInvoice('${j.id}')">${need?'To invoice':im.label}</button>${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
+                return `${invoiceSelect(j)}${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
             <td class="jt-act">
               <div class="row-actions">
                 <button class="icon-btn" title="Open and edit this job" onclick="openEdit('${j.id}')">
