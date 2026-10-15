@@ -2023,8 +2023,26 @@ function renderQueueTray(){
 }
 
 // ---------------------------------------------------------------- rendering
+// Search box (15 Oct fix, Lex 14 Oct): typing used to redraw the whole page, which threw the cursor out of the box
+// after one letter. Now only the job list underneath is redrawn, and if anything else redraws the page
+// while you're typing (auto-refresh, sync), the cursor is put back where it was.
+function onSearchInput(el){
+  state.search = el.value;
+  const box = document.getElementById("jobResults");
+  if (!box){ render(); return; }
+  box.innerHTML = state.view === "calendar" ? renderCalendar() : renderTable();
+}
 function render(){
   const app = document.getElementById("app");
+  const ae = document.activeElement;
+  const keepSearch = ae && ae.id === "jobSearch" ? { s: ae.selectionStart, e: ae.selectionEnd } : null;
+  renderInner(app);
+  if (keepSearch){
+    const el = document.getElementById("jobSearch");
+    if (el){ el.focus(); try { el.setSelectionRange(keepSearch.s, keepSearch.e); } catch(e){} }
+  }
+}
+function renderInner(app){
   document.body.classList.toggle("help-on", !!state.helpOn);
   app.innerHTML = `
     <div class="shell">
@@ -2036,7 +2054,7 @@ function render(){
       ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>click the stage pill</b> to move the job on one step, <b>click the invoice pill</b> for Not invoiced → Invoiced → Paid, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
-      ${state.view === "today" ? renderToday() : renderToolbar() + (state.view === "calendar" ? renderCalendar() : renderTable())}
+      ${state.view === "today" ? renderToday() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : renderTable()}</div>`}
       ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; click a status pill to move it along (Booked → Processing → Completed → Sent → Signed); click the invoice pill for Invoiced → Paid &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
@@ -2492,7 +2510,7 @@ function renderToolbar(){
     </div>
     <div class="search-wrap">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" placeholder="Search address, client, tenant, job no…" value="${esc(state.search)}" oninput="state.search=this.value; render();" />
+      <input type="text" id="jobSearch" autocomplete="off" placeholder="Search address, client, tenant, job no…" value="${esc(state.search)}" oninput="onSearchInput(this)" />
     </div>
     <select class="filter-select" onchange="state.typeFilter=this.value; render();">
       <option value="all">All job types</option>
