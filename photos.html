@@ -683,7 +683,7 @@ async function addFiles(fileList){
   }
   render();
   makeThumbs();
-  scheduleSave();
+  workStateSaved = false; saveWork();
 }
 let heicLib = null;
 async function convertHeic(f){
@@ -1325,7 +1325,7 @@ function wire(){
     S.photos.forEach(p => p.thumb && URL.revokeObjectURL(p.thumb));
     S.photos = []; S.breaks = new Set(); S.areaStart = {}; S.multi.clear(); S.meta = {}; S.manualBreaks = []; S.removedBreaks = [];
     $("loadMsg").classList.add("hidden"); $("heicMsg").classList.add("hidden");
-    clearWork(); workNote("");
+    clearWork(); workNote(""); keepState();
     closePanel(); render();
   };
   $("btnAll").onclick = processAll;
@@ -1493,8 +1493,19 @@ function workState(){
 }
 function scheduleSave(){
   if (workRestoring) return;
-  clearTimeout(workTimer); workTimer = setTimeout(saveWork, 500);
+  clearTimeout(workTimer); workTimerOn = true;
+  workTimer = setTimeout(() => { workTimerOn = false; saveWork(); }, 500);
+  keepState();
 }
+// Leaving for the Dashboard or Job Log: finish saving first, then go (iPhone stops a save when the page changes)
+async function flushWork(){
+  clearTimeout(workTimer); workTimerOn = false;
+  for (let i = 0; i < 600 && (workBusy || S.photos.some(p => !workSaved.has(p.id)) || !workStateSaved); i++){
+    if (!workBusy) await saveWork(); else await new Promise(r => setTimeout(r, 100));
+    if (workFailed) break;
+  }
+}
+let workStateSaved = false;
 async function saveWork(){
   if (workRestoring) return;
   if (workBusy){ workAgain = true; return; }
@@ -1504,17 +1515,23 @@ async function saveWork(){
     // new photos first (one transaction per photo keeps memory down on big batches)
     for (const p of S.photos.slice()){
       if (workSaved.has(p.id)) continue;
+      // stored as plain bytes, not the File itself: iPhone Safari can fail to store a picked File (15 Oct)
+      const buf = await p.file.arrayBuffer();
       const tx = db.transaction("photos", "readwrite");
-      tx.objectStore("photos").put({ id: p.id, file: p.file, name: p.name, time: p.time, hasDate: p.hasDate, exif: p.exif, heic: !!p.heic, lat: p.lat, lon: p.lon });
+      tx.objectStore("photos").put({ id: p.id, buf, type: p.file.type || "image/jpeg", lastModified: p.file.lastModified || p.time,
+                                     name: p.name, time: p.time, hasDate: p.hasDate, exif: p.exif, heic: !!p.heic, lat: p.lat, lon: p.lon });
       await idbDone(tx);
       workSaved.add(p.id);
+      keepState();
     }
     const tx = db.transaction(["photos", "state"], "readwrite");
     const keep = new Set(S.photos.map(p => p.id));
     for (const id of [...workSaved]) if (!keep.has(id)){ tx.objectStore("photos").delete(id); workSaved.delete(id); }
     tx.objectStore("state").put(workState(), "work");
     await idbDone(tx);
+    workStateSaved = !workTimerOn;
     if (workFailed){ workFailed = false; workNote(""); }
+    keepState();
   } catch(e){
     console.warn("couldn't save work in progress", e);
     if (!workFailed){ workFailed = true;
@@ -1522,7 +1539,21 @@ async function saveWork(){
   } finally {
     workBusy = false;
     if (workAgain){ workAgain = false; scheduleSave(); }
+    keepState();
   }
+}
+// "Kept on this device" line above the jobs, so it's clear when it's safe to leave the page
+function workPending(){ return workBusy || !!workTimerOn || S.photos.some(p => !workSaved.has(p.id)); }
+let workTimerOn = false;
+function keepState(){
+  let el = $("keepState");
+  if (!el){ const g = $("groups"); if (!g) return; el = document.createElement("div"); el.id = "keepState"; el.className = "small"; el.style.margin = "6px 0"; g.before(el); }
+  if (!S.photos.length){ el.textContent = ""; return; }
+  if (workFailed){ el.innerHTML = `<span style="color:var(--coral-dark)">Not kept on this device &mdash; finish this job before leaving the page.</span>`; return; }
+  const left = S.photos.filter(p => !workSaved.has(p.id)).length;
+  el.innerHTML = workPending()
+    ? `<span class="muted">Keeping a copy on this device&hellip;${left ? ` ${left} photo${left===1?"":"s"} to go` : ""}</span>`
+    : `<span style="color:#2E6B45">Kept on this device &#10003; &mdash; safe to switch pages</span>`;
 }
 async function clearWork(){
   clearTimeout(workTimer); workSaved = new Set();
@@ -1547,9 +1578,12 @@ async function restoreWork(){
     const byId = {}; recs.forEach(r => byId[r.id] = r);
     const photos = [];
     st.ids.forEach(id => {
-      const r = byId[id]; if (!r || !r.file) return;
+      const r = byId[id]; if (!r) return;
+      let file = r.file || null;
+      if (!file && r.buf){ try { file = new File([r.buf], r.name, { type: r.type || "image/jpeg", lastModified: r.lastModified || r.time }); } catch(e){ file = new Blob([r.buf], { type: r.type || "image/jpeg" }); } }
+      if (!file) return;
       const x = st.per[id] || {};
-      photos.push({ id, file: r.file, name: r.name, time: r.time, hasDate: r.hasDate, exif: r.exif, heic: r.heic, lat: r.lat, lon: r.lon,
+      photos.push({ id, file, name: r.name, time: r.time, hasDate: r.hasDate, exif: r.exif, heic: r.heic, lat: r.lat, lon: r.lon,
                     rot: x.rot || 0, skip: !!x.skip, autoTurned: !!x.autoTurned, portrait: !!x.portrait, thumb: null });
     });
     if (!photos.length) return;
@@ -1570,10 +1604,22 @@ async function restoreWork(){
   } finally { workRestoring = false; }
   render();
   makeThumbs();
+  keepState();
 }
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
 // save after anything you do in the tool, and straight away when leaving the page
-["click", "change", "keyup", "drop"].forEach(ev => document.addEventListener(ev, () => { if (S.photos.length || workSaved.size) scheduleSave(); }, true));
+["click", "change", "keyup", "drop"].forEach(ev => document.addEventListener(ev, () => { if (S.photos.length || workSaved.size){ workStateSaved = false; scheduleSave(); } }, true));
+document.addEventListener("click", async e => {
+  const a = e.target.closest && e.target.closest("a[href]"); if (!a) return;
+  const href = a.getAttribute("href") || "";
+  if (!href || href.startsWith("#") || a.target === "_blank" || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!S.photos.length) return;
+  e.preventDefault();
+  keepState();
+  await flushWork();
+  if (workFailed && !confirm("This work couldn't be kept on this device. Leave the Photo Tool anyway? It will be lost.")) return;
+  location.href = a.href;
+});
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && (S.photos.length || workSaved.size)){ clearTimeout(workTimer); saveWork(); } });
 window.addEventListener("beforeunload", e => {
   // only warn if the browser copy is known to be failing or still being written
