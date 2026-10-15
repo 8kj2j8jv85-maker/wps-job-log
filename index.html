@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Wellington Dashboard</title>
+<title>WPS Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1100,7 +1100,7 @@ function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
 function firstWeekdayMonIdx(y,m){ const jsDay = new Date(y, m-1, 1).getDay(); return (jsDay+6)%7; }
 function isoDate(y,m,d){ return y+"-"+pad2(m)+"-"+pad2(d); }
 function toggleMenu(){ state.menuOpen = !state.menuOpen; render(); }
-function setView(v){ state.view = v; state.menuOpen = false; document.title = v === "today" ? "Wellington Dashboard" : "Wellington Property Services — Job Log"; render(); }
+function setView(v){ state.view = v; state.menuOpen = false; document.title = v === "today" ? "WPS Dashboard" : "Wellington Property Services — Job Log"; render(); }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -2442,7 +2442,7 @@ function renderPageHead(){
   const today = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
   const n = pendingQueue().length;
   return `<div class="page-head">
-    <div><h1 class="page-title">${state.view === "today" ? "Wellington Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
+    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
     <div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
