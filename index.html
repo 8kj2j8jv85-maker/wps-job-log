@@ -692,7 +692,7 @@ async function cloudSave(){
     const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
     if (meta.savedAt && (!synced || meta.savedAt > synced)){
       // !synced = this device has never loaded the Sheet (e.g. a new phone): never overwrite it blind
-      setCloud("conflict", synced ? "Changed on another device — click Sync now" : "Tap Sync now to load your jobs from Google");
+      setCloud("conflict", synced ? "Changed on another device — click Save & get latest" : "Tap Save & get latest to load your jobs from Google");
       return;
     }
     const savedAt = new Date().toISOString();
@@ -749,7 +749,7 @@ async function cloudLoad(id, meta){
 }
 async function cloudSyncNow(){
   // Called from the "Sync now" click: loads the Sheet if it's newer, otherwise pushes this browser's copy.
-  setCloud("saving");   // show "Syncing…" straight away, while Google signs in
+  setCloud("saving");   // show "Saving…" straight away, while Google signs in
   ensureSheetsToken(async function(){
     setCloud("saving");
     try {
@@ -782,7 +782,7 @@ function renderSyncBtn(){
   // phone/tablet: the Sync button itself says what's happening
   const s = state.cloudStatus || "idle";
   const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
-  const label = s==="saving" ? "Syncing…" : s==="saved" ? "Synced ✓ "+t : (s==="error"||s==="conflict") ? "Sync again ⚠" : "Sync now";
+  const label = s==="saving" ? "Saving…" : s==="saved" ? "Saved ✓ "+t : (s==="error"||s==="conflict") ? "Try again ⚠" : "Save & get latest";
   const cls = s==="saved" ? " sync-ok" : (s==="error"||s==="conflict") ? " sync-bad" : "";
   return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}${hint("Tap after changes on the phone: saves to Google and loads changes from the PC")}>${esc(label)}</button>`
     + ((s==="error"||s==="conflict") && state.cloudMsg ? `<div id="syncMsg" class="phone-only sync-msg">${esc(state.cloudMsg)}</div>` : "");
@@ -798,7 +798,7 @@ function renderCloudPill(){
     : s==="saving" ? "Saving to Google…"
     : s==="conflict" ? state.cloudMsg
     : s==="error" ? state.cloudMsg
-    : (state.gcalConnected ? "Google copy: click Sync now" : "Not backed up to Google");
+    : (state.gcalConnected ? "Google copy: click Save & get latest" : "Not backed up to Google");
   const col = s==="saved" ? "var(--sky)" : (s==="error"||s==="conflict") ? "var(--coral)" : "inherit";
   return `<div id="cloudPill" style="font-size:12px;color:${col};padding:4px 0 6px">${esc(label)}</div>`;
 }
@@ -1548,7 +1548,7 @@ function initGCal(){
     callback: function(){},
     // Google pop-up closed or blocked: don't leave "Syncing…" showing forever
     error_callback: function(err){
-      if (state.cloudStatus === "saving") setCloud("error", (err && err.type === "popup_failed_to_open") ? "Google sign-in pop-up was blocked — allow pop-ups and tap Sync again" : "Google sign-in was closed — tap Sync again");
+      if (state.cloudStatus === "saving") setCloud("error", (err && err.type === "popup_failed_to_open") ? "Google sign-in pop-up was blocked — allow pop-ups and tap Try again" : "Google sign-in was closed — tap Try again");
     }
   });
 }
@@ -2232,7 +2232,7 @@ function refreshAll(){
     };
     setTimeout(next, 300);
   });
-  // Sign-in cancelled or refused: stop showing "Refreshing…" (the sync button shows the reason)
+  // Sign-in cancelled or refused: stop showing "Checking…" (the sync button shows the reason)
   const watch = setInterval(() => { if (!state.refreshBusy){ clearInterval(watch); return; }
     if (!state.gcalToken && state.cloudStatus === "error"){ clearInterval(watch); done(); } }, 500);
   setTimeout(() => { clearInterval(watch); if (state.refreshBusy && !state.gcalToken) done(); }, 60000);
@@ -2516,7 +2516,7 @@ function renderPageHead(){
     <div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
-        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: syncs with the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Refreshing…" : "Refresh all"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
+        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Checking…" : "Check everything now"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
       <button class="btn btn-coral" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
     </div>
@@ -2553,7 +2553,7 @@ function renderUtilityRow(){
     ${renderCloudPill()}
     <button class="btn-link" onclick="cloudSyncNow()"${hint("Saves to Google, loads other devices' changes")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></svg>
-      Sync now (Google Sheet)
+      Save &amp; get latest
     </button>
     <button class="btn-link" onclick="exportData()"${hint("Saves a copy of every job to this computer")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3154,7 +3154,7 @@ function confirmUrlAction(){
       const localAt = lsGet(LS_LOCAL_SAVED_AT) || "";
       const cloudNewer = meta.savedAt && meta.savedAt > synced;
       const localChanged = localAt && synced && localAt > synced && state.jobs.length > 0;
-      if (cloudNewer && localChanged){ urlActionFail("This browser and the Google copy were both changed since the last sync. Click Sync now first, then open the link again."); return; }
+      if (cloudNewer && localChanged){ urlActionFail("This browser and the Google copy were both changed since the last sync. Click Save & get latest first, then open the link again."); return; }
       if (cloudNewer){ if (!(await cloudLoad(id, meta))){ urlActionFail("Sync cancelled; nothing changed."); return; } }
       const c = checkUrlAction(a);                       // re-check against the fresh copy
       if (c.problem){ urlActionFail(c.problem); return; }
@@ -3165,7 +3165,7 @@ function confirmUrlAction(){
       lsSet(LS_LOCAL_SAVED_AT, new Date().toISOString());
       await cloudSave();
       rememberGoogleConnected();
-      if (state.cloudStatus !== "saved"){ urlActionFail("Changed in this browser but NOT saved to Google ("+(state.cloudMsg||"unknown")+"). Click Sync now."); return; }
+      if (state.cloudStatus !== "saved"){ urlActionFail("Changed in this browser but NOT saved to Google ("+(state.cloudMsg||"unknown")+"). Click Save & get latest."); return; }
       try { syncJobToCalendar(c.job); } catch(e){}
       const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
       a.stage = "done";
