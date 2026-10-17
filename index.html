@@ -1768,7 +1768,7 @@ function checkForBookings(){
         catch(e){ console.warn("Skipped a queue draft", d.id, e); }
       }
       payloads.sort((a,b)=>String(a.generatedAt||"").localeCompare(String(b.generatedAt||"")));
-      payloads.forEach(p=>p.items.forEach(it=>{ if (it && it.id) byId[it.id] = Object.assign({ generatedAt:p.generatedAt }, it); }));
+      payloads.forEach(p=>p.items.forEach(it=>{ if (queueItemOk(it)) byId[it.id] = Object.assign({ generatedAt:p.generatedAt }, it); }));
       state.queue = Object.values(byId).sort((a,b)=>String(a.date||"9999").localeCompare(String(b.date||"9999")));
       state.queueChecked = true;
       state.queueCheckedAt = new Date();
@@ -1806,12 +1806,23 @@ function mergeQueueDone(fromSheet){
   try{ localStorage.setItem(LS_QUEUE_DONE, JSON.stringify(state.queueDone)); }catch(e){}
 }
 function queueItem(id){ return state.queue.find(i=>i.id===id); }
+// Security 17 Oct (review item 6): queue items come from a Gmail draft, so treat them as untrusted.
+// Buttons carry the id in data attributes (never inside onclick code) and only these actions can run.
+const Q_ACTIONS = { qAdd:1, qEdit:1, qApplyUpdate:1, qApplyCancel:1, qReject:1, qMarkInvoiced:1 };
+function qGo(btn){
+  const fn = btn && btn.getAttribute("data-qa"), id = btn && btn.getAttribute("data-qid");
+  if (!Q_ACTIONS[fn] || typeof window[fn] !== "function" || !queueItem(id)) return;
+  window[fn](id);
+}
+const Q_ID_OK = /^[A-Za-z0-9._:-]{1,120}$/;
+function queueItemOk(it){ return !!it && typeof it === "object" && typeof it.id === "string" && Q_ID_OK.test(it.id); }
 function emailLink(it){
   let u = it.sourceUrl || "";
   // Gmail wraps links saved in drafts in a google.com/url redirect — unwrap it
   const m = u.match(/^https:\/\/www\.google\.com\/url\?q=([^&]+)/);
   if (m){ try { u = decodeURIComponent(m[1]); } catch(e){} }
-  if (!u && it.id){ u = "https://mail.google.com/mail/?authuser=info@wellingtonparker.com#all/" + String(it.id).split("-")[0]; }
+  if (u && !/^https:\/\/mail\.google\.com\//.test(u)) u = "";   // security 17 Oct: Gmail links only
+  if (!u && it.id && Q_ID_OK.test(String(it.id))){ u = "https://mail.google.com/mail/?authuser=info@wellingtonparker.com#all/" + encodeURIComponent(String(it.id).split("-")[0]); }
   return u;
 }
 function normPc(s){ return String(s||"").toUpperCase().replace(/\s+/g,""); }
@@ -1996,13 +2007,13 @@ function renderInvoiceCard(it){
     else {
       if (r.other) warn = `<div class="qwarn">This job already has invoice number <span class="mono">${esc(r.other)}</span>. Mark invoiced will ask before replacing it.</div>`;
       main = j.invoice==="paid"
-        ? `<button class="btn btn-coral btn-sm" onclick="qMarkInvoiced('${esc(it.id)}')"${hint("Job is already Paid. Saves this invoice number on it; stays Paid.")}>Save invoice no.</button>`
-        : `<button class="btn btn-coral btn-sm" onclick="qMarkInvoiced('${esc(it.id)}')"${hint("Sets this job to Invoiced with this invoice number and the email's date")}>Mark invoiced</button>`;
+        ? `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qMarkInvoiced" data-qid="${esc(it.id)}"${hint("Job is already Paid. Saves this invoice number on it; stays Paid.")}>Save invoice no.</button>`
+        : `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qMarkInvoiced" data-qid="${esc(it.id)}"${hint("Sets this job to Invoiced with this invoice number and the email's date")}>Mark invoiced</button>`;
     }
   }
   const dismiss = r.st==="done"
-    ? `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Clears the card. Nothing changes.")}>Clear</button>`
-    : `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
+    ? `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing changes.")}>Clear</button>`
+    : `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
   return `<div class="qcard">
     <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}<span>${esc(it.client)||"Client not clear"}</span></div>
     ${jobLine}
@@ -2057,7 +2068,7 @@ function renderSentCard(it){
     ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
     <div class="qwarn">Couldn't mark it Sent: ${esc(r.why||"")} Set the stage by hand if the report did go out.</div>
     <div class="qsrc">Report auto-send${it.sentAt && !isNaN(new Date(it.sentAt)) ? " · "+esc(new Date(it.sentAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})) : ""}</div>
-    <div class="qactions"><button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Clears the card. Nothing in the log changes.")}>Dismiss</button></div>
+    <div class="qactions"><button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing in the log changes.")}>Dismiss</button></div>
   </div>`;
 }
 
@@ -2083,15 +2094,15 @@ function renderQueueTray(){
     if (dup) warn = `<div class="qwarn">Possible duplicate of <span class="mono">${esc(dup.jobNo)}</span> (${formatDate(dup.date)}).</div>`;
     let actions = "";
     if (it.kind==="new" || !match){
-      actions = `<button class="btn btn-coral btn-sm" onclick="qAdd('${esc(it.id)}')"${hint("Adds it as a new job straight away")}>Add to log</button>
-                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qAdd" data-qid="${esc(it.id)}"${hint("Adds it as a new job straight away")}>Add to log</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qEdit" data-qid="${esc(it.id)}"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
     } else if (it.kind==="update"){
-      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyUpdate('${esc(it.id)}')"${hint("Applies the change (date, time, tenants if the job has none) to the matching job")}>Apply change</button>
-                 <button class="btn btn-ghost btn-sm" onclick="qEdit('${esc(it.id)}')"${hint("Opens the matching job with the change filled in, to check first")}>Edit first</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qApplyUpdate" data-qid="${esc(it.id)}"${hint("Applies the change (date, time, tenants if the job has none) to the matching job")}>Apply change</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qEdit" data-qid="${esc(it.id)}"${hint("Opens the matching job with the change filled in, to check first")}>Edit first</button>`;
     } else {
-      actions = `<button class="btn btn-coral btn-sm" onclick="qApplyCancel('${esc(it.id)}')"${hint("Removes the matching job and its calendar entry (asks first)")}>Delete cancelled job</button>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qApplyCancel" data-qid="${esc(it.id)}"${hint("Removes the matching job and its calendar entry (asks first)")}>Delete cancelled job</button>`;
     }
-    actions += `<button class="btn btn-text btn-sm" onclick="qReject('${esc(it.id)}')"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
+    actions += `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
     return `<div class="qcard">
       <div class="qtop"><span class="qkind ${k[1]}">${k[0]}</span><span class="type-badge">${esc(tm.label)}</span><span>${esc(it.client)||"Client not clear"}</span></div>
       <div class="qaddr">${esc(addr)||"Address not clear"}</div>
@@ -3088,9 +3099,11 @@ function checkUrlAction(a){
   if (a.copyto === "" ) return { job: j, problem: "The copy-to list has no valid email address." };
   const notes = [];
   if (j.status === "sent") notes.push(j.sentAt ? "Already at Sent ("+shortDay(new Date(j.sentAt))+"). Send date kept." : "Already at Sent with no send date. Send date will be set.");
-  if (a.tenants && j.tenantEmails && !sameEmails(j.tenantEmails, a.tenants)) notes.push("Replaces tenant emails: "+j.tenantEmails);
-  if (a.copyto && j.agentEmail && !sameEmails(j.agentEmail, a.copyto)) notes.push("Replaces copy to: "+j.agentEmail);
-  return { job: j, sentIso: t.iso, notes };
+  // Security 17 Oct (review item 11): a link that replaces emails already on the job needs an extra tick.
+  const replaces = [];
+  if (a.tenants && j.tenantEmails && !sameEmails(j.tenantEmails, a.tenants)) replaces.push(["Tenant emails", j.tenantEmails, a.tenants]);
+  if (a.copyto && j.agentEmail && !sameEmails(j.agentEmail, a.copyto)) replaces.push(["Copy to", j.agentEmail, a.copyto]);
+  return { job: j, sentIso: t.iso, notes, replaces };
 }
 function renderUrlAction(){
   const a = state.urlAction; if (!a) return "";
@@ -3110,7 +3123,12 @@ function renderUrlAction(){
   return box(`<div class="hb-t">LINK ACTION — CHECK, THEN CONFIRM</div>
     ${rows.map(r=>`<div><span style="display:inline-block;min-width:110px;color:var(--stone)">${esc(r[0])}</span>${esc(r[1])}</div>`).join("")}
     ${c.notes.map(n=>`<div style="color:var(--coral-dark)">${esc(n)}</div>`).join("")}
-    <div style="margin-top:8px"><button id="urlActionGo" class="btn btn-coral" onclick="confirmUrlAction()">Confirm and save</button>
+    ${c.replaces.length ? `<div id="urlActionWarn" style="margin-top:8px;padding:8px 10px;border:1px solid #D9534F;border-radius:6px;background:#FDECE7;color:#8A1F1B">
+      <b>This link changes who gets emails for this job.</b> Only confirm if you (or Claude, for you) made this link.
+      ${c.replaces.map(r=>`<div style="margin-top:4px">${esc(r[0])}: <s>${esc(r[1])}</s> → <b>${esc(r[2])}</b></div>`).join("")}
+      <label style="display:block;margin-top:6px;cursor:pointer"><input type="checkbox" id="urlActionOk" onchange="document.getElementById('urlActionGo').disabled=!this.checked"> I made this link and the new emails are right</label>
+    </div>` : ""}
+    <div style="margin-top:8px"><button id="urlActionGo" class="btn btn-coral" onclick="confirmUrlAction()"${c.replaces.length ? " disabled" : ""}>Confirm and save</button>
     <button class="btn btn-ghost" onclick="dismissUrlAction()">Cancel</button></div>`);
 }
 function clearActionUrl(){ try { history.replaceState(null, "", location.pathname + location.hash); } catch(e){} }
@@ -3124,6 +3142,8 @@ function applyUrlAction(a, j, c){
 }
 function confirmUrlAction(){
   const a = state.urlAction; if (!a) return;
+  const pre = checkUrlAction(a), ok = document.getElementById("urlActionOk");
+  if (pre.replaces && pre.replaces.length && !(ok && ok.checked)) return;   // security 17 Oct: tick needed
   a.stage = "working"; render();
   setCloud("saving");   // so a closed/blocked Google pop-up reports back (initGCal error_callback)
   ensureSheetsToken(async function(){
@@ -3138,6 +3158,7 @@ function confirmUrlAction(){
       if (cloudNewer){ if (!(await cloudLoad(id, meta))){ urlActionFail("Sync cancelled; nothing changed."); return; } }
       const c = checkUrlAction(a);                       // re-check against the fresh copy
       if (c.problem){ urlActionFail(c.problem); return; }
+      if (c.replaces.length && JSON.stringify(c.replaces) !== JSON.stringify(pre.replaces)){ urlActionFail("The emails on this job changed when the Google copy loaded. Nothing changed; open the link again to check."); return; }
       applyUrlAction(a, c.job, c);
       mergeJobNoHigh();
       localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
