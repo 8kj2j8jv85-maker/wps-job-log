@@ -309,6 +309,9 @@
   .page-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; padding:32px 0 6px; }
   .page-title{ margin:0; font-family:'Cormorant Garamond',Georgia,serif; font-style:italic; font-weight:600; font-size:42px; line-height:1.1; color:var(--brand); }
   .page-sub{ font-size:14px; color:var(--ink-soft); margin-top:2px; }
+  .done-count{ display:inline-flex; flex-wrap:wrap; gap:4px 10px; margin-top:6px; font-size:13px; color:var(--ink-soft); }
+  .done-count b{ color:var(--brand); font-size:15px; }
+  .done-count .dc-lbl{ font-weight:600; color:var(--brand); }
   .page-actions{ display:flex; gap:10px; flex-wrap:wrap; }
   .btn{ border-radius:8px; font-weight:500; letter-spacing:.01em; }
   .btn-coral{ background:var(--coral); color:var(--brand-dark); font-weight:600; }
@@ -498,6 +501,30 @@ function needsInvoice(j){ return REPORT_OUT.includes(j.status) && !j.invoice; }
 const DUE_STATUSES = ["booked","processing","completed"];   // report not yet sent
 // Finished jobs (13 Oct): paid, and the report is finished. Check-outs etc. at Sent or later; inventory &
 // check-ins at Signed, Deemed agreed or Archived. Hidden from the Job Log's main list, shown under "Finished".
+// Reports completed counter (Lex, 14 Oct; built 18 Oct). Every job type counts once its report is done:
+// inventory & check-ins at Signed, Deemed agreed or Archived; everything else at Sent or later.
+// Month/year come from the signed, deemed or sent date (else the visit date).
+const DONE_ALLTIME_START = 0;   // starting figure added to "all time" (e.g. Wellington Parker reports): Lex to say
+function reportDoneAt(j){
+  const done = j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status);
+  if (!done) return null;
+  const s = (j.type==="ICI" ? (j.signedAt || j.deemedAt) : "") || j.sentAt || (j.date ? j.date+"T12:00:00" : "");
+  const d = s ? new Date(s) : null;
+  return d && !isNaN(d) ? d : new Date(0);
+}
+function doneCounts(){
+  const now = new Date(); let all = 0, year = 0, month = 0;
+  state.jobs.forEach(j => {
+    const d = reportDoneAt(j); if (!d) return;
+    all++;
+    if (d.getFullYear()===now.getFullYear()){ year++; if (d.getMonth()===now.getMonth()) month++; }
+  });
+  return { all: all + DONE_ALLTIME_START, year, month };
+}
+function renderDoneCount(){
+  const c = doneCounts();
+  return `<div class="done-count"${tip("Reports completed: inventories once signed or deemed agreed, everything else once sent")}><span class="dc-lbl">Reports completed</span><span><b>${c.month}</b> this month</span><span><b>${c.year}</b> this year</span><span><b>${c.all}</b> all time</span></div>`;
+}
 function isFinished(j){ return j.invoice==="paid" && (j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status)); }
 
 const DEFAULT_CLIENTS = [
@@ -871,6 +898,9 @@ function setJobStatus(j, code){
   if (!REPORT_OUT.includes(code)){ delete j.sentAt; delete j.reissuedAt; delete j.reissues; delete j.reminderAt; }
   if (code==="deemed" && !j.deemedAt) j.deemedAt = new Date().toISOString();
   if (code!=="deemed") delete j.deemedAt;
+  // signed date (18 Oct): used by the reports completed counter
+  if (code==="signed" && !j.signedAt) j.signedAt = new Date().toISOString();
+  if (code!=="signed" && code!=="archived") delete j.signedAt;
 }
 // ---------------------------------------------------------------- 7-day comment window (inventory & check-in)
 // Window starts when the report is sent; a re-issue after amendments restarts it (changed items only).
@@ -2512,7 +2542,7 @@ function renderPageHead(){
   const today = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
   const n = pendingQueue().length;
   return `<div class="page-head">
-    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
+    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div>${renderDoneCount()}</div>
     <div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
