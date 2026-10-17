@@ -299,7 +299,8 @@
 <div id="panel" class="panel hidden"></div>
 <div id="progress" class="progress hidden"><div class="box"><div id="progTitle" style="font-weight:600">Working&hellip;</div><div id="progText" class="muted small" style="margin-top:4px"></div><div class="bar"><div id="progBar"></div></div></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- integrity: the browser refuses the file if the CDN copy is ever changed (hash checked 17 Oct 2026 against cdnjs and jsdelivr, identical) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 "use strict";
 // ============================================================ constants
@@ -691,6 +692,10 @@ async function convertHeic(f){
     await new Promise((res, rej) => {
       const s = document.createElement("script");
       s.src = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+      // integrity: refused if the CDN copy is ever changed (hash checked 17 Oct 2026 against jsdelivr, unpkg and cdnjs, identical)
+      s.integrity = "sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL";
+      s.crossOrigin = "anonymous";
+      s.referrerPolicy = "no-referrer";
       s.onload = res; s.onerror = () => rej(new Error("Couldn't load the HEIC converter (internet needed)."));
       document.head.appendChild(s);
     });
@@ -1217,6 +1222,7 @@ async function processGroup(gid, opts){
   const order = [];
   for (const p of keep){ const a = amap[p.id] || "Unsorted"; if (!order.includes(a)) order.push(a); }
   const seq = {};
+  if (typeof JSZip === "undefined"){ alert("The zip tool didn't load (no internet, or the download failed its safety check). Refresh the page and try again."); return; }
   const zip = new JSZip();
   if (!opts || !opts.inBatch) showProgress(`Processing ${m.jobNo}`, 0, keep.length);
   let i = 0;
