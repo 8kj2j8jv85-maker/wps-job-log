@@ -504,7 +504,9 @@ const DUE_STATUSES = ["booked","processing","completed"];   // report not yet se
 // Reports completed counter (Lex, 14 Oct; built 18 Oct). Every job type counts once its report is done:
 // inventory & check-ins at Signed, Deemed agreed or Archived; everything else at Sent or later.
 // Month/year come from the signed, deemed or sent date (else the visit date).
-const DONE_ALLTIME_START = 0;   // starting figure added to "all time" (e.g. Wellington Parker reports): Lex to say
+// Wellington Parker reports before WPS (Lex, 18 Oct: show both). From the 17 Oct Dropbox report index: unique job number
+// plus report type, Wellington Parker job numbers only (WPS numbers excluded, so nothing is counted twice), 2014 to Sep 2026.
+const WP_REPORTS_BEFORE_WPS = 3507;
 function reportDoneAt(j){
   const done = j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status);
   if (!done) return null;
@@ -519,11 +521,11 @@ function doneCounts(){
     all++;
     if (d.getFullYear()===now.getFullYear()){ year++; if (d.getMonth()===now.getMonth()) month++; }
   });
-  return { all: all + DONE_ALLTIME_START, year, month };
+  return { all, year, month, withWP: all + WP_REPORTS_BEFORE_WPS };
 }
 function renderDoneCount(){
   const c = doneCounts();
-  return `<div class="done-count"${tip("Reports completed: inventories once signed or deemed agreed, everything else once sent")}><span class="dc-lbl">Reports completed</span><span><b>${c.month}</b> this month</span><span><b>${c.year}</b> this year</span><span><b>${c.all}</b> all time</span></div>`;
+  return `<div class="done-count"${tip("Reports completed: inventories once signed or deemed agreed, everything else once sent")}><span class="dc-lbl">Reports completed</span><span><b>${c.month}</b> this month</span><span><b>${c.year}</b> this year</span><span><b>${c.all}</b> WPS all time</span><span><b>${c.withWP.toLocaleString("en-GB")}</b> since 2014 (incl. Wellington Parker)</span></div>`;
 }
 function isFinished(j){ return j.invoice==="paid" && (j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status)); }
 
