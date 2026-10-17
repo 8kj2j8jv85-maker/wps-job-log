@@ -943,7 +943,7 @@ function tenantEmailsText(list){ return cleanEmails((list||[]).map(t=>t.email||"
 function tenantPhonesText(list){ return (list||[]).map(t=>String(t.phone||"").trim()).filter(Boolean).join(", "); }
 function splitTenants(text){
   // Free text such as "Ms Jo Bloggs - 07700 900000 | jo@x.com & Sam Lee 07700 900001 sam@y.com" or
-  // "Lily Stevens, Omar Radwan, <omar@x.com>" -> rows in the order they appear. A name starts a new row
+  // "Amy Fox, Ben Hart, <ben@x.com>" -> rows in the order they appear. A name starts a new row
   // once the current row has a name; a phone or email starts one if the current row already has that field.
   const s = String(text||"");
   const marks = [];
@@ -1001,17 +1001,9 @@ function tenantsNeedCheck(j){
 // state.contacts = [{name, email, client}] saved in this browser and on the Sheet's Contacts tab.
 // Ticking contacts fills the job's Copy to (agentEmail), which the process emails read.
 const LS_CONTACTS = "wps_job_log_contacts_v1";
-const SEED_CONTACTS = [
-  { name:"Emmanuel Sarpong", email:"esarpong@winkworth.co.uk", client:"Winkworth - Bow" },
-  { name:"Property management (Riley)", email:"bowpropman@winkworth.co.uk", client:"Winkworth - Bow" },
-  { name:"Pre-tenancy", email:"pretenancy@movelettings.co.uk", client:"Move Lettings" },
-  { name:"Property management", email:"propertymanagement@movelettings.co.uk", client:"Move Lettings" },
-  { name:"Josh", email:"josh@jagspropertygroup.com", client:"JAGS Property Group" },
-  { name:"Aran", email:"aran@jagspropertygroup.com", client:"JAGS Property Group" },
-  { name:"Jamal Gormati", email:"jamal.gormati@mcqueens.london", client:"McQueens" },
-  { name:"Jacquie Mathieson", email:"jacquie_mathieson@sky.com", client:"Jacquie Mathieson" },
-  { name:"Dilshan Wijesinghe", email:"shan311277@gmail.com", client:"DIlshan Wijesinghe" }
-];
+// 17 Oct security review: no real contacts in this public file. Contacts load from the Sheet's Contacts tab
+// (and from Copy to emails on jobs). A new browser starts empty until Sync now loads the Sheet.
+const SEED_CONTACTS = [];
 function normalizeContacts(arr){
   if (!Array.isArray(arr)) return null;
   const seen = {};
