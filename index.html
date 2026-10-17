@@ -184,6 +184,8 @@
   textarea{ resize:vertical; min-height:70px; }
 
   /* form card */
+  .nav-flash{ animation: navFlash 2s ease-out; }
+  @keyframes navFlash{ 0%,30%{ background:#FFF1C2; box-shadow:0 0 0 2px #E8735A inset; } 100%{ background:transparent; box-shadow:none; } }
   .form-card{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:20px; }
   .form-card h3{ margin:0 0 14px; font-family:'Cormorant Garamond',Georgia,serif; font-size:19px; color:var(--brand); }
   .extract-box{ background:var(--peri-bg); border:1px dashed var(--peri); border-radius:9px; padding:14px; margin-bottom:18px; }
@@ -561,7 +563,7 @@ function load(){
   if (fillContactsFromData()) lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { state.gcalConnected = localStorage.getItem(LS_GCAL_PREF) === "1"; } catch(e){}
   try { state.helpOn = localStorage.getItem(LS_HELP) !== "0"; } catch(e){}
-  if (location.hash === "#log") state.view = "table";
+  navReadInitial();   // 17 Oct: Dashboard, Job Log, Calendar or an open job, from the web address
   try { const q = localStorage.getItem(LS_QUEUE_DONE); if (q) state.queueDone = JSON.parse(q) || {}; } catch(e){}
 }
 function getJobNoHigh(){ try { return JSON.parse(localStorage.getItem(LS_JOBNO_HIGH)||"{}")||{}; } catch(e){ return {}; } }
@@ -1100,7 +1102,11 @@ function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
 function firstWeekdayMonIdx(y,m){ const jsDay = new Date(y, m-1, 1).getDay(); return (jsDay+6)%7; }
 function isoDate(y,m,d){ return y+"-"+pad2(m)+"-"+pad2(d); }
 function toggleMenu(){ state.menuOpen = !state.menuOpen; render(); }
-function setView(v){ state.view = v; state.menuOpen = false; document.title = v === "today" ? "WPS Dashboard" : "Wellington Property Services — Job Log"; render(); }
+function setView(v){
+  if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); }   // 17 Oct: don't leave a half-edited form open behind another page
+  navSetView(v); state.menuOpen = false; render();
+}
+function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : "Wellington Property Services — Job Log"; }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -1110,6 +1116,8 @@ function calNav(delta){
 function calToday(){ state.calYear = TODAY.getFullYear(); state.calMonth = TODAY.getMonth()+1; render(); }
 function calCellClick(iso){ openNewOnDate(iso); }
 function openNewOnDate(dateIso){
+  if (!confirmLeaveForm()) return;
+  navRememberPlace(null);
   state.editing = emptyJob();
   state.editing.date = dateIso;
   state.addingClient = false;
@@ -1189,9 +1197,12 @@ function captureFormValues(){
 }
 
 // ---------------------------------------------------------------- CRUD
-function openNew(){ state.editing = emptyJob(); state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm(); }
-function openEdit(id){ const j = state.jobs.find(x=>x.id===id); if (!j) return; state.editing = Object.assign({}, j); state.addingClient=false; state.editingAgentContact=false; render(); scrollToForm(); }
-function closeForm(){ state.fromQueueId = null; state.editing = null; state.addingClient = false; state.editingAgentContact = false; render(); }
+function openNew(){ if (!confirmLeaveForm()) return; navRememberPlace(null); state.editing = emptyJob(); state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm(); }
+function openEdit(id){ const j = state.jobs.find(x=>x.id===id); if (!j) return; if (state.editing && state.editing.id===id){ scrollToForm(); return; } if (!confirmLeaveForm()) return; navRememberPlace(id); state.editing = Object.assign({}, j); state.addingClient=false; state.editingAgentContact=false; render(); scrollToForm(); }
+function closeForm(){ dropForm(); render(); navBackToPlace(); }
+function dropForm(){ state.fromQueueId = null; state.editing = null; state.addingClient = false; state.editingAgentContact = false; }
+// Cancel, Esc and Back: ask first if anything in the form was changed (fixes 5 and 7)
+function requestCloseForm(){ if (!state.editing) return true; if (!confirmLeaveForm()) return false; closeForm(); return true; }
 function scrollToForm(){ setTimeout(()=>{ const el = document.querySelector(".form-card"); if (el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 0); }
 
 function onClientChange(sel){
@@ -1284,7 +1295,9 @@ function submitForm(){
   if (rrOffer) setTimeout(() => showActionBar((saved.jobNo||"Job")+" new date saved.", "Write confirmation email", () => window.open(rearrangeEmailUrl(saved, "confirm"), "_blank", "noopener")), 0);
   if (state.fromQueueId){ markQueueDone(state.fromQueueId, "added"); state.fromQueueId = null; }
   state.editing = null;
+  if (!navReturn.id) navReturn.id = saved.id;   // a new job: highlight it if it's on screen
   render();
+  navBackToPlace();
   syncJobToCalendar(saved);
 }
 
@@ -1910,6 +1923,8 @@ function qAdd(id){
 }
 function qEdit(id){
   const it = queueItem(id); if (!it || it.kind==="invoice" || it.kind==="sent") return;
+  if (!confirmLeaveForm()) return;
+  navRememberPlace(null);
   if (it.kind!=="new"){
     const m = findMatch(it);
     if (m){
@@ -2129,6 +2144,7 @@ function render(){
   const ae = document.activeElement;
   const keepSearch = ae && ae.id === "jobSearch" ? { s: ae.selectionStart, e: ae.selectionEnd } : null;
   renderInner(app);
+  navAfterRender();
   if (keepSearch){
     const el = document.getElementById("jobSearch");
     if (el){ el.focus(); try { el.setSelectionRange(keepSearch.s, keepSearch.e); } catch(e){} }
@@ -2178,7 +2194,7 @@ const TODAY_LINKS = [
   ["Dropbox (WPS)", "https://www.dropbox.com/home/WELLINGTON%20PROPERTY%20SERVICES"],
   ["Website", "https://www.wellington-ps.co.uk"],
 ];
-function goFilter(code){ state.statusFilter = code; state.view = "table"; render(); }
+function goFilter(code){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.statusFilter = code; navSetView("table"); render(); }
 function isoToday(offsetDays){ const d = new Date(); d.setDate(d.getDate()+(offsetDays||0)); return isoDate(d.getFullYear(), d.getMonth()+1, d.getDate()); }
 function tJobRow(j, opts){
   opts = opts || {};
@@ -2189,7 +2205,7 @@ function tJobRow(j, opts){
   return `<div class="t-row">
     <div class="t-time"${opts.showDate?' style="min-width:78px"':''}>${esc(when)}${opts.showDate && j.time ? `<div class="sub" style="font-weight:400;color:var(--ink-soft);font-size:12.5px">${esc(j.time)}</div>` : ""}</div>
     <div class="t-main">
-      <button class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"")} · ${esc(tm.code)} · ${esc(fullAddress(j)||"No address")}</button>
+      <button class="t-link" onclick="openEdit('${j.id}')" data-jid="${j.id}">${esc(j.jobNo||"")} · ${esc(tm.code)} · ${esc(fullAddress(j)||"No address")}</button>
       <div class="sub">${esc(j.client||"")}${j.tenants ? " · "+esc(j.tenants) : ""} ${maps}</div>
       ${opts.showDue && di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}
     </div>
@@ -2311,7 +2327,7 @@ function windowRow(x, now){
     else if (autoReminder(j)) rem = `<div class="sub">Reminder sent automatically ${esc(shortDay(autoReminder(j)))}</div>`;
     else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')"${hint("Opens a ready-written reminder in Gmail. Check it, then send.")} style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
   }
-  return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
+  return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')" data-jid="${j.id}">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
     <div class="sub">${started} · ${line}</div>${rem}</div>
     <span class="due ${cls}" style="white-space:nowrap">${tag}</span></div>`;
 }
@@ -2323,7 +2339,7 @@ function cRow(j, opts){
   const addr = [j.address, j.postcode].filter(Boolean).join(", ") || "No address";
   return `<div class="c-row">
     <span class="c-when">${opts.timeOnly ? esc(j.time||"Any time") : esc(when)+(j.time && !opts.noTime ? ` <span class="c-dim">${esc(j.time)}</span>` : "")}</span>
-    <button class="c-job" onclick="openEdit('${j.id}')" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(tm.code)} · ${esc(addr)}<span class="c-dim"> · ${esc(j.client||"")}</span></button>
+    <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(tm.code)} · ${esc(addr)}<span class="c-dim"> · ${esc(j.client||"")}</span></button>
     ${opts.extra || ""}
     ${di ? `<span class="due ${di.cls}" style="margin:0">${di.text}</span>` : ""}
     ${stageSelect(j)}
@@ -2445,7 +2461,7 @@ function renderToday(){
   const week = days.map(x => { const wk = x.d.getDay()===0 || x.d.getDay()===6;
     return `<div class="wk-day d-wk${wk?' wk-end':''}">
       <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()}<button class="wk-add d-add" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">+</button></div>
-      ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job d-wkjob" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" title="${esc(j.jobNo||"")} · ${esc(fullAddress(j))}${j.client ? " · "+esc(j.client) : ""}">
+      ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job d-wkjob" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(j.jobNo||"")} · ${esc(fullAddress(j))}${j.client ? " · "+esc(j.client) : ""}">
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
@@ -2659,7 +2675,7 @@ function renderCalendar(){
               const sm = statusMeta(j.status), tm = typeMeta(j.type);
               const label = [j.time, tm.code, j.client].filter(Boolean).map(esc).join(" &middot; ");
               const tooltip = [tm.label, j.client, fullAddress(j)].filter(Boolean).join(" — ");
-              return `<button class="cal-job-pill" style="background:${sm.bg}; color:${sm.fg};" onclick="event.stopPropagation(); openEdit('${j.id}')" title="${esc(tooltip)}">${label}</button>`;
+              return `<button class="cal-job-pill" style="background:${sm.bg}; color:${sm.fg};" onclick="event.stopPropagation(); openEdit('${j.id}')" data-jid="${j.id}" title="${esc(tooltip)}">${label}</button>`;
             }).join("")}
           </div>
         </div>`;
@@ -2804,7 +2820,7 @@ function removeContact(email){
 function deleteJobFromForm(){
   const id = state.editing && state.editing.id;
   if (!id) return;
-  if (deleteJob(id)){ state.fromQueueId = null; state.editing = null; render(); }
+  if (deleteJob(id)){ state.fromQueueId = null; state.editing = null; navReturn.id = null; render(); navBackToPlace(); }
 }
 
 // Photo link in the job form (13 Oct). The Photo Tool saves photoLink on the job; this shows it, with Open and Copy.
@@ -2947,7 +2963,7 @@ function renderForm(){
 
     <div class="form-actions">
       ${isNew ? "" : `<button class="btn btn-danger" onclick="deleteJobFromForm()"${tip("Delete this job and its calendar event (asks first, can't be undone)")}>Delete job</button><span class="fa-gap"></span>`}
-      <button class="btn btn-ghost" onclick="closeForm()"${tip("Close without saving")}>Cancel</button>
+      <button class="btn btn-ghost" onclick="requestCloseForm()"${tip("Close without saving (asks first if you changed anything). Esc does the same.")}>Cancel</button>
       <button class="btn btn-coral" onclick="submitForm()"${hint("Saves the job, and puts it on the calendar if connected")}>${isNew ? "Save job" : "Save changes"}</button>
     </div>
   </div>`;
@@ -2966,7 +2982,7 @@ function renderTable(){
       <tbody>
         ${jobs.map(j=>{
           const sm = statusMeta(j.status), tm = typeMeta(j.type), di = dueInfo(j);
-          return `<tr class="${di&&di.late?'row-late':''}">
+          return `<tr class="${di&&di.late?'row-late':''}" data-jid="${j.id}">
             <td class="mono jt-no">${esc(j.jobNo)}</td>
             <td class="jt-type"><span class="type-badge">${esc(tm.label)}</span></td>
             <td class="jt-agent">${esc(j.client)||"—"}</td>
@@ -2978,7 +2994,7 @@ function renderTable(){
                 return `${invoiceSelect(j)}${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
             <td class="jt-act">
               <div class="row-actions">
-                <button class="icon-btn" title="Open and edit this job" onclick="openEdit('${j.id}')">
+                <button class="icon-btn" title="Open and edit this job" onclick="openEdit('${j.id}')" data-jid="${j.id}">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 </button>
                 <button class="icon-btn" title="Delete this job (asks first, can't be undone)" onclick="deleteJob('${j.id}')">
@@ -3149,6 +3165,156 @@ function confirmUrlAction(){
     }
   });
 }
+
+
+// ---------------------------------------------------------------- navigation (17 Oct, fixes 1-8)
+// The web address follows the screen: no hash = Dashboard, #log = Job Log list, #calendar = calendar,
+// #job=<job no.> = a job open in the form, #new = a new job. Back and Forward move between them, refresh
+// keeps the page, and Back from the Photo Tool lands where you left. Closing a form steps back in the
+// history (so Back never reopens it); leaving a changed form asks first.
+let navFirst = true;          // the first render only replaces the address, never adds to the history
+let navExpect = null;         // a hash we stepped back to ourselves, so its popstate is ignored
+let navApplying = false;      // true while a Back/Forward is being applied
+let navSnap = null;           // { id, snap } of the open form when it was opened
+let navReturn = { y: null, id: null };   // where the page was when the form opened
+
+const NAV_FIELDS = { jobNo:"f_jobNo", type:"f_type", status:"f_status", date:"f_date", time:"f_time", propertyType:"f_propertyType",
+  address:"f_address", town:"f_town", postcode:"f_postcode", bedrooms:"f_bedrooms", extraAreas:"f_extraAreas",
+  notes:"f_notes", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
+function formSnapshot(){
+  const f = state.editing; if (!f) return null;
+  const val = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  const v = {};
+  for (const k in NAV_FIELDS){ const x = val(NAV_FIELDS[k]); v[k] = String(x !== undefined ? x : (f[k] ?? "")).trim(); }
+  v.tenants = (f.tenantRows||[]).map((t,i) => [val("t_name_"+i) ?? t.name, val("t_phone_"+i) ?? t.phone, val("t_email_"+i) ?? t.email]
+    .map(x => String(x||"").trim()).join("|")).filter(x => x !== "||");
+  v.client = f.client || "";
+  v.copyTo = (f.copyTo || []).slice().sort();
+  return JSON.stringify(v);
+}
+function formDirty(){
+  if (!state.editing || !navSnap || navSnap.id !== state.editing.id) return false;
+  return formSnapshot() !== navSnap.snap;
+}
+function confirmLeaveForm(){
+  if (!formDirty()) return true;
+  const f = state.editing;
+  const name = state.jobs.some(j => j.id === f.id) ? (f.jobNo || "this job") : "this new job";
+  return confirm("You've changed " + name + " but not saved it.\n\nOK = discard the changes\nCancel = keep editing");
+}
+
+function navRememberPlace(id){ if (!state.editing) navReturn = { y: window.scrollY, id: id || null }; }
+function navBackToPlace(){
+  const r = navReturn; navReturn = { y: null, id: null };
+  if (r.y === null && !r.id) return;
+  setTimeout(() => {
+    if (r.y !== null) window.scrollTo(0, r.y);
+    const el = r.id ? document.querySelector('[data-jid="' + r.id + '"]') : null;
+    if (!el) return;
+    const b = el.getBoundingClientRect();
+    if (b.bottom < 0 || b.top > window.innerHeight) el.scrollIntoView({ block: "center" });
+    el.classList.remove("nav-flash"); void el.offsetWidth; el.classList.add("nav-flash");
+    setTimeout(() => el.classList.remove("nav-flash"), 2000);
+  }, 0);
+}
+
+function navHashFor(){
+  const f = state.editing;
+  if (f){
+    const saved = state.jobs.find(j => j.id === f.id);
+    if (!saved) return "#new";
+    const no = (saved.jobNo || "").trim();
+    const unique = no && state.jobs.filter(j => (j.jobNo || "").trim() === no).length === 1;
+    return "#job=" + encodeURIComponent(unique ? no : saved.id);
+  }
+  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : "";
+}
+function navSame(a, b){ const n = h => (!h || h === "#" || h === "#today") ? "" : h; return n(a) === n(b); }
+function navParse(hash){
+  const h = decodeURIComponent((hash || "").replace(/^#/, ""));
+  const st = history.state && history.state.wps ? history.state : null;
+  if (h === "" || h === "today") return { view: "today" };
+  if (h === "log") return { view: "table" };
+  if (h === "calendar") return { view: "calendar" };
+  if (h === "new") return { view: (st && st.view) || "table", isNew: true };
+  if (h.indexOf("job=") === 0) return { view: (st && st.view) || "table", jobKey: h.slice(4) };
+  return null;   // not ours: leave the page as it is
+}
+function navFindJob(key){
+  if (!key) return null;
+  return state.jobs.find(j => j.id === key) || state.jobs.filter(j => (j.jobNo || "").trim().toUpperCase() === key.trim().toUpperCase())[0] || null;
+}
+function navOpenQuiet(t){
+  // Open the form for Back/Forward or a refresh: no question, no scroll memory.
+  if (t.isNew) state.editing = emptyJob();
+  else { const j = navFindJob(t.jobKey); if (!j) return false; state.editing = Object.assign({}, j); }
+  state.addingClient = false; state.editingAgentContact = false;
+  return true;
+}
+function navReadInitial(){
+  // Called from load(), after the jobs are read from this browser.
+  const t = navParse(location.hash);
+  if (!t) return;
+  state.view = t.view;
+  if (t.jobKey || t.isNew) navOpenQuiet(t);
+}
+function navAfterRender(){
+  // Take the "as opened" copy of the form once per job, then put the screen into the web address.
+  if (state.editing){ if (!navSnap || navSnap.id !== state.editing.id) navSnap = { id: state.editing.id, snap: formSnapshot() }; }
+  else navSnap = null;
+  if (navApplying) return;
+  const want = navHashFor();
+  if (navFirst){ navFirst = false; if (!navSame(want, location.hash)) navReplace(want); return; }
+  if (navSame(want, location.hash)) return;
+  const hs = history.state && history.state.wps ? history.state : null;
+  try {
+    if (/[?&]do=/.test(location.search)) navReplace(want);                                    // a link action: don't keep it in the history
+    else if (!state.editing && hs && hs.form && navSame(want, hs.base)){ navExpect = want; history.back(); }   // form closed: step back to the page under it
+    else if (state.editing && hs && hs.form) navReplace(want, hs.base);                        // one form swapped for another
+    else history.pushState(navState(state.editing ? location.hash : null), "", navUrl(want));
+  } catch(e){}
+}
+function navState(base){ return { wps: 1, view: state.view, form: !!state.editing, base: base === null ? undefined : base }; }
+function navUrl(h){ return location.pathname + location.search + h; }
+function navReplace(h, base){ try { history.replaceState(navState(base === undefined ? null : base), "", navUrl(h)); } catch(e){} }
+
+window.addEventListener("popstate", function(){
+  if (navExpect !== null){ const e = navExpect; navExpect = null; if (navSame(location.hash, e)) return; }
+  const t = navParse(location.hash);
+  if (!t) return;
+  const hadForm = !!state.editing;
+  if (state.editing){
+    const sameForm = t.jobKey && (navFindJob(t.jobKey) || {}).id === state.editing.id;
+    if (!sameForm){
+      if (!confirmLeaveForm()){   // keep editing: put the form's address back
+        try { history.pushState(navState(location.hash), "", navUrl(navHashFor())); } catch(e){}
+        return;
+      }
+      dropForm();
+    }
+  }
+  const formWasOpen = hadForm && !state.editing;
+  state.rearrangeId = null;
+  navSetView(t.view); state.menuOpen = false;
+  let opened = false;
+  if ((t.jobKey || t.isNew) && !state.editing) opened = navOpenQuiet(t);
+  navApplying = true;
+  try { render(); } finally { navApplying = false; }
+  if (opened) scrollToForm();
+  else if (formWasOpen) navBackToPlace();
+  if ((t.jobKey || t.isNew) && !state.editing) navReplace(navHashFor());   // job no longer exists
+});
+
+// Esc closes the form, like Cancel (fix 7). The Rearrange panel closes first if it's open.
+document.addEventListener("keydown", function(e){
+  if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+  if (state.rearrangeId && typeof closeRearrange === "function"){ closeRearrange(); return; }
+  if (state.editing){ e.preventDefault(); requestCloseForm(); }
+});
+
+// Leaving the page (Photo Tool, Dictation, another site, refresh, closing the tab) with a changed form:
+// the browser asks first. Its wording is set by the browser.
+window.addEventListener("beforeunload", function(e){ if (formDirty()){ e.preventDefault(); e.returnValue = ""; } });
 
 // ---------------------------------------------------------------- init
 load();
