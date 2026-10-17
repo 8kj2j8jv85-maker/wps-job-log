@@ -44,6 +44,10 @@ h2{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font
 .chip.has:not(.on){border-color:var(--navy2);color:var(--navy)}
 .chip.has:after{content:"";position:absolute;top:3px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--coral)}
 .chip.add{border-style:dashed;color:var(--muted)}
+.chip.next:not(.on){border:2px solid var(--coral);padding:7px 11px}
+.lastvisit{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 10px;padding:8px 10px;background:#FFF6F4;border:1px solid #F6D3CE;border-radius:10px}
+.lastvisit b{color:var(--navy)}
+.lastvisit button{background:none;border:none;padding:0;font:inherit;font-size:13px;color:var(--navy);text-decoration:underline;margin-left:6px}
 .roomhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .roomhead h2{flex:1}
 .mini{background:none;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit;font-size:13px;color:var(--muted)}
@@ -95,7 +99,7 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
 <main>
   <div class="warn" id="warn"></div>
 
-  <section class="card tip hint" style="display:none" id="helpCard"><b>How this works:</b> fill in the job, tap a <b>room</b>, tap the <b>microphone</b> and talk. Tap the mic again to stop. Tap the next room and carry on. At the end tap <b>Copy for Claude</b> and paste into the WPS project chat. <b>Jobs</b> (top) starts a new job or opens an old one. Tap <b>?</b> to hide these hints.</section>
+  <section class="card tip hint" style="display:none" id="helpCard"><b>How this works:</b> fill in the job, tap a <b>room</b>, tap the <b>microphone</b> and talk. Tap the mic again to stop. Tap the next room and carry on. At the end tap <b>Copy for Claude</b> and paste into the WPS project chat. <b>Jobs</b> (top) starts a new job or opens an old one. A property you've done before on this phone gets its rooms from the last visit (a check-out uses the check-in); <b>More rooms</b> shows the full list. Tap <b>?</b> to hide these hints.</section>
 
   <section class="card" id="jobCard">
     <div class="row">
@@ -113,6 +117,7 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
 
   <section class="card">
     <label class="f">Room</label>
+    <div class="lastvisit" id="lastVisit" style="display:none"></div>
     <div class="chips" id="chips"></div>
   </section>
 
@@ -234,6 +239,63 @@ function room(name, create){
   var r = {name:name, text:'', clips:[]}; j.rooms.push(r); return r;
 }
 function curRoom(){ var j=job(); return j && j.current ? room(j.current, true) : null; }
+
+/* ---------- rooms from the last visit (Lex, 18 Oct) ----------
+   A property done before (any job type) gets its rooms filled in from the last visit on this phone;
+   a check-out uses the check-in. Rooms are only built from scratch for a brand-new property.
+   Property = postcode + flat/house number from the address, so a whole block never matches by mistake. */
+function normPc(s){
+  var m = String(s||'').toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/g);
+  return m ? m[m.length-1].replace(/\s+/g,'') : '';
+}
+function unitKey(s){
+  s = String(s||'');
+  var m = s.match(/\b(?:flat|apartment|apt|unit|studio|room|maisonette)\.?\s*(\d+[a-z]?)\b/i);
+  if(m) return 'f' + m[1].toLowerCase();
+  m = s.match(/^\s*(\d+[a-z]?)\b/i);
+  return m ? 'n' + m[1].toLowerCase() : '';
+}
+function propKey(addr){
+  var pc = normPc(addr), u = unitKey(addr);
+  return pc && u ? pc + '|' + u : '';
+}
+function doneRooms(j){ return j.rooms.filter(function(r){ return r.text.trim(); }).map(function(r){ return r.name; }); }
+function lastVisit(j){
+  var key = propKey(j.address); if(!key) return null;
+  var prev = state.jobs.filter(function(x){
+    return x.id !== j.id && (x.created||0) < (j.created||Date.now()) && propKey(x.address) === key && doneRooms(x).length;
+  }).sort(function(a,b){ return (b.created||0) - (a.created||0); });
+  if(!prev.length) return null;
+  var pick = prev[0];
+  if(j.type === 'CO'){ var ici = prev.filter(function(x){ return x.type === 'ICI'; })[0]; if(ici) pick = ici; }
+  return pick;
+}
+// Fill (or refresh) the plan while nothing has been dictated on this job yet.
+function refreshPlan(j){
+  if(!j || doneRooms(j).length) return;
+  var p = lastVisit(j);
+  if(!p){ j.plan = null; return; }
+  j.plan = {names: doneRooms(p), jobNo: p.jobNo || '', type: p.type, date: p.created};
+}
+// Job details from the Job Log on this device (read only), when the job number matches.
+function logJob(no){
+  no = String(no||'').trim().toUpperCase(); if(!no) return null;
+  try{
+    var list = JSON.parse(localStorage.getItem('wps_standalone_jobs_v1') || '[]');
+    if(!Array.isArray(list)) return null;
+    var hits = list.filter(function(x){ return x && String(x.jobNo||'').trim().toUpperCase() === no; });
+    return hits.length === 1 ? hits[0] : null;
+  }catch(e){ return null; }
+}
+function fillFromLog(j){
+  if(!j || j.address) return false;
+  var lj = logJob(j.jobNo); if(!lj) return false;
+  var addr = [lj.address, lj.town, lj.postcode].map(function(s){ return String(s||'').replace(/\s+/g,' ').trim(); }).filter(Boolean).join(', ');
+  if(!addr) return false;
+  j.address = addr;
+  if(TYPES[lj.type]) j.type = lj.type;
+  return true;
+}
 
 /* ---------- text processing ---------- */
 function processText(t){
@@ -380,14 +442,7 @@ function keepAwake(){
 function render(){
   var j = job() || newJob();
   $('jobNo').value = j.jobNo; $('jobType').value = j.type; $('jobAddr').value = j.address;
-  var names = state.settings.rooms.slice();
-  j.rooms.forEach(function(r){ if(names.indexOf(r.name) < 0) names.push(r.name); });
-  var html = names.map(function(n){
-    var r = room(n, false);
-    var has = r && (r.text.trim() || r.clips.length);
-    return '<button class="chip' + (j.current===n?' on':'') + (has?' has':'') + '" data-room="' + esc(n) + '">' + esc(n) + '</button>';
-  }).join('') + '<button class="chip add" id="addRoom">+ Other</button>';
-  $('chips').innerHTML = html;
+  renderChips();
   var r = curRoom();
   $('roomName').textContent = r ? r.name : 'Pick a room';
   if(!want) $('roomText').value = r ? r.text : '';
@@ -395,6 +450,39 @@ function render(){
   renderClips();
   var done = j.rooms.filter(function(x){ return x.text.trim(); }).length;
   $('sum').textContent = done ? done + ' room' + (done>1?'s':'') + ' dictated' : '';
+}
+function renderChips(){
+  var j = job(); if(!j) return;
+  var plan = j.plan && j.plan.names && j.plan.names.length ? j.plan.names : null;
+  var names;
+  if(plan){
+    names = plan.slice();
+    j.rooms.forEach(function(r){ if(names.indexOf(r.name) < 0) names.push(r.name); });
+    if(j.showAll) state.settings.rooms.forEach(function(n){ if(names.indexOf(n) < 0) names.push(n); });
+  } else {
+    names = state.settings.rooms.slice();
+    j.rooms.forEach(function(r){ if(names.indexOf(r.name) < 0) names.push(r.name); });
+  }
+  var next = '';
+  if(plan) for(var i=0;i<plan.length;i++){ var pr = room(plan[i], false); if(plan[i] !== j.current && (!pr || !pr.text.trim())){ next = plan[i]; break; } }
+  var html = names.map(function(n){
+    var r = room(n, false);
+    var has = r && (r.text.trim() || r.clips.length);
+    return '<button class="chip' + (j.current===n?' on':'') + (has?' has':'') + (n===next?' next':'') + '" data-room="' + esc(n) + '">' + esc(n) + '</button>';
+  }).join('');
+  if(plan && !j.showAll) html += '<button class="chip add" id="allRooms">More rooms</button>';
+  html += '<button class="chip add" id="addRoom">+ Other</button>';
+  // only replace when something changed, so a tap that blurs the address box isn't lost
+  if($('chips').getAttribute('data-html') !== html){ $('chips').innerHTML = html; $('chips').setAttribute('data-html', html); }
+  var lv = $('lastVisit');
+  if(plan){
+    var t = TYPES[j.plan.type] ? TYPES[j.plan.type].name : (j.plan.type || '');
+    var d = j.plan.date ? new Date(j.plan.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
+    lv.innerHTML = 'Rooms from the last visit: <b>' + esc([j.plan.jobNo, t, d].filter(Boolean).join(' · ')) + '</b>' +
+      (next ? '. Next: <b>' + esc(next) + '</b>' : '') +
+      (j.showAll ? '<button id="planLess">Last visit\'s rooms only</button>' : '');
+    lv.style.display = 'block';
+  } else { lv.style.display = 'none'; lv.innerHTML = ''; }
 }
 function fmt(s){ var m = Math.floor(s/60), x = s%60; return m + ':' + (x<10?'0':'') + x; }
 function renderClips(){
@@ -444,6 +532,7 @@ $('chips').addEventListener('click', function(e){
   var b = e.target.closest('button'); if(!b) return;
   if(want) stop();
   var j = job() || newJob();
+  if(b.id === 'allRooms'){ j.showAll = true; save(); renderChips(); return; }
   if(b.id === 'addRoom'){
     var n = prompt('Room name (e.g. Bedroom 4, Utility, Balcony)');
     if(!n || !n.trim()) return; n = n.trim();
@@ -461,8 +550,17 @@ $('clearRoom').addEventListener('click', function(){
   r.text = ''; save(); render();
 });
 ['jobNo','jobType','jobAddr'].forEach(function(id){
-  $(id).addEventListener('input', function(){ var j = job() || newJob(); j.jobNo = $('jobNo').value.trim(); j.type = $('jobType').value; j.address = $('jobAddr').value.trim(); save(); });
-  $(id).addEventListener('change', function(){ var j = job(); if(j){ j.jobNo = $('jobNo').value.trim(); j.type = $('jobType').value; j.address = $('jobAddr').value.trim(); save(); } });
+  function upd(j){
+    j.jobNo = $('jobNo').value.trim(); j.type = $('jobType').value; j.address = $('jobAddr').value.trim();
+    if(id === 'jobNo' && fillFromLog(j)){ $('jobAddr').value = j.address; $('jobType').value = j.type; toast('Address and type filled from the Job Log'); }
+    refreshPlan(j); save(); renderChips();
+  }
+  $(id).addEventListener('input', function(){ upd(job() || newJob()); });
+  $(id).addEventListener('change', function(){ var j = job(); if(j) upd(j); });
+});
+$('lastVisit').addEventListener('click', function(e){
+  if(e.target.id !== 'planLess') return;
+  var j = job(); if(!j) return; j.showAll = false; save(); renderChips();
 });
 $('clips').addEventListener('click', function(e){
   var b = e.target.closest('button'); if(!b) return;
