@@ -2184,7 +2184,7 @@ const LINK_TIPS = {
   "Photo Tool":"Turn a day's photos into named, watermarked zips", "Dictation":"Phone notes by voice, room by room",
   "Amendments review":"Work through tenant comments point by point", "Amendments form":"The comments form tenants use",
   "Acrobat (e-sign)":"Send reports out for signature", "Gmail (info@)":"The info@ inbox", "Google Calendar":"The info@ calendar",
-  "Dropbox (WPS)":"WPS files", "Website":"wellington-ps.co.uk", "Job Log Sheet":"The Google Sheet copy of the Job Log (don't edit it there)"
+  "Dropbox (WPS)":"WPS files", "Website":"wellington-ps.co.uk", "Job Log Sheet (view only, don't edit)":"The Google Sheet copy of the Job Log. For looking only: the Job Log ignores edits made there and overwrites them on the next save"
 };
 const TODAY_LINKS = [
   ["Photo Tool", "photos.html"],
@@ -2487,7 +2487,7 @@ function renderToday(){
 
 function renderSideLinks(){
   const sheetId = lsGet(LS_SHEET_ID);
-  const links = TODAY_LINKS.filter(l => l[1] !== "photos.html").concat(sheetId ? [["Job Log Sheet", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
+  const links = TODAY_LINKS.filter(l => l[1] !== "photos.html").concat(sheetId ? [["Job Log Sheet (view only, don't edit)", "https://docs.google.com/spreadsheets/d/"+sheetId]] : []);
   return `<div class="side-links"><div class="side-label">LINKS</div>${links.map(l => `<a href="${l[1]}"${l[1].startsWith("http")?' target="_blank" rel="noopener"':''}${LINK_TIPS[l[0]] ? tip(LINK_TIPS[l[0]]) : ""}>${esc(l[0])}</a>`).join("")}</div>`;
 }
 function renderSidebar(){
