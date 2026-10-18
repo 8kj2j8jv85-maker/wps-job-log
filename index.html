@@ -909,6 +909,7 @@ function setCloud(status, msg){
   state.cloudStatus = status; state.cloudMsg = msg || "";
   if ((status==="error"||status==="conflict") && state.urlAction && state.urlAction.stage==="working") urlActionFail("Not saved: "+(msg||status)+". Nothing changed in Google.");
   if (status==="saved") state.cloudAt = new Date();
+  if (state.planDay && !state.planReal && typeof roadSignedIn === "function" && roadSignedIn()) setTimeout(drawPlan, 0);   // signed in while Plan my day is open: get the road times
   const el = document.getElementById("cloudPill");
   if (el) el.outerHTML = renderCloudPill();
   const sm = document.getElementById("syncMsg");
@@ -3558,6 +3559,7 @@ async function drawPlan(){
   if (window._planMap){ try { window._planMap.remove(); } catch(e){} window._planMap = null; }
   const list = document.getElementById("planList"), box = document.getElementById("planMap");
   if (!list || !state.planDay) return;
+  state.planReal = false;
   const seq = ++planSeq, iso = state.planDay, jobs = planJobs(iso), h = planHome(), home = { ll:[h.lat, h.lon], label:h.label };
   const alive = el => seq === planSeq && el && document.body.contains(el);
   try {
@@ -3575,7 +3577,7 @@ async function drawPlan(){
     const reordered = order.some((s, i) => stops[i] !== s);
     const canRoad = order.length && roadSignedIn();
     list.innerHTML = planListHtml(iso, home, order, est, deps, false, missing, reordered, gm,
-      !order.length ? "" : canRoad ? "Getting Google road times with traffic…" : "Estimates only. Click Check everything now (signs in to Google) for road times with traffic.");
+      !order.length ? "" : canRoad ? "Getting Google road times with traffic…" : "Estimates only. Click Save & get latest in the sidebar (signs in to Google) for road times with traffic.");
     // map first with the straight dashed line, so the page never waits on the road lookup
     let map = null, line = null;
     if (box){
@@ -3597,6 +3599,7 @@ async function drawPlan(){
       road = await fetchRoad(pts, deps);
       const deps2 = planDepartures(iso, order, road.map((r, i) => r ? (r.trafficMin != null ? r.trafficMin : r.min) : est[i].min));
       if (deps2.some((d, i) => Math.abs(d - deps[i]) >= 900000)){ deps = deps2; road = await fetchRoad(pts, deps); }
+      deps = planDepartures(iso, order, road.map((r, i) => r ? (r.trafficMin != null ? r.trafficMin : r.min) : est[i].min));   // show leave times from the real legs
     } catch(e){
       if (alive(list)) list.innerHTML = planListHtml(iso, home, order, est, deps, false, missing, reordered, gm, `Couldn't get Google road times (${esc(e.message || "no connection")}). Showing estimates.`);
       return;
@@ -3605,6 +3608,7 @@ async function drawPlan(){
     const legs = road.map((r, i) => r ? { mi: r.km * 0.621371, min: r.min, trafficMin: r.trafficMin, departUsed: r.departUsed, line: r.line } : est[i]);
     const gaps = road.filter(r => !r).length;
     const past = new Date(iso+"T23:59:59").getTime() < Date.now() || deps.every(d => d <= Date.now());
+    state.planReal = true;
     list.innerHTML = planListHtml(iso, home, order, legs, deps, true, missing, reordered, gm,
       (gaps ? `${gaps} leg${gaps>1?"s":""} still estimated (Google had no route). ` : "") + (past ? "This day has passed, so no traffic times; normal road times shown." : ""));
     if (map && alive(box)){
