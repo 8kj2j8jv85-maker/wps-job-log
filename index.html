@@ -312,8 +312,9 @@
 
   /* ===== WPS look B (29 Sept): navy sidebar ===== */
   .shell{ display:flex; min-height:100vh; }
-  .sidebar{ width:248px; flex-shrink:0; background:var(--brand); color:#fff; display:flex; flex-direction:column; gap:26px; padding:22px 16px; position:sticky; top:0; height:100vh; overflow-y:auto; }
-  .side-logo{ width:206px; height:auto; display:block; }
+  .sidebar{ width:248px; flex-shrink:0; background:var(--brand); color:#fff; display:flex; flex-direction:column; gap:26px; padding:22px 16px; position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; }
+  .sidebar > *{ min-width:0; max-width:100%; }   /* 18 Oct: no sideways scrollbar when the Windows scrollbar takes width */
+  .side-logo{ width:206px; max-width:100%; height:auto; display:block; }
   .side-nav{ display:flex; flex-direction:column; gap:4px; }
   .side-nav a{ display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:8px; color:var(--sky); text-decoration:none; font-size:15px; font-weight:500; }
   .side-nav a:hover{ background:rgba(255,255,255,.06); color:#fff; }
@@ -338,6 +339,9 @@
   .done-count{ display:inline-flex; flex-wrap:wrap; gap:4px 10px; margin-top:6px; font-size:13px; color:var(--ink-soft); }
   .done-count b{ color:var(--brand-text, var(--brand)); font-size:15px; }
   .done-count .dc-lbl{ font-weight:600; color:var(--brand-text, var(--brand)); }
+  .dn-parked{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:10px; padding-top:8px; border-top:1px solid var(--line, rgba(0,0,0,.08)); font-size:13px; }
+  .dn-pk{ display:inline-flex; align-items:center; gap:6px; }
+  .done-wp{ margin-top:2px; font-size:12px; color:var(--stone); }
   .page-actions{ display:flex; gap:10px; flex-wrap:wrap; }
   .btn{ border-radius:8px; font-weight:500; letter-spacing:.01em; }
   .btn-coral{ background:var(--coral); color:var(--brand-dark); font-weight:600; }
@@ -393,6 +397,8 @@
   .help-box{ background:#FFF8E6; border:1px solid #F0D58C; border-radius:10px; padding:10px 14px; margin:12px 0; font-size:13.5px; line-height:1.5; color:var(--ink); }
   .help-box b{ font-weight:600; color:var(--brand-text); }
   .help-box .hb-t{ font-size:11px; font-weight:600; letter-spacing:.12em; color:var(--amber); margin-bottom:2px; }
+  .help-box .hb-hide{ float:right; margin:-2px -4px 0 10px; background:none; border:0; padding:2px 6px; font:inherit; font-size:12px; font-weight:600; color:var(--amber); cursor:pointer; border-radius:6px; }
+  .help-box .hb-hide:hover{ background:rgba(0,0,0,.06); }
   .side-more{ display:contents; }
   .phone-only{ display:none; }
   .btn.sync-ok{ border-color:var(--green); color:var(--green); background:var(--green-bg); }
@@ -467,7 +473,7 @@
   .d-tiles{ margin:10px 0 12px; }
   .d-tile{ flex-direction:row; align-items:center; gap:8px; padding:6px 9px; }
   .d-txt{ display:flex; flex-direction:column; min-width:0; }
-  .d-num{ font-size:22px; min-width:16px; }
+  .d-num{ font-size:22px; min-width:16px; flex-shrink:0; }   /* 18 Oct: "100%" no longer squeezed over its label */
   .d-lbl{ line-height:1.2; }
   @media (min-width:601px){ .d-sub{ white-space:normal; overflow:visible; line-height:1.2; } }
   .dn-row{ display:flex; align-items:center; gap:10px; padding:7px 0 7px 10px; border-top:1px solid var(--line-soft); border-left:3px solid var(--line); font-size:13.5px; min-width:0; }
@@ -660,7 +666,8 @@ const DUE_STATUSES = ["booked","processing","completed"];   // report not yet se
 // Reports completed counter (Lex, 14 Oct; built 18 Oct). Every job type counts once its report is done:
 // inventory & check-ins at Signed, Deemed agreed or Archived; everything else at Sent or later.
 // Month/year come from the signed, deemed or sent date (else the visit date).
-// WPS jobs only, counting from zero (Lex, 18 Oct: no Wellington Parker starting figure).
+// WPS jobs only, counting from zero. A second small line adds Wellington Parker's total (WP_TOTAL) for a combined figure
+// (Lex, 18 Oct evening, option 7A); the WPS counts and milestones stay WPS only.
 function reportDoneAt(j){
   const done = j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status);
   if (!done) return null;
@@ -679,7 +686,7 @@ function doneCounts(){
 }
 // Milestones (Lex, 18 Oct): a one-off message under the dashboard panel when WPS passes each figure, and a special one
 // the day WPS beats Wellington Parker's total. Shown once per device until "Thanks" is pressed.
-const WP_TOTAL = 3507;   // Wellington Parker reports, 2014 to Sep 2026 (17 Oct Dropbox index). Never shown, only the target.
+const WP_TOTAL = 3507;   // Wellington Parker reports, 2014 to Sep 2026 (17 Oct Dropbox index). Milestone target, and added to the combined line.
 const MILESTONES = [50, 100, 250, 500, 1000, 2000, 3000];
 const LS_MILESTONES = "wps_milestones_seen_v1";
 function milestoneMessage(m, n){
@@ -715,7 +722,7 @@ function renderMilestone(){
 }
 function renderDoneCount(){
   const c = doneCounts();
-  return `<div class="done-count"${tip("Reports completed: inventories once signed or deemed agreed, everything else once sent")}><span class="dc-lbl">Reports completed</span><span><b>${c.month}</b> this month</span><span><b>${c.year}</b> this year</span><span><b>${c.all}</b> all time</span></div>`;
+  return `<div class="done-count"${tip("Reports completed: inventories once signed or deemed agreed, everything else once sent")}><span class="dc-lbl">Reports completed</span><span><b>${c.month}</b> this month</span><span><b>${c.year}</b> this year</span><span><b>${c.all}</b> all time</span></div><div class="done-wp"${tip("Wellington Parker's "+WP_TOTAL.toLocaleString("en-GB")+" reports (2014 to Sep 2026) plus WPS")}>${(WP_TOTAL + c.all).toLocaleString("en-GB")} including Wellington Parker</div>`;
 }
 function isFinished(j){ return j.invoice==="paid" && (j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status)); }
 
@@ -729,8 +736,18 @@ const ADD_NEW = "__add_new__";
 const LS_HELP = "wps_help_on_v1";   // shared with the Photo Tool and Dictation (same site)
 function hint(t){ return ` title="${esc(t)}" data-hint="${esc(t)}"`; }   // hover title + text shown under the button when Help is on
 function tip(t){ return ` title="${esc(t)}"`; }                          // hover title only (small buttons, pills)
-function helpBox(html){ return state.helpOn ? `<div class="help-box"><div class="hb-t">HOW THIS WORKS</div>${html}</div>` : ""; }
-function toggleHelp(){ state.helpOn = !state.helpOn; lsSet(LS_HELP, state.helpOn ? "1" : "0"); render(); }
+// Each "How this works" box can be hidden once read (Lex, 18 Oct). Kept per box in this browser; switching
+// Help hints off and on again brings them all back. Shared with the Photo Tool.
+const LS_HELP_HIDDEN = "wps_help_hidden_v1";
+function helpHidden(){ try { const a = JSON.parse(lsGet(LS_HELP_HIDDEN) || "[]"); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
+function helpKey(html){ let h = 0; const s = String(html); for (let i = 0; i < s.length; i++){ h = (h*31 + s.charCodeAt(i)) | 0; } return "b" + (h >>> 0).toString(36); }
+function hideHelpBox(k){ const a = helpHidden(); if (!a.includes(k)) a.push(k); lsSet(LS_HELP_HIDDEN, JSON.stringify(a)); render(); }
+function helpBox(html){
+  if (!state.helpOn) return "";
+  const k = helpKey(html); if (helpHidden().includes(k)) return "";
+  return `<div class="help-box"><button class="hb-hide" onclick="hideHelpBox('${k}')"${tip("Hide this box. Switch Help hints off and on to bring it back.")}>Hide</button><div class="hb-t">HOW THIS WORKS</div>${html}</div>`;
+}
+function toggleHelp(){ state.helpOn = !state.helpOn; lsSet(LS_HELP, state.helpOn ? "1" : "0"); if (state.helpOn) lsSet(LS_HELP_HIDDEN, "[]"); render(); }
 
 const TODAY = new Date();
 let state = {
@@ -1116,6 +1133,25 @@ function autoReminder(j){
   const a = state.amend; if (!a || !a.autoRem) return null;
   const s = j.reissuedAt || j.sentAt; if (!s) return null;
   return a.autoRem[normJobNo(j.jobNo)+"|"+String(s).slice(0,10)] || null;
+}
+// 7-day reminders are automatic (Lex, 18 Oct): process email D (WPS Amendments script, live 11 Oct) and the WPS signing
+// page both send them by themselves, 2 days before the window closes. Check-ins sent from 11 Oct never get a Write email
+// button in Do next or the tiles. Only the comment windows panel keeps a small fallback link, once the reminder day has
+// passed with nothing in the script's log (the log is only read when Amendments are loaded).
+const AUTO_REMIND_FROM = new Date("2026-10-11T00:00:00");
+function am_loaded(){ return !!(state.amend && state.amend.loaded); }
+function autoRemindExpected(j){ const s = windowStart(j); return !!(s && s >= AUTO_REMIND_FROM); }
+function autoRemindDay(j){
+  // the script runs daily at 9am and sends on the first run with 2 days or less left (Lexington and Bow Road: 18 Oct)
+  const c = windowClose(j); if (!c) return null;
+  const from = addDays(c, -REMINDER_DAYS_LEFT), d = new Date(from); d.setHours(9,0,0,0);
+  if (d < from) d.setDate(d.getDate()+1);
+  return d;
+}
+function needsManualReminder(j, now){
+  // true only for older check-ins (sent before 11 Oct) with 2 days or less left and no reminder recorded
+  if (j.status!=="sent" || j.reminderAt || autoReminder(j) || autoRemindExpected(j)) return false;
+  const c = windowClose(j); return !!(c && c > now && Math.ceil((c-now)/86400000) <= REMINDER_DAYS_LEFT);
 }
 function windowState(j){
   // open | hold (amendments open, window passed) | due (passed, amendments not checked yet) | deemed | signed
@@ -1673,6 +1709,14 @@ function showActionBar(msg, btnLabel, onBtn){
 }
 
 // Paid button on the dashboard's Awaiting payment rows (13 Oct)
+function parkJob(id, on){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  const before = snapJob(j);
+  if (on) j.parkedAt = new Date().toISOString(); else delete j.parkedAt;
+  saveJobs();
+  render();
+  showUndo(`${j.jobNo || "Job"} ${on ? "parked (off Do next)" : "back on Do next"}`, before);
+}
 function markPaid(id){
   const j = state.jobs.find(x=>x.id===id);
   if (!j || j.invoice !== "invoiced") return;
@@ -2536,8 +2580,12 @@ function routeUrl(jobs){
 }
 function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
 function shortDay(d){ return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
+// On time only judges jobs visited from 11 Oct, when the Job Log went live (Lex, 18 Oct, option 4B): the changeover
+// backlog from September stays out of the score.
+const ONTIME_FROM = new Date("2026-10-11T00:00:00");
+function onTimeJob(j){ const v = visitTime(j); return !!(v && v >= ONTIME_FROM); }
 function turnaroundStats(jobs, since){
-  const done = jobs.filter(j => j.sentAt && new Date(j.sentAt) >= since && visitTime(j));
+  const done = jobs.filter(j => j.sentAt && new Date(j.sentAt) >= since && onTimeJob(j));
   if (!done.length) return null;
   let total = 0, onTime = 0;
   done.forEach(j => {
@@ -2550,7 +2598,7 @@ function turnaroundStats(jobs, since){
 // ---------------------------------------------------------------- performance (Lex, 14 Oct; built 18 Oct)
 // Everything here is worked out from dates the Job Log keeps: visit date/time, processing, sent, signed, deemed.
 function turnaroundBetween(jobs, from, to){
-  const done = jobs.filter(j => j.sentAt && new Date(j.sentAt) >= from && new Date(j.sentAt) < to && visitTime(j));
+  const done = jobs.filter(j => j.sentAt && new Date(j.sentAt) >= from && new Date(j.sentAt) < to && onTimeJob(j));
   if (!done.length) return null;
   let total = 0, onTime = 0;
   done.forEach(j => { const hrs = (new Date(j.sentAt) - visitTime(j)) / 3600000; total += Math.max(0, hrs); if (hrs <= (TURNAROUND_HOURS[j.type] || 48)) onTime++; });
@@ -2666,6 +2714,12 @@ function windowRow(x, now){
   if (open && j.status==="sent"){
     if (j.reminderAt) rem = `<div class="sub">Reminder sent ${esc(shortDay(new Date(j.reminderAt)))} · <button class="t-link" style="font-size:12px" onclick="markReminder('${j.id}', false)">undo</button></div>`;
     else if (autoReminder(j)) rem = `<div class="sub">Reminder sent automatically ${esc(shortDay(autoReminder(j)))}</div>`;
+    else if (autoRemindExpected(j)){
+      const ad = autoRemindDay(j);
+      if (!ad || ad > now) rem = `<div class="sub">Auto reminder due ${esc(shortDay(ad || x.closes))}</div>`;
+      else if (!am_loaded()) rem = `<div class="sub">Auto reminder due ${esc(shortDay(ad))} · load Amendments to confirm it went</div>`;
+      else rem = `<div class="sub">Auto reminder not in the script's log yet (due ${esc(shortDay(ad))}) · <button class="t-link" style="font-size:12px" onclick="sendReminder('${j.id}')"${tip("Only if the automatic one didn't go. Opens a ready-written reminder in Gmail.")}>write one by hand</button></div>`;
+    }
     else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')"${hint("Opens a ready-written reminder in Gmail. Check it, then send.")} style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
   }
   return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')" data-jid="${j.id}">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
@@ -2752,7 +2806,7 @@ function renderToday(){
   const windows = live.filter(j => j.type==="ICI" && j.sentAt && j.status!=="archived").map(j => ({ j, closes: windowClose(j), st: windowState(j) }))
     .filter(x => x.st==="open" || x.st==="hold" || x.st==="due" || x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
   const openWin = windows.filter(x => x.st==="open" || x.st==="hold" || x.st==="due").length;
-  const remindersDue = windows.filter(x => x.st==="open" && x.j.status==="sent" && !x.j.reminderAt && !autoReminder(x.j) && Math.ceil((x.closes-now)/86400000) <= REMINDER_DAYS_LEFT).length;
+  const remindersDue = windows.filter(x => x.st==="open" && needsManualReminder(x.j, now)).length;   // 18 Oct: automatic ones never count
   const sentNoDate = live.filter(j => j.type==="ICI" && j.status==="sent" && !j.sentAt).length;
   const wkStats = turnaroundStats(live, addDays(now, -7));
   const moStats = turnaroundStats(live, new Date(now.getFullYear(), now.getMonth(), 1));
@@ -2774,7 +2828,7 @@ function renderToday(){
     ["amend", "Amendments", amN==null ? "–" : amN, amN==null ? "click to load" : "", amN ? "late" : ""],
     ["inv", "To invoice", toInvoice.length, "", toInvoice.length ? "coral" : ""],
     ["paid", "Awaiting payment", unpaid.length, "", ""],
-    ["turn", "On time (7 days)", wkStats ? wkStats.pct+"%" : "–", wkStats ? "avg "+wkStats.avg+"h" : "no reports yet", ""],
+    ["turn", "On time (7 days)", wkStats ? wkStats.pct+"%" : "–", wkStats ? "avg "+wkStats.avg+"h" : "none visited since 11 Oct", ""],
   ];
   const countOf = k => { const t = tiles.find(x => x[0]===k); return typeof t[2]==="number" ? t[2] : 0; };
   // Default panel: the most urgent thing with something in it
@@ -2800,13 +2854,17 @@ function renderToday(){
 
   // Do next (Lex, 18 Oct; idea from Jobber's "recommended actions"): one list of what to do now, most urgent
   // first, each line with the job and its one obvious action. The tiles and panel below stay for the full lists.
-  const dn = [];
-  const dnAdd = (rank, tone, what, j, acts) => dn.push({ rank, tone, what, j, acts: acts || "", i: dn.length });
+  const dn = [], dnParked = [];
+  // Park (Lex, 18 Oct): a parked job drops off Do next (it still shows in the tiles and lists) until un-parked
+  const dnAdd = (rank, tone, what, j, acts) => {
+    if (j && j.parkedAt){ if (!dnParked.includes(j)) dnParked.push(j); return; }
+    dn.push({ rank, tone, what, j, acts: acts || "", i: dn.length });
+  };
   const dnRr = j => `<button class="d-mv" onclick="dnRearrange('${j.id}')"${tip("Visit didn't happen. Opens Rearrange in the Reports due list below.")}>Rearrange</button>`;
   const dueSoon = due.filter(x => !x.d.late && x.d.due - now < 24*3600000);
-  const remindDue = windows.filter(x => x.st==="open" && x.j.status==="sent" && !x.j.reminderAt && !autoReminder(x.j) && Math.ceil((x.closes-now)/86400000) <= REMINDER_DAYS_LEFT);
+  const remindDue = windows.filter(x => x.st==="open" && needsManualReminder(x.j, now));
   if (amN) dnAdd(10, "late", amN+" job"+(amN===1?"":"s")+" with tenant comments", null, `<button class="d-mv" onclick="setDashPanel('amend')">Review</button>`);
-  due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j, x.j.status==="processing" ? dnRr(x.j) : ""));
+  due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j));   // 18 Oct: no Rearrange once visited (Processing)
   unconfirmed.forEach(x => dnAdd(30, "warn", "Visit passed, still Booked", x.j, `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${dnRr(x.j)}`));
   remindDue.forEach(x => dnAdd(40, "warn", "Comment reminder due", x.j, `<button class="d-mv" onclick="sendReminder('${x.j.id}')"${tip("Opens a ready-written reminder in Gmail. Check it, then send.")}>Write email</button>`));
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
@@ -2822,10 +2880,11 @@ function renderToday(){
   const dnHtml = `<div class="t-card d-card dn-card">
       <h3>Do next <span class="count">${dn.length ? dn.length+" thing"+(dn.length===1?"":"s") : ""}</span></h3>
       ${dn.length ? (state.dnAll ? dn : dn.slice(0, DN_MAX)).map(x => `<div class="dn-row dn-${x.tone || "plain"}">
-          <span class="dn-what">${esc(x.what)}</span>${x.j ? dnJob(x.j) : `<span class="dn-gap"></span>`}${x.acts ? `<span class="d-acts">${x.acts}</span>` : ""}
+          <span class="dn-what">${esc(x.what)}</span>${x.j ? dnJob(x.j) : `<span class="dn-gap"></span>`}${(x.acts || x.j) ? `<span class="d-acts">${x.acts}${x.j ? `<button class="d-mv dn-park" onclick="parkJob('${x.j.id}', true)"${tip("Take this job off Do next until you un-park it. It still shows in the tiles and lists.")}>Park</button>` : ""}</span>` : ""}
         </div>`).join("")
         + (dn.length > DN_MAX ? `<button class="t-link d-more" onclick="state.dnAll=!state.dnAll;render()">${state.dnAll ? "Show fewer" : "Show all "+dn.length}</button>` : "")
         : `<div class="t-empty">Nothing urgent. All caught up.</div>`}
+      ${dnParked.length ? `<div class="dn-parked"><span class="c-dim">Parked (${dnParked.length}):</span>${dnParked.map(j => `<span class="dn-pk"><button class="t-link" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}">${esc(j.jobNo||"")}</button><button class="d-mv" onclick="parkJob('${j.id}', false)"${tip("Put this job back on Do next")}>Un-park</button></span>`).join("")}</div>` : ""}
     </div>`;
 
   const MAX = 7;
@@ -2842,7 +2901,7 @@ function renderToday(){
           + rows(unconfirmed, x => cRow(x.j, {extra: `<span class="d-acts"><button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${rrBtn(x.j)}</span>`}) + rearrangeBox(x.j), "")
           + note("If the report has already gone out, click the job and set its Status. Not visited? Press Rearrange.")
           + `<div class="d-sect" style="margin-top:14px">Reports to write (${due.length})</div>` : "")
-        + rows(due, x => cRow(x.j, {due:true, extra: x.j.status==="processing" ? `<span class="d-acts">${rrBtn(x.j)}</span>` : ""}) + rearrangeBox(x.j), "No reports waiting to be written."); break;
+        + rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;   // 18 Oct: Rearrange only while still at Booked
     case "book": title = "New bookings";
       body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" item"+(queueN===1?"":"s")+" (bookings or Tide invoices) waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
     case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
@@ -2862,7 +2921,7 @@ function renderToday(){
     case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
     case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: (j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
     case "turn": title = "Performance";
-      body = renderPerformance(live, now) + note("On time = report sent within the target from the visit: check-outs 48h, everything else 72h. Completed = check-ins once signed or deemed agreed, everything else once sent. Last month is compared up to the same day. Worked out from dates the Job Log has kept since 11 Oct, so older jobs may be missing."); break;
+      body = renderPerformance(live, now) + note("On time = report sent within the target from the visit: check-outs 48h, everything else 72h. Completed = check-ins once signed or deemed agreed, everything else once sent. Last month is compared up to the same day. On time only counts jobs visited from 11 Oct, when the Job Log went live, so the September changeover backlog stays out. Completed counts every job."); break;
   }
 
   // Next 7 days, compact
