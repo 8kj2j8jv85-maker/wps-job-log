@@ -517,6 +517,32 @@
     .status-card .num{ font-size:22px; }
     .status-card .lbl{ white-space:nowrap; }
   }
+
+  /* ---------- Stage board and week map (Lex, 18 Oct) ---------- */
+  .board{ display:grid; grid-template-columns:repeat(6,minmax(150px,1fr)); gap:10px; overflow-x:auto; padding-bottom:6px; align-items:start; }
+  .bd-col{ background:var(--paper-deep); border:1px solid var(--line); border-radius:10px; padding:8px; min-height:120px; display:flex; flex-direction:column; gap:7px; }
+  .bd-col.bd-over{ outline:2px dashed var(--peri); outline-offset:-2px; background:var(--peri-bg); }
+  .bd-head{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; border-top:3px solid var(--line); padding:6px 2px 2px; }
+  .bd-n{ font-weight:600; color:var(--ink-soft); }
+  .bd-empty{ font-size:12.5px; color:var(--stone); padding:6px 2px; }
+  .bd-card{ background:var(--card); border:1px solid var(--line); border-radius:9px; padding:8px 9px; font-size:13px; display:flex; flex-direction:column; gap:3px; cursor:grab; min-width:0; }
+  .bd-card.bd-late{ border-color:var(--coral); background:var(--coral-bg); }
+  .bd-card.bd-dragging{ opacity:.45; }
+  .bd-top{ display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12.5px; }
+  .bd-card .bd-addr{ white-space:normal; font-size:13px; line-height:1.3; }
+  .bd-sub{ font-size:12px; color:var(--ink-soft); }
+  .bd-card .due{ margin:0; white-space:normal; }
+  .bd-sel{ margin-top:3px; } .bd-sel .sel-box{ width:100%; }
+  .wm-toggle{ display:inline-flex; margin-right:10px; vertical-align:middle; }
+  .wm-toggle button{ padding:4px 10px; font-size:12.5px; }
+  .wm-bar{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-bottom:8px; }
+  .wm-range{ width:auto; min-width:150px; }
+  .wm-legend{ display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--ink-soft); }
+  .wm-legend i{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  .wk-map{ height:380px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--paper-deep); position:relative; z-index:0; }
+  .wm-msg{ padding:14px; font-size:13.5px; color:var(--ink-soft); }
+  @media (max-width:900px){ .board{ grid-template-columns:repeat(6,minmax(230px,82vw)); scroll-snap-type:x proximity; margin-right:-16px; padding-right:16px; } .bd-col{ scroll-snap-align:start; } }
+  @media (max-width:600px){ .wk-map{ height:300px; } .bd-card{ cursor:default; } }
   /* ---------- themes (Lex, 18 Oct): Classic (default), Light, Night. Picked in the left menu, remembered per device. ---------- */
   html[data-theme="light"]{
     --paper:#FFFFFF; --paper-deep:#F3F5F9; --line:#E8EBF0; --line-soft:#F3F5F8; --sky:#D7E1EF; --peri-bg:#EEF1F8; --stone-bg:#F0F2F5;
@@ -701,7 +727,8 @@ let state = {
   typeFilter: "all",
   clientFilter: "all",
   monthFilter: "all",
-  view: "today",             // "today", "table" or "calendar"
+  view: "today",             // "today", "table", "board" or "calendar"
+  weekMode: (function(){ try { return localStorage.getItem("wps_week_mode_v1")==="map" ? "map" : "days"; } catch(e){ return "days"; } })(),   // Dashboard week card: "days" or "map" (18 Oct)
   calYear: TODAY.getFullYear(),
   calMonth: TODAY.getMonth()+1,   // 1-12
   gcalConnected: false,
@@ -2323,7 +2350,7 @@ function onSearchInput(el){
   state.search = el.value;
   const box = document.getElementById("jobResults");
   if (!box){ render(); return; }
-  box.innerHTML = state.view === "calendar" ? renderCalendar() : renderTable();
+  box.innerHTML = state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable();
 }
 function render(){
   const app = document.getElementById("app");
@@ -2331,6 +2358,7 @@ function render(){
   const keepSearch = ae && ae.id === "jobSearch" ? { s: ae.selectionStart, e: ae.selectionEnd } : null;
   renderInner(app);
   navAfterRender();
+  drawWeekMap();
   if (keepSearch){
     const el = document.getElementById("jobSearch");
     if (el){ el.focus(); try { el.setSelectionRange(keepSearch.s, keepSearch.e); } catch(e){} }
@@ -2348,7 +2376,7 @@ function renderInner(app){
       ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
-      ${state.view === "today" ? renderToday() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : renderTable()}</div>`}
+      ${state.view === "today" ? renderToday() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
       ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; pick a job's stage or invoice state from its box &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
@@ -2807,8 +2835,8 @@ function renderToday(){
       </div>
     </div>
     <div class="t-card d-card d-week">
-      <h3>Next 7 days <span class="count">${coming.length} job${coming.length===1?"":"s"}</span></h3>
-      <div class="wk-strip">${week}</div>${freeLine}
+      <h3>${state.weekMode === "map" ? "Map" : "Next 7 days"} <span class="count"><span class="view-toggle wm-toggle"><button class="${state.weekMode!=='map'?'active':''}" onclick="setWeekMode('days')"${tip("Day by day")}>Days</button><button class="${state.weekMode==='map'?'active':''}" onclick="setWeekMode('map')"${tip("Upcoming jobs on a map, to see which visits are near each other")}>Map</button></span>${state.weekMode === "map" ? "" : coming.length+" job"+(coming.length===1?"":"s")}</span></h3>
+      ${state.weekMode === "map" ? renderWeekMapBox() : `<div class="wk-strip">${week}</div>${freeLine}`}
     </div>
     <div class="t-card d-card d-panel">
       <h3>${esc(title)}</h3>
@@ -2962,6 +2990,7 @@ function renderToolbar(){
   return `<div class="toolbar">
     <div class="view-toggle">
       <button class="${state.view==='table'?'active':''}" onclick="setView('table')"${tip("Show jobs as a list")}>List</button>
+      <button class="${state.view==='board'?'active':''}" onclick="setView('board')"${tip("Show jobs as a board, one column per stage. Drag a card to move it on a PC; on the phone pick the stage on the card.")}>Board</button>
       <button class="${state.view==='calendar'?'active':''}" onclick="setView('calendar')"${tip("Show jobs on a month calendar")}>Calendar</button>
     </div>
     <div class="search-wrap">
@@ -2976,13 +3005,133 @@ function renderToolbar(){
       <option value="all">All agents</option>
       ${state.clients.map(c=>`<option value="${esc(c.name)}" ${state.clientFilter===c.name?"selected":""}>${esc(c.name)}</option>`).join("")}
     </select>
-    ${state.view==="table" ? `
+    ${state.view==="table" || state.view==="board" ? `
       <select class="filter-select" onchange="state.monthFilter=this.value; render();">
         <option value="all">All months</option>
         ${monthOptions().map(k=>`<option value="${k}" ${state.monthFilter===k?"selected":""}>${monthLabel(k)}</option>`).join("")}
       </select>
     ` : ""}
   </div>`;
+}
+
+// ---------------------------------------------------------------- stage board (Lex, 18 Oct)
+// One column per stage, cards in the same order as the list (report due first). On a PC drag a card to another
+// column; on the phone (no drag) pick the stage from the box on the card. Same filters and search as the list.
+// Idea from InventoryBase's agenda, where appointments are dragged between columns.
+const BOARD_COLS = ["booked","processing","completed","sent","signed","deemed"];
+function renderBoard(){
+  const jobs = filteredJobs();
+  const cols = state.statusFilter === "archived" ? BOARD_COLS.concat("archived") : BOARD_COLS;
+  if (!jobs.length) return `<div class="empty">No jobs match right now. Try clearing a filter or search term.</div>`;
+  return `<div class="board">${cols.map(code => {
+    const sm = statusMeta(code), list = jobs.filter(j => j.status === code);
+    return `<div class="bd-col" data-st="${code}" ondragover="bdOver(event)" ondragleave="bdLeave(event)" ondrop="bdDrop(event,'${code}')">
+      <div class="bd-head" style="border-top-color:${sm.fg}"><span style="color:${sm.fg}">${esc(sm.label)}</span><span class="bd-n">${list.length}</span></div>
+      ${list.length ? list.map(bdCard).join("") : `<div class="bd-empty">Nothing here</div>`}
+    </div>`; }).join("")}</div>
+    <div class="d-note">Drag a card to another column to move it (PC). On the phone, pick the stage from the box on the card. Undo shows after each move.</div>`;
+}
+function bdCard(j){
+  const di = dueInfo(j), tm = typeMeta(j.type);
+  return `<div class="bd-card${di && di.late ? " bd-late" : ""}" draggable="true" data-jid="${j.id}" ondragstart="bdDrag(event,'${j.id}')" ondragend="bdEnd(event)">
+    <div class="bd-top"><b>${esc(j.jobNo||"")}</b><span class="type-badge" title="${esc(tm.label)}">${esc(tm.code)}</span></div>
+    <button class="c-job bd-addr" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}">${esc([j.address, j.postcode].filter(Boolean).join(", ") || "No address")}</button>
+    <div class="bd-sub">${esc(tableDate(j.date))}${j.time ? " · "+esc(j.time) : ""}${j.client ? " · "+esc(j.client) : ""}</div>
+    ${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}
+    ${needsInvoice(j) ? `<span class="due" style="color:var(--coral-dark)">To invoice</span>` : j.invoice==="invoiced" ? `<span class="due due-ok">Invoiced${j.invoiceNo ? " "+esc(j.invoiceNo) : ""}</span>` : ""}
+    <div class="bd-sel">${stageSelect(j)}</div>
+  </div>`;
+}
+function bdDrag(e, id){ try { e.dataTransfer.setData("text/plain", id); e.dataTransfer.effectAllowed = "move"; } catch(x){} e.currentTarget.classList.add("bd-dragging"); }
+function bdEnd(e){ e.currentTarget.classList.remove("bd-dragging"); document.querySelectorAll(".bd-over").forEach(c => c.classList.remove("bd-over")); }
+function bdOver(e){ e.preventDefault(); e.currentTarget.classList.add("bd-over"); }
+function bdLeave(e){ if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove("bd-over"); }
+function bdDrop(e, code){
+  e.preventDefault(); e.currentTarget.classList.remove("bd-over");
+  let id = ""; try { id = e.dataTransfer.getData("text/plain"); } catch(x){}
+  if (id && state.jobs.some(j => j.id === id)) pickStatus(id, code);
+}
+
+// ---------------------------------------------------------------- week map (Lex, 18 Oct)
+// Upcoming jobs as pins, to see which visits sit near each other (idea from Inventory Hive's calendar + map).
+// The map library (Leaflet) and the OpenStreetMap tiles only load when Map is picked. Postcode positions come
+// from postcodes.io, like the Photo Tool, and are remembered on this device. Only postcodes are sent.
+const LS_MAP_PC = "wps_map_postcodes_v1";
+const LEAFLET = { js:"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", jsSri:"sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=",
+                  css:"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", cssSri:"sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" };
+const MAP_TYPE_COL = { ICI:"#2E6DB4", CO:"#C0392B", MTI:"#C27C0E", SOC:"#7D3C98", CLN:"#148F77" };
+const MAP_RANGES = [["7","Next 7 days"],["30","Next 30 days"],["times","Times to agree"]];
+function setWeekMode(m){ state.weekMode = m; lsSet("wps_week_mode_v1", m); render(); }
+function setMapRange(r){ state.mapRange = r; render(); }
+function mapRange(){ return state.mapRange || "7"; }
+function mapJobs(){
+  const today = isoToday(0), r = mapRange();
+  const active = state.jobs.filter(j => j.status !== "archived");
+  const byTime = (a,b) => ((a.date||"9")+(a.time||"99")).localeCompare((b.date||"9")+(b.time||"99"));
+  if (r === "times") return active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
+  const end = isoToday(r === "30" ? 30 : 7);
+  return active.filter(j => j.date && j.date >= today && j.date <= end).sort(byTime);
+}
+function renderWeekMapBox(){
+  return `<div class="wm-bar"><select class="filter-select wm-range" onchange="setMapRange(this.value)" aria-label="Jobs on the map">${MAP_RANGES.map(([v,l]) => `<option value="${v}"${v===mapRange()?" selected":""}>${l}</option>`).join("")}</select>
+    <span class="wm-legend">${Object.keys(MAP_TYPE_COL).map(k => `<span><i style="background:${MAP_TYPE_COL[k]}"></i>${k}</span>`).join("")}</span></div>
+    <div id="wkMap" class="wk-map"><div class="wm-msg">Loading the map…</div></div><div id="wkMapNote" class="d-note"></div>`;
+}
+function loadLeaflet(){
+  if (window.L && window.L.map) return Promise.resolve();
+  if (window._leafletP) return window._leafletP;
+  window._leafletP = new Promise((res, rej) => {
+    const c = document.createElement("link"); c.rel = "stylesheet"; c.href = LEAFLET.css; c.integrity = LEAFLET.cssSri; c.crossOrigin = "anonymous"; document.head.appendChild(c);
+    const s = document.createElement("script"); s.src = LEAFLET.js; s.integrity = LEAFLET.jsSri; s.crossOrigin = "anonymous";
+    s.onload = () => res(); s.onerror = () => { window._leafletP = null; rej(new Error("map library didn't load")); };
+    document.head.appendChild(s);
+  });
+  return window._leafletP;
+}
+async function mapCoords(pcs){
+  let cache = {}; try { cache = JSON.parse(lsGet(LS_MAP_PC) || "{}") || {}; } catch(e){}
+  const need = [...new Set(pcs.map(normPc))].filter(k => k && !(k in cache));
+  for (let i=0; i<need.length; i+=100){
+    const r = await fetch("https://api.postcodes.io/postcodes", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ postcodes: need.slice(i, i+100) }) });
+    const d = await r.json();
+    (d.result || []).forEach(row => { cache[normPc(row.query)] = row.result ? [row.result.latitude, row.result.longitude] : null; });
+  }
+  lsSet(LS_MAP_PC, JSON.stringify(cache));
+  return cache;
+}
+let wkMapSeq = 0;
+async function drawWeekMap(){
+  const box = document.getElementById("wkMap");
+  if (window._wkMap){ try { window._wkMap.remove(); } catch(e){} window._wkMap = null; }
+  if (!box) return;
+  const seq = ++wkMapSeq, jobs = mapJobs(), note = document.getElementById("wkMapNote");
+  try {
+    await loadLeaflet();
+    const coords = await mapCoords(jobs.filter(j => j.postcode).map(j => j.postcode));
+    if (seq !== wkMapSeq || !document.body.contains(box)) return;   // the page was redrawn meanwhile
+    box.innerHTML = "";
+    const map = L.map(box, { scrollWheelZoom:false }); window._wkMap = map;
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(map);
+    const pts = [], seen = {}, missing = [];
+    jobs.forEach(j => {
+      const c = coords[normPc(j.postcode)];
+      if (!c){ missing.push(j); return; }
+      const k = c.join(","); const n = seen[k] = (seen[k] || 0) + 1;   // same postcode: fan the pins out a little
+      const ll = [c[0] + (n-1)*0.00025, c[1] + (n-1)*0.00035];
+      const when = j.date ? shortDay(new Date(j.date+"T00:00:00"))+(j.time ? " "+j.time : "") : "No date";
+      const col = MAP_TYPE_COL[j.type] || "#555";
+      L.circleMarker(ll, { radius:9, color:"#fff", weight:2, fillColor:col, fillOpacity:.95 }).addTo(map)
+        .bindTooltip(esc(when+" · "+typeMeta(j.type).code))
+        .bindPopup(`<b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)}<br>${esc(when)}<br>${esc(fullAddress(j))}${j.client ? "<br>"+esc(j.client) : ""}<br><a href="#" onclick="openEdit('${j.id}');return false;">Open job</a>`);
+      pts.push(ll);
+    });
+    if (pts.length > 1) map.fitBounds(pts, { padding:[28,28], maxZoom:15 });
+    else map.setView(pts[0] || [51.52, -0.05], pts.length ? 14 : 11);
+    if (note) note.innerHTML = (jobs.length ? `${pts.length} of ${jobs.length} job${jobs.length===1?"":"s"} on the map.` : "No jobs in this range.")
+      + (missing.length ? ` Not on the map (no postcode or not found): ${missing.map(j => esc(j.jobNo||"?")).join(", ")}.` : "");
+  } catch(e){
+    if (seq === wkMapSeq && document.body.contains(box)) box.innerHTML = `<div class="wm-msg">The map couldn't load (${esc(e.message || "no connection")}). The day view still works.</div>`;
+  }
 }
 
 function renderCalendar(){
@@ -3592,7 +3741,7 @@ function navHashFor(){
     const unique = no && state.jobs.filter(j => (j.jobNo || "").trim() === no).length === 1;
     return "#job=" + encodeURIComponent(unique ? no : saved.id);
   }
-  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : "";
+  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : "";
 }
 function navSame(a, b){ const n = h => (!h || h === "#" || h === "#today") ? "" : h; return n(a) === n(b); }
 function navParse(hash){
@@ -3601,6 +3750,7 @@ function navParse(hash){
   if (h === "" || h === "today") return { view: "today" };
   if (h === "log") return { view: "table" };
   if (h === "calendar") return { view: "calendar" };
+  if (h === "board") return { view: "board" };
   if (h === "new") return { view: (st && st.view) || "table", isNew: true };
   if (h.indexOf("job=") === 0) return { view: (st && st.view) || "table", jobKey: h.slice(4) };
   return null;   // not ours: leave the page as it is
