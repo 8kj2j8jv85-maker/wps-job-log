@@ -460,6 +460,63 @@
     .jt-inv{ grid-column:3; grid-row:4; text-align:right; }
   }
 
+
+  /* ---------- Dashboard layout (Lex, 18 Oct): Do next list, compact tile strip, phone + button, folded free days ---------- */
+  .d-row{ grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); }
+  .d-week{ margin-bottom:12px; }
+  .d-tiles{ margin:10px 0 12px; }
+  .d-tile{ flex-direction:row; align-items:center; gap:8px; padding:6px 9px; }
+  .d-txt{ display:flex; flex-direction:column; min-width:0; }
+  .d-num{ font-size:22px; min-width:16px; }
+  .d-lbl{ line-height:1.2; }
+  @media (min-width:601px){ .d-sub{ white-space:normal; overflow:visible; line-height:1.2; } }
+  .dn-row{ display:flex; align-items:center; gap:10px; padding:7px 0 7px 10px; border-top:1px solid var(--line-soft); border-left:3px solid var(--line); font-size:13.5px; min-width:0; }
+  .dn-card .dn-row:first-of-type{ border-top-color:transparent; }
+  .dn-late{ border-left-color:var(--red); } .dn-warn{ border-left-color:var(--amber); } .dn-coral{ border-left-color:var(--coral); }
+  .dn-what{ flex:0 0 auto; min-width:150px; font-weight:600; color:var(--ink); white-space:nowrap; }
+  .dn-late .dn-what{ color:var(--red); } .dn-warn .dn-what{ color:var(--amber); } .dn-coral .dn-what{ color:var(--coral-dark); }
+  .dn-gap{ flex:1; }
+  a.d-mv{ text-decoration:none; display:inline-block; }
+  .wk-freeline{ display:none; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px; font-size:13px; }
+  .wk-freebtn{ border:1px solid var(--line); background:var(--paper); border-radius:999px; padding:5px 11px; font:inherit; font-size:12.5px; color:var(--brand-text); cursor:pointer; }
+  .fab-new{ display:none; }
+  .sync-line:empty{ display:none !important; }
+  /* Job Log rows (Lex, 18 Oct): one line each on a PC */
+  @media (min-width:601px){ .tablewrap td{ padding:9px 8px; } .tablewrap th{ padding:6px 8px; } .jt-status .due{ white-space:normal; max-width:170px; } }
+  .jt-clip{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jt-addr .jt-clip{ max-width:240px; }
+  .jt-agent .jt-clip{ max-width:120px; }
+  .jt-date, .jt-time{ white-space:nowrap; }
+  .tb-long{ display:none; }
+  @media (max-width:900px){
+    .d-row{ grid-template-columns:1fr; }
+    .wk-isfree{ display:none; }
+    .wk-freeline{ display:flex; }
+    .dn-row{ flex-wrap:wrap; row-gap:3px; }
+    .dn-what{ min-width:0; }
+    .dn-row .c-job{ flex:1 1 100%; order:3; white-space:normal; }
+  }
+  @media (max-width:900px) and (min-width:601px){ .d-tiles{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  @media (max-width:600px){
+    .d-tiles{ display:flex; overflow-x:auto; gap:6px; margin-right:-16px; padding:0 16px 4px 0; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; }
+    .d-tile{ flex:0 0 auto; scroll-snap-align:start; }
+    .d-lbl{ white-space:nowrap; }
+    .d-sub{ max-width:140px; }
+    .page-actions .nj-btn{ display:none; }
+    .page-actions .sync-line.phone-only{ display:block; width:100%; font-size:12.5px; color:var(--ink-soft); }
+    .page-actions .sync-line.sync-ok{ color:var(--green); }
+    .page-actions .sync-line.sync-bad{ color:var(--coral-dark); }
+    .fab-new{ display:flex; position:fixed; right:16px; bottom:calc(18px + env(safe-area-inset-bottom, 0px)); width:56px; height:56px; border-radius:50%; background:var(--coral); color:#fff; border:none; font-size:32px; line-height:1; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.25); z-index:900; cursor:pointer; }
+    body.undo-on .fab-new{ bottom:calc(84px + env(safe-area-inset-bottom, 0px)); }
+    .wrap{ padding-bottom:96px; }
+    .jt-clip, .jt-addr .jt-clip, .jt-agent .jt-clip{ max-width:none; white-space:normal; overflow:visible; }
+    .tb-code{ display:none; } .tb-long{ display:inline; }
+    /* Job Log stage cards: one sideways-scrolling row, number beside the label */
+    .status-strip{ display:flex; overflow-x:auto; gap:6px; margin:12px -16px 12px 0; padding:0 16px 4px 0; -webkit-overflow-scrolling:touch; }
+    .status-card{ flex:0 0 auto; display:flex; align-items:center; gap:7px; padding:7px 10px; }
+    .status-card .num{ font-size:22px; }
+    .status-card .lbl{ white-space:nowrap; }
+  }
   /* ---------- themes (Lex, 18 Oct): Classic (default), Light, Night. Picked in the left menu, remembered per device. ---------- */
   html[data-theme="light"]{
     --paper:#FFFFFF; --paper-deep:#F3F5F9; --line:#E8EBF0; --line-soft:#F3F5F8; --sky:#D7E1EF; --peri-bg:#EEF1F8; --stone-bg:#F0F2F5;
@@ -902,6 +959,11 @@ function renderSyncBtn(){
   const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
   const label = s==="saving" ? "Saving…" : s==="saved" ? "Saved ✓ "+t : (s==="error"||s==="conflict") ? "Try again ⚠" : "Save & get latest";
   const cls = s==="saved" ? " sync-ok" : (s==="error"||s==="conflict") ? " sync-bad" : "";
+  // Phone Dashboard (Lex, 18 Oct): no separate Save button, "Check everything now" saves too. Just a status line.
+  if (state.view === "today"){
+    const line = s==="saving" ? "Saving to Google…" : s==="saved" ? "Saved to Google ✓ "+t : (s==="error"||s==="conflict") ? "Not saved ⚠ "+(state.cloudMsg || "")+" Tap Check everything now to try again." : "";
+    return `<div id="syncBtn" class="phone-only sync-line${cls}">${esc(line)}</div>`;
+  }
   return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}${hint("Tap after changes on the phone: saves to Google and loads changes from the PC")}>${esc(label)}</button>`
     + ((s==="error"||s==="conflict") && state.cloudMsg ? `<div id="syncMsg" class="phone-only sync-msg">${esc(state.cloudMsg)}</div>` : "");
 }
@@ -1448,11 +1510,11 @@ function showUndo(msg, before){
   let bar = document.getElementById("undo-bar");
   if (!bar){ bar = document.createElement("div"); bar.id = "undo-bar"; document.body.appendChild(bar); }
   bar.innerHTML = `<span>${esc(msg)}</span><button onclick="doUndo()">Undo</button><button class="undo-x" onclick="hideUndo()" aria-label="Close">✕</button>`;
-  bar.classList.add("show");
+  bar.classList.add("show"); document.body.classList.add("undo-on");
   clearTimeout(undoTimer);
   undoTimer = setTimeout(hideUndo, 8000);
 }
-function hideUndo(){ const bar = document.getElementById("undo-bar"); if (bar) bar.classList.remove("show"); undoSnap = null; }
+function hideUndo(){ const bar = document.getElementById("undo-bar"); if (bar) bar.classList.remove("show"); document.body.classList.remove("undo-on"); undoSnap = null; }
 function doUndo(){
   if (!undoSnap) return hideUndo();
   const j = state.jobs.find(x => x.id === undoSnap.id);
@@ -1560,7 +1622,7 @@ function showActionBar(msg, btnLabel, onBtn){
   if (!bar){ bar = document.createElement("div"); bar.id = "undo-bar"; document.body.appendChild(bar); }
   undoSnap = null; window._actionBarFn = onBtn || null;
   bar.innerHTML = `<span>${esc(msg)}</span>${btnLabel ? `<button onclick="(window._actionBarFn||function(){})();hideUndo()">${esc(btnLabel)}</button>` : ""}<button class="undo-x" onclick="hideUndo()" aria-label="Close">✕</button>`;
-  bar.classList.add("show");
+  bar.classList.add("show"); document.body.classList.add("undo-on");
   clearTimeout(undoTimer);
   undoTimer = setTimeout(hideUndo, btnLabel ? 20000 : 8000);
 }
@@ -2291,6 +2353,7 @@ function renderInner(app){
     </div>
     </main>
     </div>
+    ${state.editing ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="Log a job by hand">+</button>`}
   `;
 }
 
@@ -2588,6 +2651,12 @@ function todayInfo(j){
 }
 function setDashPanel(k){ state.dashPanel = k; state.dashAll = false; render(); }
 function toggleDashAll(){ state.dashAll = !state.dashAll; render(); }
+// Do next buttons (18 Oct): Rearrange opens in the Reports due list (one Rearrange box on the page at a time)
+function dnRearrange(id){ state.dashPanel = "due"; state.dashAll = true; state.rearrangeId = null; openRearrange(id); }
+function dnTray(){
+  if (!document.querySelector(".tray")){ state.queueChecked = true; render(); }   // tray was hidden: show it again
+  const t = document.querySelector(".tray"); if (t && t.scrollIntoView) t.scrollIntoView({block:"start", behavior:"smooth"});
+}
 function renderToday(){
   const today = isoToday(0), weekEnd = isoToday(7);
   const live = state.jobs;
@@ -2650,10 +2719,41 @@ function renderToday(){
   const TILE_GROUP = { due:"todo", times:"todo", photos:"todo", book:"todo", sig:"wait", win:"wait", amend:"wait", inv:"money", paid:"money", turn:"perf" };
   const GROUPS = [["todo","To do now",4],["wait","Waiting on others",3],["money","Money",2],["perf","Performance",1]];
   const groupHead = GROUPS.map(([g, lbl, n]) => `<div class="d-ghead d-g-${g}" style="grid-column:span ${n}">${lbl}</div>`).join("");
-  const tileHtml = groupHead + tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile d-g-${TILE_GROUP[k]}${panel===k?' on':''}${n===0 && panel!==k ? ' zero' : ''}${["sig","inv","turn"].includes(k) ? ' d-gstart' : ''}" onclick="setDashPanel('${k}')"${tip(TILE_TIPS[k]+". Click to see the list below.")}>
+  // Tiles as a compact strip (Lex, 18 Oct): number beside the label, so the strip is one short row on a PC and
+  // a sideways-scrolling row on the phone. The full sub line is in the hover text, so nothing is cut off.
+  const tileHtml = groupHead + tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile d-g-${TILE_GROUP[k]}${panel===k?' on':''}${n===0 && panel!==k ? ' zero' : ''}${["sig","inv","turn"].includes(k) ? ' d-gstart' : ''}" onclick="setDashPanel('${k}')"${tip(TILE_TIPS[k]+(sub ? " ("+sub+")" : "")+". Click to see the list below.")}>
       <span class="d-num" style="color:${k==='turn' ? tc(wkStats) : (toneCol[tone] || (n && n!=='–' ? 'var(--brand-text)' : 'var(--stone)'))}">${n}</span>
-      <span class="d-lbl">${lbl}</span>${sub ? `<span class="d-sub"${tone==='late'?' style="color:var(--red)"':''}>${esc(sub)}</span>` : ""}
+      <span class="d-txt"><span class="d-lbl">${lbl}</span>${sub ? `<span class="d-sub"${tone==='late'?' style="color:var(--red)"':''}>${esc(sub)}</span>` : ""}</span>
     </button>`).join("");
+
+  // Do next (Lex, 18 Oct; idea from Jobber's "recommended actions"): one list of what to do now, most urgent
+  // first, each line with the job and its one obvious action. The tiles and panel below stay for the full lists.
+  const dn = [];
+  const dnAdd = (rank, tone, what, j, acts) => dn.push({ rank, tone, what, j, acts: acts || "", i: dn.length });
+  const dnRr = j => `<button class="d-mv" onclick="dnRearrange('${j.id}')"${tip("Visit didn't happen. Opens Rearrange in the Reports due list below.")}>Rearrange</button>`;
+  const dueSoon = due.filter(x => !x.d.late && x.d.due - now < 24*3600000);
+  const remindDue = windows.filter(x => x.st==="open" && x.j.status==="sent" && !x.j.reminderAt && !autoReminder(x.j) && Math.ceil((x.closes-now)/86400000) <= REMINDER_DAYS_LEFT);
+  if (amN) dnAdd(10, "late", amN+" job"+(amN===1?"":"s")+" with tenant comments", null, `<button class="d-mv" onclick="setDashPanel('amend')">Review</button>`);
+  due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j, x.j.status==="processing" ? dnRr(x.j) : ""));
+  unconfirmed.forEach(x => dnAdd(30, "warn", "Visit passed, still Booked", x.j, `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${dnRr(x.j)}`));
+  remindDue.forEach(x => dnAdd(40, "warn", "Comment reminder due", x.j, `<button class="d-mv" onclick="sendReminder('${x.j.id}')"${tip("Opens a ready-written reminder in Gmail. Check it, then send.")}>Write email</button>`));
+  if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
+  dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
+  photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
+  timesToAgree.forEach(j => dnAdd(80, "", j.rearrangePending ? "New date to agree" : "Time to agree", j));
+  if (toInvoice.length) dnAdd(90, "coral", toInvoice.length+" report"+(toInvoice.length===1?"":"s")+" sent, not invoiced", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
+  if (unpaid.length) dnAdd(95, "", unpaid.length+" invoice"+(unpaid.length===1?"":"s")+" awaiting payment", null, `<button class="d-mv" onclick="setDashPanel('paid')">See list</button>`);
+  dn.sort((a,b) => a.rank - b.rank || a.i - b.i);
+  const DN_MAX = 6;
+  const dnJob = j => `<button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", ") || "No address")}</button>`;
+  const dnHtml = `<div class="t-card d-card dn-card">
+      <h3>Do next <span class="count">${dn.length ? dn.length+" thing"+(dn.length===1?"":"s") : ""}</span></h3>
+      ${dn.length ? (state.dnAll ? dn : dn.slice(0, DN_MAX)).map(x => `<div class="dn-row dn-${x.tone || "plain"}">
+          <span class="dn-what">${esc(x.what)}</span>${x.j ? dnJob(x.j) : `<span class="dn-gap"></span>`}${x.acts ? `<span class="d-acts">${x.acts}</span>` : ""}
+        </div>`).join("")
+        + (dn.length > DN_MAX ? `<button class="t-link d-more" onclick="state.dnAll=!state.dnAll;render()">${state.dnAll ? "Show fewer" : "Show all "+dn.length}</button>` : "")
+        : `<div class="t-empty">Nothing urgent. All caught up.</div>`}
+    </div>`;
 
   const MAX = 7;
   const rows = (arr, fn, empty) => {
@@ -2688,23 +2788,27 @@ function renderToday(){
   // Next 7 days, compact
   const days = [];
   for (let i=1; i<=7; i++){ const iso = isoToday(i); days.push({ iso, d: new Date(iso+"T00:00:00"), jobs: active.filter(j => j.date === iso).sort(byTime) }); }
+  // Phone (Lex, 18 Oct): days with nothing booked fold into one line of day buttons (each still adds a job)
+  const freeDays = days.filter(x => !x.jobs.length);
+  const freeLine = freeDays.length ? `<div class="wk-freeline"><span class="c-dim">${freeDays.length===7 ? "Nothing booked this week." : "Nothing booked:"}</span>${freeDays.map(x => `<button class="wk-freebtn" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">${x.d.toLocaleDateString("en-GB",{weekday:"short"})} ${x.d.getDate()} +</button>`).join("")}</div>` : "";
   const week = days.map(x => { const wk = x.d.getDay()===0 || x.d.getDay()===6;
-    return `<div class="wk-day d-wk${wk?' wk-end':''}">
+    return `<div class="wk-day d-wk${wk?' wk-end':''}${x.jobs.length ? '' : ' wk-isfree'}">
       <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()}<button class="wk-add d-add" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">+</button></div>
       ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job d-wkjob" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(j.jobNo||"")} · ${esc(fullAddress(j))}${j.client ? " · "+esc(j.client) : ""}">
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`The <b>tiles</b> count what needs doing. <b>Click a tile</b> to see its list in the panel at the bottom. <b>Click a job</b> to open it. <b>Pick a stage</b> from the coloured box on a job to move it to that stage. The <b>+</b> on a day adds a job on that day. Hover over anything on a PC for a short explanation.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`<b>Do next</b> lists what needs doing now, most urgent first, with the one button for each. The <b>tiles</b> count everything; <b>click a tile</b> to see its full list in the panel at the bottom. <b>Click a job</b> to open it. <b>Pick a stage</b> from the coloured box on a job to move it to that stage. The <b>+</b> on a day adds a job on that day. Hover over anything on a PC for a short explanation.`)}<div class="d-tiles">${tileHtml}</div>
     <div class="d-row">
+      ${dnHtml}
       <div class="t-card d-card">
         <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route"${tip("Opens Google Maps with today's jobs as stops, in time order")}>Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
         ${todays.length ? todays.map(j => cRow(j, {timeOnly:true}) + todayInfo(j)).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
       </div>
-      <div class="t-card d-card">
-        <h3>Next 7 days <span class="count">${coming.length} job${coming.length===1?"":"s"}</span></h3>
-        <div class="wk-strip">${week}</div>
-      </div>
+    </div>
+    <div class="t-card d-card d-week">
+      <h3>Next 7 days <span class="count">${coming.length} job${coming.length===1?"":"s"}</span></h3>
+      <div class="wk-strip">${week}</div>${freeLine}
     </div>
     <div class="t-card d-card d-panel">
       <h3>${esc(title)}</h3>
@@ -2745,7 +2849,7 @@ function renderPageHead(){
       ${state.view === "today"
         ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Checking…" : "Check everything now"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
-      <button class="btn btn-coral" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
+      <button class="btn btn-coral nj-btn" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
     </div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
 }
@@ -3213,6 +3317,13 @@ function renderForm(){
   </div>`;
 }
 
+// Job Log rows (Lex, 18 Oct): short dates ("Fri 9 Oct", year only when it isn't this year) so rows stay one line
+function tableDate(iso){
+  if (!iso) return "—";
+  const d = new Date(iso+"T00:00:00"); if (isNaN(d)) return iso;
+  const o = {weekday:"short", day:"numeric", month:"short"}; if (d.getFullYear() !== new Date().getFullYear()) o.year = "numeric";
+  return d.toLocaleDateString("en-GB", o).replace(",", "");
+}
 function renderTable(){
   const jobs = filteredJobs();
   if (!jobs.length){
@@ -3228,10 +3339,10 @@ function renderTable(){
           const sm = statusMeta(j.status), tm = typeMeta(j.type), di = dueInfo(j);
           return `<tr class="${di&&di.late?'row-late':''}" data-jid="${j.id}">
             <td class="mono jt-no">${esc(j.jobNo)}</td>
-            <td class="jt-type"><span class="type-badge">${esc(tm.label)}</span></td>
-            <td class="jt-agent">${esc(j.client)||"—"}</td>
-            <td class="jt-addr" style="max-width:240px;">${esc(fullAddress(j))||"—"}</td>
-            <td class="jt-date">${formatDate(j.date)}</td>
+            <td class="jt-type"><span class="type-badge" title="${esc(tm.label)}"><span class="tb-code">${esc(tm.code)}</span><span class="tb-long">${esc(tm.label)}</span></span></td>
+            <td class="jt-agent" title="${esc(j.client||"")}"><span class="jt-clip">${esc(j.client)||"—"}</span></td>
+            <td class="jt-addr" title="${esc(fullAddress(j))}"><span class="jt-clip">${esc(fullAddress(j))||"—"}</span></td>
+            <td class="jt-date" title="${esc(formatDate(j.date))}">${esc(tableDate(j.date))}</td>
             <td class="jt-time">${esc(j.time)||"—"}</td>
             <td class="jt-status">${stageSelect(j)}${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
             <td class="jt-inv">${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
