@@ -341,6 +341,11 @@
   .done-count .dc-lbl{ font-weight:600; color:var(--brand-text, var(--brand)); }
   .dn-parked{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:10px; padding-top:8px; border-top:1px solid var(--line, rgba(0,0,0,.08)); font-size:13px; }
   .dn-pk{ display:inline-flex; align-items:center; gap:6px; }
+  .perf-top{ margin-top:6px; font-size:13.5px; line-height:1.35; color:var(--ink-soft); max-width:640px; }
+  .perf-top .pt-icon{ display:inline-block; width:18px; font-weight:700; color:var(--brand-text, var(--brand)); }
+  .perf-top .pt-main{ font-weight:600; color:var(--brand-text, var(--brand)); }
+  .perf-top.pq-best .pt-icon, .perf-top.pq-best .pt-main{ color:var(--green, #2E6B45); }
+  .perf-top.pq-low .pt-icon{ color:var(--coral-dark, #C4553D); }
   .done-wp{ margin-top:2px; font-size:12px; color:var(--stone); }
   .page-actions{ display:flex; gap:10px; flex-wrap:wrap; }
   .btn{ border-radius:8px; font-weight:500; letter-spacing:.01em; }
@@ -2670,7 +2675,7 @@ const PERF_LINES = {
           ["●","Keep the wheels turning.","Book, visit, write, send. You've got this."],
           ["●","Building something.","Every job logged here is part of WPS's own record."]]
 };
-function perfLine(tm, lm, dm, dl, st, now){
+function perfPick(tm, lm, dm, dl, st, now){
   let tier = "steady";
   if ((tm && tm.pct >= 90) || st.days >= 7) tier = "best";
   else if (st.days === 0 || (tm && tm.pct < 50)) tier = (dm > dl ? "up" : "low");
@@ -2678,16 +2683,28 @@ function perfLine(tm, lm, dm, dl, st, now){
   const list = PERF_LINES[tier];
   const dayNo = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 86400000);
   const [icon, main, sub] = list[dayNo % list.length];
-  return `<div class="perf-quote pq-${tier}"><div class="pq-icon">${icon}</div><div class="pq-text"><div class="pq-main">${esc(main)}</div><div class="pq-sub">${esc(sub)}</div></div></div>`;
+  return { tier, icon, main, sub };
 }
-function renderPerformance(jobs, now){
+function perfLine(tm, lm, dm, dl, st, now){
+  const q = perfPick(tm, lm, dm, dl, st, now);
+  return `<div class="perf-quote pq-${q.tier}"><div class="pq-icon">${q.icon}</div><div class="pq-text"><div class="pq-main">${esc(q.main)}</div><div class="pq-sub">${esc(q.sub)}</div></div></div>`;
+}
+// Same message as the Performance panel, as one line under Reports completed on the Dashboard (Lex, 18 Oct: always visible)
+function perfInputs(jobs, now){
   const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lmStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
-  // last month up to the same day and time, so early in the month it's a fair comparison
   const lmSame = new Date(lmStart); lmSame.setDate(Math.min(now.getDate(), new Date(now.getFullYear(), now.getMonth(), 0).getDate())); lmSame.setHours(now.getHours(), now.getMinutes(), 0, 0);
-  const tm = turnaroundBetween(jobs, mStart, now), lm = turnaroundBetween(jobs, lmStart, lmSame);
-  const dm = doneBetween(jobs, mStart, now), dl = doneBetween(jobs, lmStart, lmSame);
-  const st = perfStreak(jobs, now), b = perfBests(jobs);
+  return { tm: turnaroundBetween(jobs, mStart, now), lm: turnaroundBetween(jobs, lmStart, lmSame),
+           dm: doneBetween(jobs, mStart, now), dl: doneBetween(jobs, lmStart, lmSame), st: perfStreak(jobs, now) };
+}
+function renderPerfTop(){
+  if (!state.jobs.length) return "";
+  const now = new Date(), x = perfInputs(state.jobs, now), q = perfPick(x.tm, x.lm, x.dm, x.dl, x.st, now);
+  return `<div class="perf-top pq-${q.tier}"${tip("Today's message. Click the On time tile for the full Performance view.")}><span class="pt-icon">${q.icon}</span><span class="pt-main">${esc(q.main)}</span> <span class="pt-sub">${esc(q.sub)}</span></div>`;
+}
+function renderPerformance(jobs, now){
+  // last month up to the same day and time, so early in the month it's a fair comparison (perfInputs)
+  const { tm, lm, dm, dl, st } = perfInputs(jobs, now), b = perfBests(jobs);
   const tcol = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green, #2E6B45)" : s.pct>=50 ? "var(--amber, #8A5A00)" : "var(--red, #B42318)";
   const dn = now.getDate(), sameDay = dn + ((dn%100 >= 11 && dn%100 <= 13) ? "th" : ({1:"st",2:"nd",3:"rd"}[dn%10] || "th"));
   const box = (lbl, big, col, sub) => `<div class="perf-box"><div class="p-lbl">${lbl}</div><div class="t-big" style="color:${col}">${big}</div><div class="p-sub">${sub}</div></div>`;
@@ -2983,7 +3000,7 @@ function renderPageHead(){
   const today = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
   const n = pendingQueue().length;
   return `<div class="page-head">
-    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div>${renderDoneCount()}</div>
+    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div>${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
     <div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
