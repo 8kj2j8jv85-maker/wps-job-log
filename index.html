@@ -605,6 +605,29 @@
   .wx-ht{ color:var(--ink-soft); } .wx-hi{ font-size:17px; line-height:1.3; } .wx-htemp{ font-weight:600; }
   .wx-hr{ color:var(--ink-soft); font-size:11px; }
   .wx-src{ margin-top:6px; font-size:11px; color:var(--stone); } .wx-src a{ color:inherit; }
+
+  /* Plan my day (Lex, 18 Oct) */
+  .wk-route{ margin-left:auto; border:1px solid var(--coral); background:var(--card); color:var(--coral-dark); border-radius:6px; padding:1px 7px; font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; }
+  .d-wk .wk-route + .wk-add{ margin-left:2px; }
+  button.d-route{ border:none; cursor:pointer; font:inherit; }
+  .d-plan{ background:var(--coral) !important; color:#fff !important; margin-right:6px; }
+  .plan-card{ margin-bottom:12px; }
+  .plan-day{ width:auto; min-width:120px; margin-right:10px; padding:4px 8px; font-size:13px; }
+  .plan-home{ font-size:13.5px; display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-bottom:10px; }
+  .plan-pc{ font:inherit; font-size:14px; padding:5px 8px; border:1px solid var(--line); border-radius:6px; width:150px; }
+  .plan-body{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:14px; align-items:start; }
+  .plan-map{ height:420px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--paper-deep); z-index:0; position:relative; }
+  .pl-home{ font-weight:600; color:var(--brand-text); font-size:13.5px; padding:4px 0; }
+  .pl-leg{ font-size:12px; color:var(--ink-soft); padding:2px 0 2px 10px; border-left:2px dashed var(--coral); margin-left:11px; }
+  .pl-stop{ display:flex; align-items:center; gap:8px; padding:5px 0; font-size:13.5px; min-width:0; }
+  .pl-n{ flex:0 0 22px; height:22px; border-radius:50%; color:#fff; font-size:12px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .pl-t{ flex:0 0 auto; min-width:58px; font-weight:600; color:var(--brand-text); }
+  .pl-tot{ margin-top:10px; padding-top:8px; border-top:1px solid var(--line-soft); font-size:13.5px; }
+  .pl-note{ margin-top:6px; font-size:12.5px; color:var(--ink-soft); }
+  .pl-gm{ margin-top:10px; display:inline-flex; }
+  .pl-pin{ background:none; border:none; } .pl-pin span{ display:flex; width:26px; height:26px; border-radius:50%; color:#fff; font-weight:700; font-size:13px; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  .pl-pin-home{ font-size:20px; line-height:26px; text-align:center; }
+  @media (max-width:900px){ .plan-body{ grid-template-columns:1fr; } .plan-map{ height:300px; } }
   /* ---------- themes (Lex, 18 Oct): Classic (default), Light, Night. Picked in the left menu, remembered per device. ---------- */
   html[data-theme="light"]{
     --paper:#FFFFFF; --paper-deep:#F3F5F9; --line:#E8EBF0; --line-soft:#F3F5F8; --sky:#D7E1EF; --peri-bg:#EEF1F8; --stone-bg:#F0F2F5;
@@ -2460,6 +2483,7 @@ function render(){
   renderInner(app);
   navAfterRender();
   drawWeekMap();
+  drawPlan();
   if (state.view === "today" && !state.wxBusy && (!state.wx || Date.now() - state.wx.at > 20*60000) && !state.wxTried && !(state.wxErrAt && Date.now() - state.wxErrAt < 5*60000)){ state.wxTried = true; setTimeout(() => { state.wxTried = false; loadWeather(); }, 0); }
   if (keepSearch){
     const el = document.getElementById("jobSearch");
@@ -2990,7 +3014,7 @@ function renderToday(){
   const freeLine = freeDays.length ? `<div class="wk-freeline"><span class="c-dim">${freeDays.length===7 ? "Nothing booked this week." : "Nothing booked:"}</span>${freeDays.map(x => `<button class="wk-freebtn" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">${x.d.toLocaleDateString("en-GB",{weekday:"short"})} ${x.d.getDate()} +</button>`).join("")}</div>` : "";
   const week = days.map(x => { const wk = x.d.getDay()===0 || x.d.getDay()===6;
     return `<div class="wk-day d-wk${wk?' wk-end':''}${x.jobs.length ? '' : ' wk-isfree'}">
-      <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()}<button class="wk-add d-add" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">+</button></div>
+      <div class="wk-head"><span>${x.d.toLocaleDateString("en-GB",{weekday:"short"})}</span> ${x.d.getDate()}${x.jobs.length ? `<button class="wk-route" onclick="openPlan('${x.iso}')" title="Plan this day: order, map, miles and drive time">Route</button>` : ""}<button class="wk-add d-add" onclick="openNewOnDate('${x.iso}')" title="Add a job on this day">+</button></div>
       ${x.jobs.length ? x.jobs.map(j => { const sm = statusMeta(j.status); return `<button class="wk-job d-wkjob" style="border-left-color:${sm.fg}" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(j.jobNo||"")} · ${esc(fullAddress(j))}${j.client ? " · "+esc(j.client) : ""}">
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
@@ -2999,7 +3023,7 @@ function renderToday(){
     <div class="d-row">
       ${dnHtml}
       <div class="t-card d-card">
-        <h3>Today <span class="count">${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route"${tip("Opens Google Maps with today's jobs as stops, in time order")}>Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
+        <h3>Today <span class="count">${todays.length ? `<button class="d-route d-plan" onclick="openPlan('${today}')"${tip("Plan today: order, map, miles and drive time")}>Plan my day</button>` : ""}${route ? `<a href="${route}" target="_blank" rel="noopener" class="d-route"${tip("Opens Google Maps with today's jobs as stops, in time order")}>Today's route</a>` : ""}${todays.length} job${todays.length===1?"":"s"}</span></h3>
         ${renderWxCard()}
         ${todays.length ? todays.map(j => cRow(j, {timeOnly:true}) + todayInfo(j)).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
       </div>
@@ -3008,6 +3032,7 @@ function renderToday(){
       <h3>${state.weekMode === "map" ? "Map" : "Next 7 days"} <span class="count"><span class="view-toggle wm-toggle"><button class="${state.weekMode!=='map'?'active':''}" onclick="setWeekMode('days')"${tip("Day by day")}>Days</button><button class="${state.weekMode==='map'?'active':''}" onclick="setWeekMode('map')"${tip("Upcoming jobs on a map, to see which visits are near each other")}>Map</button></span>${state.weekMode === "map" ? "" : coming.length+" job"+(coming.length===1?"":"s")}${timesToAgree.some(j => !j.date) ? ` · <button class="t-link wk-nodate" onclick="setDashPanel('times')"${tip("Booked jobs with no date yet. Click to see them.")}>${timesToAgree.filter(j => !j.date).length} with no date</button>` : ""}</span></h3>
       ${state.weekMode === "map" ? renderWeekMapBox() : `<div class="wk-strip">${week}</div>${freeLine}`}
     </div>
+    ${renderPlanCard()}
     <div class="t-card d-card d-panel">
       <h3>${esc(title)}</h3>
       ${body}
@@ -3385,6 +3410,116 @@ function renderWxCard(){
 // live clock beside the date (no page redraw)
 function clockText(){ const d = new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 setInterval(() => { const el = document.getElementById("liveClock"); if (el) el.textContent = clockText(); }, 15000);
+
+// ---------------------------------------------------------------- plan my day (Lex, 18 Oct: "do the Inventory Hive kind of thing properly")
+// Part 1, no new accounts: a day's jobs in visit order on a map with numbered stops, start and finish at home,
+// rough miles and drive time per leg and for the day, a suggested order for jobs with no time, and Google Maps
+// for turn-by-turn. Distances are straight-line x 1.3 and times use average speeds, so everything says "about".
+// Real road times need a routing service (part 2). Home is set per device (default Grays).
+const LS_PLAN_HOME = "wps_plan_home_v1";
+function planHome(){ try { const h = JSON.parse(lsGet(LS_PLAN_HOME) || "null"); if (h && h.lat != null) return h; } catch(e){} return { label:"Grays", lat:WX_HOME.lat, lon:WX_HOME.lon }; }
+function openPlan(iso){ state.planDay = iso; state.planEditHome = false; render(); const c = document.querySelector(".plan-card"); if (c && c.scrollIntoView) c.scrollIntoView({block:"start", behavior:"smooth"}); }
+function closePlan(){ state.planDay = null; render(); }
+function planJobs(iso){
+  return state.jobs.filter(j => j.status !== "archived" && j.date === iso).sort((a,b) => (a.time||"99").localeCompare(b.time||"99"));
+}
+function milesBetween(a, b){
+  const R = 3958.8, rad = x => x * Math.PI / 180, dLat = rad(b[0]-a[0]), dLon = rad(b[1]-a[1]);
+  const h = Math.sin(dLat/2)**2 + Math.cos(rad(a[0]))*Math.cos(rad(b[0]))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function legEstimate(a, b){
+  const road = milesBetween(a, b) * 1.3;               // roads are rarely straight
+  const mph = road < 6 ? 14 : road < 15 ? 20 : 30;     // London streets vs the A13
+  return { mi: road, min: road / mph * 60 };
+}
+function routeCost(pts){ let t = 0; for (let i=1; i<pts.length; i++) t += legEstimate(pts[i-1], pts[i]).min; return t; }
+// Jobs with a time keep their time order; jobs with no time go where they add the least driving.
+function planOrder(home, stops){
+  const fixed = stops.filter(s => s.j.time), free = stops.filter(s => !s.j.time);
+  let seq = fixed.slice();
+  free.forEach(s => {
+    let best = 0, bestCost = Infinity;
+    for (let i=0; i<=seq.length; i++){
+      const trial = seq.slice(0,i).concat([s], seq.slice(i));
+      const c = routeCost([home.ll].concat(trial.map(x => x.ll), [home.ll]));
+      if (c < bestCost){ bestCost = c; best = i; }
+    }
+    seq.splice(best, 0, s);
+  });
+  return seq;
+}
+function fmtMins(m){ m = Math.round(m); return m < 60 ? m+" min" : Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min"; }
+function setPlanHome(){
+  const el = document.getElementById("planHomePc"); const pc = el ? el.value.trim() : "";
+  if (!pc){ lsSet(LS_PLAN_HOME, ""); state.planEditHome = false; render(); return; }
+  mapCoords([pc]).then(c => {
+    const ll = c[normPc(pc)];
+    if (!ll){ alert("Postcode not found: "+pc); return; }
+    lsSet(LS_PLAN_HOME, JSON.stringify({ label: pc.toUpperCase(), pc, lat: ll[0], lon: ll[1] }));
+    state.planEditHome = false; render();
+  }).catch(() => alert("Couldn't look up that postcode right now."));
+}
+function renderPlanCard(){
+  if (!state.planDay) return "";
+  const iso = state.planDay, d = new Date(iso+"T00:00:00"), home = planHome(), jobs = planJobs(iso);
+  const opts = []; for (let i=0; i<=7; i++){ const o = isoToday(i); opts.push(`<option value="${o}"${o===iso?" selected":""}>${esc(i===0 ? "Today" : shortDay(new Date(o+"T00:00:00")))}</option>`); }
+  if (!opts.some(o => o.includes('value="'+iso+'"'))) opts.unshift(`<option value="${iso}" selected>${esc(shortDay(d))}</option>`);
+  return `<div class="t-card d-card plan-card">
+    <h3>Plan my day <span class="count"><select class="filter-select plan-day" onchange="openPlan(this.value)" aria-label="Day">${opts.join("")}</select><button class="t-link" onclick="closePlan()">Close</button></span></h3>
+    <div class="plan-home">Start and finish: <b>${esc(home.label)}</b>
+      ${state.planEditHome ? `<input id="planHomePc" class="plan-pc" placeholder="Postcode, e.g. RM17 5XX" value="${esc(home.pc||"")}"><button class="d-mv" onclick="setPlanHome()">Save</button><button class="t-link" onclick="state.planEditHome=false;render()">Cancel</button><span class="c-dim">Blank = Grays. Kept on this device only.</span>`
+        : `<button class="t-link" onclick="state.planEditHome=true;render()">Change</button>`}</div>
+    ${jobs.length ? `<div class="plan-body"><div id="planList" class="plan-list"><div class="t-empty">Working out the route…</div></div><div id="planMap" class="plan-map"></div></div>` : `<div class="t-empty">No jobs on this day.</div>`}
+    <div class="d-note">Miles and times are estimates from straight-line distance (about), not road routing. Use Google Maps for directions and traffic. Jobs with a time stay in time order; jobs with no time are placed where they add the least driving.</div>
+  </div>`;
+}
+let planSeq = 0;
+async function drawPlan(){
+  if (window._planMap){ try { window._planMap.remove(); } catch(e){} window._planMap = null; }
+  const list = document.getElementById("planList"), box = document.getElementById("planMap");
+  if (!list || !state.planDay) return;
+  const seq = ++planSeq, jobs = planJobs(state.planDay), h = planHome(), home = { ll:[h.lat, h.lon], label:h.label };
+  try {
+    const coords = await mapCoords(jobs.filter(j => j.postcode).map(j => j.postcode));
+    if (seq !== planSeq || !document.body.contains(list)) return;
+    const stops = [], missing = [];
+    jobs.forEach(j => { const c = coords[normPc(j.postcode)]; if (c) stops.push({ j, ll:c }); else missing.push(j); });
+    const order = planOrder(home, stops);
+    const pts = [home.ll].concat(order.map(s => s.ll), [home.ll]);
+    let totMi = 0, totMin = 0, rows = "";
+    order.forEach((s, i) => {
+      const leg = legEstimate(pts[i], pts[i+1]); totMi += leg.mi; totMin += leg.min;
+      const j = s.j;
+      rows += `<div class="pl-leg">↓ about ${leg.mi.toFixed(1)} mi, ${fmtMins(leg.min)}</div>
+        <div class="pl-stop"><span class="pl-n" style="background:${MAP_TYPE_COL[j.type]||"#555"}">${i+1}</span>
+          <span class="pl-t">${esc(j.time || "No time")}</span>
+          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>`;
+    });
+    const back = order.length ? legEstimate(pts[pts.length-2], home.ll) : { mi:0, min:0 }; totMi += back.mi; totMin += back.min;
+    const gm = order.length ? "https://www.google.com/maps/dir/?api=1&travelmode=driving&origin="+encodeURIComponent(home.label.length > 3 ? home.label+(h.pc ? "" : ", Essex") : home.ll.join(","))
+      + "&destination="+encodeURIComponent(home.label.length > 3 ? home.label+(h.pc ? "" : ", Essex") : home.ll.join(","))
+      + "&waypoints="+encodeURIComponent(order.slice(0, 9).map(s => fullAddress(s.j)).join("|")) : "";
+    const reordered = order.some((s, i) => stops[i] !== s);
+    list.innerHTML = `<div class="pl-home">🏠 ${esc(home.label)}</div>${rows}${order.length ? `<div class="pl-leg">↓ about ${back.mi.toFixed(1)} mi, ${fmtMins(back.min)}</div><div class="pl-home">🏠 ${esc(home.label)}</div>` : ""}
+      <div class="pl-tot">About <b>${totMi.toFixed(0)} miles</b> and <b>${fmtMins(totMin)}</b> driving${order.length ? ` · mileage for the day: about ${totMi.toFixed(1)} mi` : ""}</div>
+      ${reordered ? `<div class="pl-note">Jobs with no time have been put in the order that saves the most driving.</div>` : ""}
+      ${missing.length ? `<div class="pl-note">Not placed (no postcode or not found): ${missing.map(j => esc(j.jobNo||"?")).join(", ")}.</div>` : ""}
+      ${gm ? `<a class="btn btn-ghost btn-sm pl-gm" href="${gm}" target="_blank" rel="noopener">Open in Google Maps</a>${order.length > 9 ? `<span class="c-dim"> (first 9 stops only)</span>` : ""}` : ""}`;
+    if (!box) return;
+    try { await loadLeaflet(); } catch(e){ box.innerHTML = `<div class="wm-msg">The map couldn't load. The list still works.</div>`; return; }
+    if (seq !== planSeq || !document.body.contains(box)) return;
+    const map = L.map(box, { scrollWheelZoom:false }); window._planMap = map;
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(map);
+    L.polyline(pts, { color:"#E8735A", weight:3, opacity:.8, dashArray:"6 6" }).addTo(map);
+    L.marker(home.ll, { icon: L.divIcon({ className:"pl-pin pl-pin-home", html:"🏠", iconSize:[26,26] }) }).addTo(map).bindTooltip(esc(home.label));
+    order.forEach((s, i) => L.marker(s.ll, { icon: L.divIcon({ className:"pl-pin", html:`<span style="background:${MAP_TYPE_COL[s.j.type]||"#555"}">${i+1}</span>`, iconSize:[26,26] }) })
+      .addTo(map).bindPopup(`<b>${esc(s.j.jobNo||"")}</b> · ${esc(typeMeta(s.j.type).code)}<br>${esc(s.j.time||"No time")}<br>${esc(fullAddress(s.j))}<br><a href="#" onclick="openEdit('${s.j.id}');return false;">Open job</a>`));
+    map.fitBounds(pts, { padding:[24,24], maxZoom:14 });
+  } catch(e){
+    if (seq === planSeq && document.body.contains(list)) list.innerHTML = `<div class="t-empty">Couldn't work out the route (${esc(e.message || "no connection")}).</div>`;
+  }
+}
 
 function renderCalendar(){
   const y = state.calYear, m = state.calMonth;
