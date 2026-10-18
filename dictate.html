@@ -23,9 +23,13 @@ header .door{width:22px;height:30px;border:2.5px solid #fff;border-radius:11px 1
 header .door:after{content:"";position:absolute;right:4px;top:13px;width:4px;height:4px;border-radius:50%;background:var(--coral)}
 header h1{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:25px;margin:0 0 0 4px;flex:1;line-height:1}
 header{flex-wrap:wrap}
-header .dnav{flex-basis:100%;display:flex;gap:6px;margin-top:8px;overflow-x:auto}
-header .dnav a,header .dnav .here{color:#fff;text-decoration:none;font-size:13px;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:6px 11px;white-space:nowrap;opacity:.85}
-header .dnav .here{background:rgba(255,255,255,.14);opacity:1}
+/* Same four links as the Dashboard and Photo Tool, same look (Lex, 18 Oct) */
+header .dnav{flex-basis:100%;display:flex;justify-content:space-between;gap:4px;margin-top:8px;overflow-x:auto}
+header .dnav a,header .dnav .here{color:#C9D6E8;text-decoration:none;font-size:13px;font-weight:500;border-radius:8px;padding:7px 8px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+header .dnav a:hover{background:rgba(255,255,255,.06);color:#fff}
+header .dnav .here{background:rgba(255,255,255,.1);color:#fff}
+header .dnav .here svg{stroke:#E8735A}
+@media (max-width:420px){header .dnav svg{display:none}}
 header a.home{color:#fff;text-decoration:none;font-size:13px;opacity:.85;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 10px}
 .hint{display:none;font-size:12px;color:#8A5A00;margin-top:4px;line-height:1.35}
 .help-on .hint{display:block}
@@ -108,7 +112,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
   <button id="helpBtn" title="Turns the hint lines on or off">?</button>
   <button id="jobsBtn" title="Your saved dictations. Start a new job here.">Jobs</button>
   <button id="setBtn" title="Word fixes, room list, audio backup">Settings</button>
-  <nav class="dnav" aria-label="WPS pages"><a href="./">Dashboard</a><a href="./#log">Job Log</a><a href="photos.html">Photo Tool</a><span class="here">Dictation</span></nav>
+  <nav class="dnav" aria-label="WPS pages"><a href="./"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Dashboard</a><a href="./#log"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Job Log</a><a href="photos.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Photo Tool</a><span class="here"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>Dictation</span></nav>
 </header>
 
 <main>

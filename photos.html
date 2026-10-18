@@ -193,6 +193,24 @@
     .panel{ left:0; }
   }
 
+  /* One top bar on the phone (Lex, 18 Oct): same four links as the Dashboard; help, manual, settings and theme behind Menu */
+  .side-menu-btn{ display:none; }
+  .side-extra{ display:contents; }
+  @media (max-width: 860px){
+    .side-menu-btn{ display:inline-block; margin-left:auto; background:rgba(255,255,255,.1); color:#fff; border:none; border-radius:8px; padding:8px 12px; font:inherit; font-size:14px; font-weight:600; cursor:pointer; order:2; }
+    .side-logo{ order:1; }
+    .side-nav{ order:3; width:100%; justify-content:space-between; gap:4px; }
+    .side-batch, .side-actions{ order:4; }
+    .side-extra{ display:none; }
+    body.pt-menu-open .side-extra{ display:flex; flex-direction:column; gap:2px; width:100%; }
+  }
+  @media (max-width:600px){
+    .sidebar{ padding:10px 12px; gap:8px; }
+    .side-logo{ width:120px; }
+    .side-nav a{ padding:7px 6px; font-size:13px; gap:5px; }
+    .side-nav a svg{ width:16px; height:16px; }
+  }
+  @media (max-width:420px){ .side-nav a svg{ display:none; } .side-nav a{ padding:7px 8px; } }
   /* ---------- themes (Lex, 18 Oct): same setting as the Dashboard (wps_theme_v1), remembered per device ---------- */
   .theme-row{ display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:13px; color:var(--sky); }
   .theme-row select{ flex:1; font:inherit; font-size:13px; padding:4px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:#26335F; color:#fff; }
@@ -224,7 +242,9 @@
     <a href="./" title="Today's overview"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg> Dashboard</a>
     <a href="./#log" title="Every job, as a list or a calendar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Job Log</a>
     <a href="photos.html" class="active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Photo Tool</a>
+    <a href="dictate.html" title="Phone notes by voice, room by room"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>Dictation</a>
   </nav>
+  <button class="side-menu-btn" id="sideMenuBtn" type="button" onclick="document.body.classList.toggle('pt-menu-open');this.textContent=document.body.classList.contains('pt-menu-open')?'Close ✕':'Menu ☰'">Menu ☰</button>
   <div id="sideBatch" class="side-batch hidden">
     <div class="side-label">THIS BATCH</div>
     <div id="summary"></div>
@@ -233,10 +253,12 @@
     <button class="btn btn-coral hidden" id="btnAll" title="Makes a zip for every job in this batch" data-hint="Zips every job in this batch">Process all jobs</button>
     <button class="btn btn-side hidden" id="btnAddMore" title="Add photos you missed. Work already done stays." data-hint="Add photos you missed">+ Add more photos</button>
     <button class="btn btn-side hidden" id="btnClear" title="Clears the tool for the next batch. Your original photos aren't touched." data-hint="Clears the tool. Originals untouched.">Start again</button>
+    <div class="side-extra">
     <a href="#" id="lnkHelp" class="side-link" title="Turns the hint text on or off. Hover hints always work on a PC."><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span id="helpLbl">Help hints: on ✓</span></a>
     <a href="manual.pdf?v=20261018" target="_blank" rel="noopener" class="side-link" title="The how-to manual (PDF)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg> Manual</a>
     <a href="#" id="lnkSettings" class="side-link" title="Gap between jobs, photo size, watermark, area list"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</a>
     <label class="theme-row" title="Colours for this device: Classic, Light or Night. Same setting as the Dashboard.">Theme <select id="themeSel"><option value="classic">Classic</option><option value="light">Light</option><option value="night">Night</option></select></label>
+    </div>
   </div>
 </aside>
 <main class="main">
