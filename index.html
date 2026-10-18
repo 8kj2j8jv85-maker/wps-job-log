@@ -80,6 +80,17 @@
   .t-links a{ display:block; padding:10px 12px; border:1px solid var(--line); border-radius:8px; color:var(--brand); text-decoration:none; font-weight:600; font-size:13.5px; background:var(--paper); }
   .t-links a:hover{ border-color:var(--peri); }
   .t-big{ font-size:30px; font-weight:600; line-height:1; }
+  .perf-quote{ position:relative; overflow:hidden; display:flex; gap:14px; align-items:flex-start; margin:0 0 14px; padding:16px 18px 16px 20px; border-radius:14px;
+    background:linear-gradient(135deg, var(--brand) 0%, #2B3D74 100%); color:#fff; animation:pqIn .6s ease-out both; }
+  .perf-quote:before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--coral); }
+  .perf-quote:after{ content:""; position:absolute; right:-40px; top:-40px; width:140px; height:140px; border-radius:50%; background:rgba(224,104,75,.18); }
+  .perf-quote .pq-icon{ flex:0 0 auto; width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,.12); display:flex; align-items:center; justify-content:center; font-size:19px; }
+  .perf-quote .pq-text{ position:relative; z-index:1; }
+  .perf-quote .pq-main{ font-family:'Cormorant Garamond',Georgia,serif; font-style:italic; font-weight:600; font-size:23px; line-height:1.2; }
+  .perf-quote .pq-sub{ margin-top:6px; font-size:13px; color:#D6DEF2; line-height:1.45; }
+  @keyframes pqIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce){ .perf-quote{ animation:none; } }
+  @media (max-width:640px){ .perf-quote .pq-main{ font-size:20px; } }
   .perf-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:2px 0 8px; }
   .perf-box{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:var(--card, var(--white)); }
   .perf-box .p-lbl{ font-size:12.5px; font-weight:600; color:var(--coral-dark); letter-spacing:.02em; margin-bottom:6px; }
@@ -2449,6 +2460,35 @@ function perfBests(jobs){
   return { wk, fast };
 }
 function fmtHours(h){ return h < 1 ? Math.max(1, Math.round(h*60))+" min" : h < 48 ? Math.round(h)+"h" : (Math.round(h/24*10)/10)+" days"; }
+// Encouraging line at the top of the Performance panel (Lex, 18 Oct). Picked from how things are going; changes daily.
+const PERF_LINES = {
+  best:  [["★","On a roll.","Reports are going out on time. Keep the rhythm going."],
+          ["★","This is what good looks like.","On time and nothing overdue. Agents notice that."],
+          ["★","Consistency wins the work.","Every on-time report makes the next booking easier to win."],
+          ["★","Strong run.","Hold this pace and the numbers will speak for themselves."]],
+  up:    [["↗","Moving the right way.","Better than this point last month. Small gains add up."],
+          ["↗","Momentum is building.","More done than last month so far. Keep stacking them."],
+          ["↗","Heading up.","The trend is with you. One report at a time."],
+          ["↗","Progress, not perfection.","You're ahead of last month. Keep going."]],
+  low:   [["☀","Every report out is a step forward.","Clear the oldest one first, then the next. The streak starts again today."],
+          ["☀","Fresh start today.","One overdue report sent makes the rest feel lighter."],
+          ["☀","Steady beats rushed.","Pick the next report, get it right, send it. Then the next."],
+          ["☀","The backlog is temporary.","WPS is new. The habits you build now set the standard."]],
+  steady:[["●","Steady and building.","Keep reports moving and the on-time score climbs."],
+          ["●","Good work today.","Each report done well is the reputation WPS is built on."],
+          ["●","Keep the wheels turning.","Book, visit, write, send. You've got this."],
+          ["●","Building something.","Every job logged here is part of WPS's own record."]]
+};
+function perfLine(tm, lm, dm, dl, st, now){
+  let tier = "steady";
+  if ((tm && tm.pct >= 90) || st.days >= 7) tier = "best";
+  else if (st.days === 0 || (tm && tm.pct < 50)) tier = (dm > dl ? "up" : "low");
+  else if (dm > dl || (tm && lm && tm.pct > lm.pct)) tier = "up";
+  const list = PERF_LINES[tier];
+  const dayNo = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 86400000);
+  const [icon, main, sub] = list[dayNo % list.length];
+  return `<div class="perf-quote pq-${tier}"><div class="pq-icon">${icon}</div><div class="pq-text"><div class="pq-main">${esc(main)}</div><div class="pq-sub">${esc(sub)}</div></div></div>`;
+}
 function renderPerformance(jobs, now){
   const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lmStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
@@ -2460,7 +2500,7 @@ function renderPerformance(jobs, now){
   const tcol = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green, #2E6B45)" : s.pct>=50 ? "var(--amber, #8A5A00)" : "var(--red, #B42318)";
   const dn = now.getDate(), sameDay = dn + ((dn%100 >= 11 && dn%100 <= 13) ? "th" : ({1:"st",2:"nd",3:"rd"}[dn%10] || "th"));
   const box = (lbl, big, col, sub) => `<div class="perf-box"><div class="p-lbl">${lbl}</div><div class="t-big" style="color:${col}">${big}</div><div class="p-sub">${sub}</div></div>`;
-  return `<div class="perf-grid">`
+  return perfLine(tm, lm, dm, dl, st, now) + `<div class="perf-grid">`
     + box("On time this month", tm ? tm.pct+"%" : "–", tcol(tm), (tm ? `${tm.n} report${tm.n===1?"":"s"} · avg ${tm.avg}h<br>` : "No reports sent yet this month<br>") + perfArrow(tm ? tm.pct : null, lm ? lm.pct : null, " points"))
     + box("Reports completed this month", dm, dm ? "var(--brand-text, var(--brand))" : "var(--stone)", `Last month by the ${sameDay}: ${dl}<br>` + perfArrow(dm, dl))
     + box("Nothing overdue streak", st.days + (st.days===1 ? " day" : " days"), st.days >= 7 ? "var(--green, #2E6B45)" : st.days ? "var(--brand-text, var(--brand))" : "var(--red, #B42318)",
