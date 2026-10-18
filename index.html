@@ -314,6 +314,13 @@
   .page-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; padding:32px 0 6px; }
   .page-title{ margin:0; font-family:'Cormorant Garamond',Georgia,serif; font-style:italic; font-weight:600; font-size:42px; line-height:1.1; color:var(--brand); }
   .page-sub{ font-size:14px; color:var(--ink-soft); margin-top:2px; }
+  .milestone{ display:flex; align-items:center; gap:16px; margin-top:16px; border:2px solid var(--coral); background:linear-gradient(135deg,#FFF6F4,#FFFFFF); }
+  .milestone h3{ margin:0 0 4px; }
+  .milestone p{ margin:0; color:var(--ink-soft); line-height:1.45; }
+  .milestone .ms-body{ flex:1; }
+  .milestone .ms-star{ font-size:34px; color:var(--coral); line-height:1; }
+  .ms-wp{ border-color:#C9A227; background:linear-gradient(135deg,#FFF8E1,#FFFFFF); }
+  @media (max-width:640px){ .milestone{ flex-wrap:wrap; } .milestone .btn{ width:100%; } }
   .done-count{ display:inline-flex; flex-wrap:wrap; gap:4px 10px; margin-top:6px; font-size:13px; color:var(--ink-soft); }
   .done-count b{ color:var(--brand); font-size:15px; }
   .done-count .dc-lbl{ font-weight:600; color:var(--brand); }
@@ -525,6 +532,42 @@ function doneCounts(){
     if (d.getFullYear()===now.getFullYear()){ year++; if (d.getMonth()===now.getMonth()) month++; }
   });
   return { all, year, month };
+}
+// Milestones (Lex, 18 Oct): a one-off message under the dashboard panel when WPS passes each figure, and a special one
+// the day WPS beats Wellington Parker's total. Shown once per device until "Thanks" is pressed.
+const WP_TOTAL = 3507;   // Wellington Parker reports, 2014 to Sep 2026 (17 Oct Dropbox index). Never shown, only the target.
+const MILESTONES = [50, 100, 250, 500, 1000, 2000, 3000];
+const LS_MILESTONES = "wps_milestones_seen_v1";
+function milestoneMessage(m, n){
+  if (m === "wp") return ["You've beaten Wellington Parker!", `${n.toLocaleString("en-GB")} reports under Wellington Property Services. That's more than all ${WP_TOTAL.toLocaleString("en-GB")} Wellington Parker reports. A new record, built by you.`];
+  const lines = {
+    50:   "50 reports done under WPS. A proper start.",
+    100:  "100 reports. Three figures under the new name.",
+    250:  "250 reports. A quarter of a thousand.",
+    500:  "500 reports. Half a thousand properties covered.",
+    1000: "1,000 reports. Four figures. WPS is well and truly established.",
+    2000: "2,000 reports. Double the thousand.",
+    3000: `3,000 reports. ${(WP_TOTAL - n > 0 ? (WP_TOTAL - n).toLocaleString("en-GB") + " to go" : "Nearly there")} to pass Wellington Parker.`
+  };
+  return ["Milestone: " + m.toLocaleString("en-GB") + " reports", lines[m]];
+}
+function seenMilestones(){ try { return JSON.parse(lsGet(LS_MILESTONES) || "[]"); } catch(e){ return []; } }
+function currentMilestone(){
+  const n = doneCounts().all, seen = seenMilestones();
+  if (n > WP_TOTAL && !seen.includes("wp")) return { m: "wp", n };
+  const hit = MILESTONES.filter(m => n >= m && !seen.includes(m));
+  return hit.length ? { m: hit[hit.length-1], n } : null;
+}
+function dismissMilestone(){
+  const n = doneCounts().all, seen = seenMilestones();
+  MILESTONES.forEach(m => { if (n >= m && !seen.includes(m)) seen.push(m); });   // the ones passed on the way count as seen
+  if (n > WP_TOTAL && !seen.includes("wp")) seen.push("wp");
+  lsSet(LS_MILESTONES, JSON.stringify(seen)); render();
+}
+function renderMilestone(){
+  const c = currentMilestone(); if (!c) return "";
+  const [h, msg] = milestoneMessage(c.m, c.n);
+  return `<div class="t-card d-card milestone${c.m === "wp" ? " ms-wp" : ""}"><div class="ms-star">${c.m === "wp" ? "🏆" : "★"}</div><div class="ms-body"><h3>${esc(h)}</h3><p>${esc(msg)}</p></div><button class="btn btn-coral btn-sm" onclick="dismissMilestone()">Thanks</button></div>`;
 }
 function renderDoneCount(){
   const c = doneCounts();
@@ -2594,7 +2637,7 @@ function renderToday(){
     <div class="t-card d-card d-panel">
       <h3>${esc(title)}</h3>
       ${body}
-    </div>`;
+    </div>${renderMilestone()}`;
 }
 
 function renderSideLinks(){
