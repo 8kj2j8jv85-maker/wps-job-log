@@ -81,10 +81,10 @@
   .t-links a:hover{ border-color:var(--peri); }
   .t-big{ font-size:30px; font-weight:600; line-height:1; }
   .perf-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:2px 0 8px; }
-  .perf-box{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:var(--white); }
+  .perf-box{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:var(--card, var(--white)); }
   .perf-box .p-lbl{ font-size:12.5px; font-weight:600; color:var(--coral-dark); letter-spacing:.02em; margin-bottom:6px; }
   .perf-box .p-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:5px; line-height:1.4; }
-  .p-up{ color:#2E6B45; font-weight:600; } .p-down{ color:#B42318; font-weight:600; } .p-same{ color:var(--stone); font-weight:600; }
+  .p-up{ color:var(--green, #2E6B45); font-weight:600; } .p-down{ color:var(--red, #B42318); font-weight:600; } .p-same{ color:var(--stone); font-weight:600; }
   .wk-strip{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; }
   .wk-day{ background:var(--paper); border:1px solid var(--line-soft); border-radius:8px; padding:8px; min-height:110px; display:flex; flex-direction:column; gap:6px; }
   .wk-day.wk-end{ background:var(--paper-deep); }
@@ -2457,15 +2457,15 @@ function renderPerformance(jobs, now){
   const tm = turnaroundBetween(jobs, mStart, now), lm = turnaroundBetween(jobs, lmStart, lmSame);
   const dm = doneBetween(jobs, mStart, now), dl = doneBetween(jobs, lmStart, lmSame);
   const st = perfStreak(jobs, now), b = perfBests(jobs);
-  const tcol = s => !s ? "var(--stone)" : s.pct>=80 ? "#2E6B45" : s.pct>=50 ? "#8A5A00" : "#B42318";
+  const tcol = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green, #2E6B45)" : s.pct>=50 ? "var(--amber, #8A5A00)" : "var(--red, #B42318)";
   const dn = now.getDate(), sameDay = dn + ((dn%100 >= 11 && dn%100 <= 13) ? "th" : ({1:"st",2:"nd",3:"rd"}[dn%10] || "th"));
   const box = (lbl, big, col, sub) => `<div class="perf-box"><div class="p-lbl">${lbl}</div><div class="t-big" style="color:${col}">${big}</div><div class="p-sub">${sub}</div></div>`;
   return `<div class="perf-grid">`
     + box("On time this month", tm ? tm.pct+"%" : "–", tcol(tm), (tm ? `${tm.n} report${tm.n===1?"":"s"} · avg ${tm.avg}h<br>` : "No reports sent yet this month<br>") + perfArrow(tm ? tm.pct : null, lm ? lm.pct : null, " points"))
-    + box("Reports completed this month", dm, dm ? "var(--brand)" : "var(--stone)", `Last month by the ${sameDay}: ${dl}<br>` + perfArrow(dm, dl))
-    + box("Nothing overdue streak", st.days + (st.days===1 ? " day" : " days"), st.days >= 7 ? "#2E6B45" : st.days ? "var(--brand)" : "#B42318",
+    + box("Reports completed this month", dm, dm ? "var(--brand-text, var(--brand))" : "var(--stone)", `Last month by the ${sameDay}: ${dl}<br>` + perfArrow(dm, dl))
+    + box("Nothing overdue streak", st.days + (st.days===1 ? " day" : " days"), st.days >= 7 ? "var(--green, #2E6B45)" : st.days ? "var(--brand-text, var(--brand))" : "var(--red, #B42318)",
         st.days ? (st.capped ? "Every day since the first job in the Job Log" : "Days in a row with no report overdue") : "A report is overdue today")
-    + box("Personal bests", b.wk ? b.wk.n : "–", "var(--brand)",
+    + box("Personal bests", b.wk ? b.wk.n : "–", "var(--brand-text, var(--brand))",
         (b.wk ? `Busiest week: ${b.wk.n} report${b.wk.n===1?"":"s"} (w/c ${esc(b.wk.start.toLocaleDateString("en-GB",{day:"numeric",month:"short"}))})<br>` : "No completed reports yet<br>")
         + (b.fast ? `Fastest turnaround: ${fmtHours(b.fast.h)} (${esc(b.fast.j.jobNo || "")} ${esc(typeMeta(b.fast.j.type).code)})` : "Fastest turnaround: –"))
     + `</div>`;
