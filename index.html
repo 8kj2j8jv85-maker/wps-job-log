@@ -2776,6 +2776,9 @@ function renderHeader(){
 }
 
 // Themes (Lex, 18 Oct): Classic, Light, Night. Remembered on this device only.
+window.addEventListener("storage", function(e){   // theme changed on the Photo Tool or Dictation in another tab
+  if (e.key === "wps_theme_v1"){ const t = e.newValue; if (t==="light"||t==="night") document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme"); if (typeof render === "function" && !state.editing) render(); }
+});
 function currentTheme(){ const t = lsGet("wps_theme_v1"); return t==="light"||t==="night" ? t : "classic"; }
 function setTheme(t){
   if (t==="light"||t==="night"){ document.documentElement.setAttribute("data-theme", t); lsSet("wps_theme_v1", t); }

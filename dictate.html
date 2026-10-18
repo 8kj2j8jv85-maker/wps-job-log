@@ -2,6 +2,7 @@
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
+<script>try{var th=localStorage.getItem("wps_theme_v1");if(th==="light"||th==="night")document.documentElement.setAttribute("data-theme",th);}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="WPS Dictation">
@@ -84,6 +85,20 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
 .toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));background:var(--ink);color:#fff;padding:12px 14px;border-radius:12px;font-size:14px;z-index:30;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;max-width:608px;margin:0 auto}
 .toast.show{opacity:1;transform:none}
 .warn{background:#FFF4E5;border:1px solid #F3D3A3;color:#7A4B00;border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:12px;display:none}
+/* themes (Lex, 18 Oct): same setting as the Dashboard (wps_theme_v1), remembered per device */
+html[data-theme="light"]{--bg:#FFFFFF;--line:#E8EBF0}
+html[data-theme="light"] .card{box-shadow:0 1px 3px rgba(31,45,90,.07)}
+html[data-theme="night"]{color-scheme:dark;--bg:#0F1420;--card:#1A2133;--ink:#E7EBF3;--muted:#A8B1C2;--line:#2B3550;--ok:#7CC79A}
+html[data-theme="night"] header{background:#141B30}
+html[data-theme="night"] input,html[data-theme="night"] select,html[data-theme="night"] textarea,html[data-theme="night"] .chip,html[data-theme="night"] footer,html[data-theme="night"] .btn.ghost,html[data-theme="night"] .joblist .j{background:var(--card)}
+html[data-theme="night"] h2,html[data-theme="night"] .panel h3,html[data-theme="night"] .lastvisit b,html[data-theme="night"] .lastvisit button,html[data-theme="night"] .clip button,html[data-theme="night"] .clip a,html[data-theme="night"] .btn.ghost,html[data-theme="night"] .chip.has:not(.on){color:#B7C6F0}
+html[data-theme="night"] .chip.on,html[data-theme="night"] .btn.primary{background:#34436A;border-color:#34436A}
+html[data-theme="night"] .joblist .j.cur{border-color:#8B9CD0;box-shadow:inset 3px 0 0 #8B9CD0}
+html[data-theme="night"] .lastvisit{background:#2A2220;border-color:#5A3B33}
+html[data-theme="night"] .warn{background:#3A3018;border-color:#5C4C22;color:#E8C26A}
+html[data-theme="night"] .hint,html[data-theme="night"].help-on footer .hint,html[data-theme="night"] .help-on footer .hint{color:#E8C26A}
+html[data-theme="night"] .toast{background:#2B3550;color:#E7EBF3}
+html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 </style>
 </head>
 <body>
@@ -169,6 +184,11 @@ footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:1
     <div class="card">
       <label class="toggle"><input type="checkbox" id="audioOn"> Keep audio backup of each room</label>
       <div class="tip">Saves the recording on this phone so you can replay a note if the text came out wrong. If live text stops working with this on, switch it off.</div>
+    </div>
+    <div class="card">
+      <label class="f" for="themeSel">Theme</label>
+      <select id="themeSel"><option value="classic">Classic</option><option value="light">Light</option><option value="night">Night</option></select>
+      <div class="tip" style="margin-top:6px">Colours on this phone. The same setting as the Dashboard and Photo Tool; it changes straight away.</div>
     </div>
     <div class="card">
       <button class="btn ghost" id="exportBtn" style="width:100%;margin-bottom:8px">Export all notes (backup file)</button>
@@ -673,6 +693,26 @@ if(!SR){
   w.textContent = 'Live text isn\'t available in this browser. Open this page in Safari on your iPhone (or Chrome on a computer). Audio backup still works.';
 }
 render();
+})();
+</script>
+<script>
+// theme (18 Oct): same setting as the Dashboard
+(function(){
+  var sel = document.getElementById("themeSel"); if (!sel) return;
+  var cur = "classic"; try { var t = localStorage.getItem("wps_theme_v1"); if (t==="light"||t==="night") cur = t; } catch(e){}
+  sel.value = cur;
+  sel.addEventListener("change", function(){
+    var t = sel.value;
+    if (t==="light"||t==="night") document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme");
+    try { localStorage.setItem("wps_theme_v1", t==="light"||t==="night" ? t : "classic"); } catch(e){}
+  });
+  // changed on another open page (e.g. the Dashboard): follow it
+  window.addEventListener("storage", function(e){
+    if (e.key !== "wps_theme_v1") return;
+    var t = e.newValue === "light" || e.newValue === "night" ? e.newValue : "classic";
+    if (t !== "classic") document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme");
+    sel.value = t;
+  });
 })();
 </script>
 </body>
