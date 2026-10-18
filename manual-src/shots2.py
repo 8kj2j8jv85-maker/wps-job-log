@@ -11,7 +11,7 @@ def tile(pg, key):
 h=H(1440,900); pg=h.pg
 h.go(""); pg.evaluate("localStorage.setItem('wps_help_on_v1','0')"); h.go(""); real_look(pg)
 tile(pg,"due")
-badges(h,"d1_dashboard",[(".side-nav",1),(".side-links",2),(".side-tools",3),("button:has-text('Refresh all')",4,"t"),("button:has-text('+ New job')",5,"t"),(".d-tiles",6),(".d-card >> nth=0",7),(".d-card >> nth=1",8),(".d-panel",9)])
+badges(h,"d1_dashboard",[(".side-nav",1),(".side-links",2),(".side-tools",3),("button:has-text('Check everything now')",4,"t"),("button:has-text('+ New job')",5,"t"),(".d-tiles",6),(".d-card >> nth=0",7),(".d-card >> nth=1",8),(".d-panel",9)])
 badges(h,"d2_tiles",[],clip_sel=".d-tiles")
 # Reports due panel: Mark visited / Rearrange
 badges(h,"d8_due",[("button:has-text('Mark visited') >> nth=0",1,"t"),("button:has-text('Rearrange') >> nth=0",2,"t")],clip_sel=".d-panel")
@@ -46,7 +46,7 @@ badges(h,"d7_tray",[(".qcard >> nth=0 >> button:has-text('Add to log')",1,"t"),(
 pg.evaluate("()=>{state.queueChecked=false; state.queue=[]; render();}")
 # Job Log
 pg.locator(".side-nav a:has-text('Job Log')").click(); pg.wait_for_timeout(200); real_look(pg)
-badges(h,"j1_log",[(".status-strip",1),(".view-toggle",2),(".search-wrap",3,"t"),(".filter-select >> nth=0",4),("tr:has-text('WPS261007') .jt-status .pill",5,"t"),("tr:has-text('WPS261007') .jt-inv .pill",6,"t"),("tr:has-text('WPS261007') button[title^='Open and edit']",7,"t"),("tr:has-text('WPS261007') button[title^='Delete']",8,"b"),("tr:has-text('WPS261007') button[title*='calendar']",9,"t"),(".status-card:has-text('Finished')",10,"b")])
+badges(h,"j1_log",[(".status-strip",1),(".view-toggle",2),(".search-wrap",3,"t"),(".filter-select >> nth=0",4),("tr:has-text('WPS261007') .jt-status .sel-box",5,"t"),("tr:has-text('WPS261007') .jt-inv .sel-box",6,"t"),("tr:has-text('WPS261007') button[title^='Open and edit']",7,"t"),("tr:has-text('WPS261007') button[title^='Delete']",8,"b"),("tr:has-text('WPS261007') button[title*='calendar']",9,"t"),(".status-card:has-text('Finished')",10,"b")])
 # Job form on an existing job (tenant rows, Copy to, photo link, Delete job)
 pg.evaluate("openEdit('job_WPS261006')"); pg.wait_for_timeout(250)
 badges(h,"j2_form",[(".extract-box",1),("#f_jobNo",2),("#f_status",3),("#f_invoice",4),("#f_clientSelect",5),(".tenant-block",6),(".copyto-block",7),("#f_photoLink",8),("button:has-text('Delete job')",9,"t"),("button:has-text('Save changes')",10,"tr")],clip_sel=".form-card",pad=40)

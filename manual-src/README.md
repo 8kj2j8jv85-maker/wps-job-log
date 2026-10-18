@@ -8,10 +8,11 @@ photos.html point at manual.pdf?v=<date>; change the date when the PDF is replac
 - harness.py — test browser (Playwright) with the made-up jobs and contacts loaded; clock set by CLOCK
 - shotlib.py — screenshot helpers (numbered markers)
 - shots2.py, shots_form.py, shots_fix.py — the 14 Oct Dashboard / Job Log / phone screenshots
-- shots.py — the 12 Oct script; still used for the Photo Tool and Dictation pictures (needs fix/jszip.min.js)
+- shots3.py — the 18 Oct pictures: counter, milestone, Performance, themes, Photo Tool and Dictation (needs fix/jszip.min.js, from cdnjs jszip 3.10.1, and the sample photos from fix/photos.py)
+- shots.py — the 12 Oct script (replaced by shots3.py for the Photo Tool and Dictation)
 - check*.py — scripted checks from 12 Oct
 - pdf.py — prints manual.html to manual.pdf
 
 Paths in the scripts point at /home/claude/manual; copy this folder there to rerun
 (ROOT=/path/to/repo PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 shots2.py).
-Built 12 Oct 2026; rewritten 14 Oct 2026 for PRs #1-#14 (live main 45371bb).
+Built 12 Oct 2026; rewritten 14 Oct 2026 for PRs #1-#14 (live main 45371bb); rewritten 18 Oct 2026 for PRs #15-#29 (main 6adbff1 plus the PR #29 Photo Tool zip name fix), report auto-send and the signing page (live 18 Oct 01:38).
