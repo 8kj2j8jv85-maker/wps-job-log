@@ -1618,7 +1618,8 @@ try { if (navigator.storage && navigator.storage.persist) navigator.storage.pers
 document.addEventListener("click", async e => {
   const a = e.target.closest && e.target.closest("a[href]"); if (!a) return;
   const href = a.getAttribute("href") || "";
-  if (!href || href.startsWith("#") || a.target === "_blank" || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  // leave download links alone (the zip) - catching them lost the zip's file name (18 Oct)
+  if (!href || href.startsWith("#") || a.hasAttribute("download") || /^(blob|data):/i.test(href) || a.target === "_blank" || e.ctrlKey || e.metaKey || e.shiftKey) return;
   if (!S.photos.length) return;
   e.preventDefault();
   keepState();
