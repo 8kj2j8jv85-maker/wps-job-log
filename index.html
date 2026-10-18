@@ -625,6 +625,7 @@
   .pl-tot{ margin-top:10px; padding-top:8px; border-top:1px solid var(--line-soft); font-size:13.5px; }
   .pl-note{ margin-top:6px; font-size:12.5px; color:var(--ink-soft); }
   .pl-gm{ margin-top:10px; display:inline-flex; }
+  .pl-late{ color:var(--coral-dark); }
   .pl-pin{ background:none; border:none; } .pl-pin span{ display:flex; width:26px; height:26px; border-radius:50%; color:#fff; font-weight:700; font-size:13px; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); }
   .pl-pin-home{ font-size:20px; line-height:26px; text-align:center; }
   @media (max-width:900px){ .plan-body{ grid-template-columns:1fr; } .plan-map{ height:300px; } }
@@ -3471,51 +3472,145 @@ function renderPlanCard(){
       ${state.planEditHome ? `<input id="planHomePc" class="plan-pc" placeholder="Postcode, e.g. RM17 5XX" value="${esc(home.pc||"")}"><button class="d-mv" onclick="setPlanHome()">Save</button><button class="t-link" onclick="state.planEditHome=false;render()">Cancel</button><span class="c-dim">Blank = Grays. Kept on this device only.</span>`
         : `<button class="t-link" onclick="state.planEditHome=true;render()">Change</button>`}</div>
     ${jobs.length ? `<div class="plan-body"><div id="planList" class="plan-list"><div class="t-empty">Working out the route…</div></div><div id="planMap" class="plan-map"></div></div>` : `<div class="t-empty">No jobs on this day.</div>`}
-    <div class="d-note">Miles and times are estimates from straight-line distance (about), not road routing. Use Google Maps for directions and traffic. Jobs with a time stay in time order; jobs with no time are placed where they add the least driving.</div>
+    <div class="d-note">Road times and expected traffic come from Google Maps when you're signed in to Google; otherwise they're straight-line estimates ("about"). Jobs with a time stay in time order; jobs with no time are placed where they add the least driving. Leave times allow ${esc(VISIT_SUMMARY())} at each job. Use Google Maps for turn-by-turn.</div>
   </div>`;
 }
 let planSeq = 0;
+// ---- part 2 (Lex, 19 Oct): real road times with expected traffic, from Google Maps through the WPS Amendments
+// script (file "Route", free Apps Script Maps service, no key). One lookup per leg because Google only gives the
+// traffic time for a trip with no stop in the middle. Only map points and the sign-in token are sent; the script
+// refuses anyone but info@. If not signed in, or the lookup fails, the straight-line estimates stay.
+const ROUTE_URL = "https://script.google.com/macros/s/AKfycbxAJ7lbajJ81KFwi4G9tIGTUKXhofsFcJ8QM4K_Vu4gdOx_yaCPYpDIL-y7vQvlbPxR/exec";
+const LS_VISIT_MIN = "wps_visit_min_v1";
+const VISIT_DEFAULT = { ICI:90, CO:90, MTI:30, SOC:90, CLN:60 };   // minutes at each job type, incl. parking and getting in (Lex OK 19 Oct)
+const DAY_START = "08:30";   // leave home at this time when the first stop has no time
+function VISIT_SUMMARY(){ return "ICI "+fmtMins(visitMins("ICI"))+", CO "+fmtMins(visitMins("CO"))+", MTI "+fmtMins(visitMins("MTI"))+", SOC "+fmtMins(visitMins("SOC")); }
+function visitMins(type){ let v = {}; try { v = JSON.parse(lsGet(LS_VISIT_MIN) || "{}") || {}; } catch(e){} const n = Number(v[type] != null ? v[type] : VISIT_DEFAULT[type]); return isFinite(n) && n >= 0 ? n : 60; }
+function atTime(iso, hhmm){ const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || ""); if (!m) return null; return new Date(iso+"T"+String(m[1]).padStart(2,"0")+":"+m[2]+":00").getTime(); }
+function hm(ms){ const d = new Date(ms); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+// When each leg sets off. Leg i runs pts[i] -> pts[i+1]; the last leg goes home. Uses the leg times we have
+// (real ones once known, estimates before), so the traffic lookup asks about the right time of day.
+function planDepartures(iso, order, legMins){
+  const out = []; let ready = null;
+  for (let i=0; i<=order.length; i++){
+    const s = order[i], target = s ? atTime(iso, s.j.time) : null, mins = legMins[i] || 0;
+    let dep;
+    if (target != null){ dep = target - mins*60000; dep = Math.floor(dep/300000)*300000; if (ready != null && ready > dep) dep = ready; }
+    else dep = ready != null ? ready : atTime(iso, DAY_START);
+    out.push(dep);
+    if (s){ const arrive = dep + mins*60000; ready = Math.max(arrive, target || 0) + visitMins(s.j.type)*60000; }
+  }
+  return out;
+}
+function decodeLine(str){   // Google's encoded polyline -> [[lat, lon], ...]
+  const pts = []; let i = 0, lat = 0, lon = 0;
+  while (i < str.length){
+    let b, sh = 0, r = 0; do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32 && i < str.length); lat += (r & 1) ? ~(r >> 1) : (r >> 1);
+    sh = 0; r = 0; do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32 && i < str.length); lon += (r & 1) ? ~(r >> 1) : (r >> 1);
+    pts.push([lat/1e5, lon/1e5]);
+  }
+  return pts;
+}
+const roadCache = {};   // this page only; the script also caches for 6 hours
+function roadSignedIn(){ return !!(state.gcalToken && Date.now() < (state.gcalTokenExpiry||0) - 60000); }
+async function fetchRoad(pts, deps){
+  const legs = [], keys = [], out = [];
+  for (let i=1; i<pts.length; i++){
+    const dep = deps[i-1], fut = dep > Date.now() + 60000;
+    const k = pts[i-1].map(x => x.toFixed(4)).join(",")+">"+pts[i].map(x => x.toFixed(4)).join(",")+"@"+(fut ? Math.round(dep/900000) : "now");
+    keys.push(k); if (!roadCache[k]) legs.push({ from:pts[i-1], to:pts[i], depart:dep, k });
+  }
+  if (legs.length){
+    const r = await fetch(ROUTE_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify({ action:"route", token: state.gcalToken, legs: legs.map(l => ({ from:l.from, to:l.to, depart:l.depart })) }) });
+    const d = await r.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || "no answer");
+    d.legs.forEach((x, i) => { if (x && x.ok) roadCache[legs[i].k] = x; });
+  }
+  keys.forEach(k => out.push(roadCache[k] || null));
+  return out;
+}
+function planListHtml(iso, home, order, legs, deps, real, missing, reordered, gm, note){
+  let rows = "", totMi = 0, totMin = 0, late = 0;
+  legs.forEach((g, i) => {
+    const s = order[i], useMin = g.trafficMin != null ? g.trafficMin : g.min;
+    totMi += g.mi; totMin += useMin;
+    const target = s ? atTime(iso, s.j.time) : null, arrive = deps[i] + useMin*60000, isLate = target != null && arrive > target + 60000;
+    if (isLate) late++;
+    const when = real && g.departUsed ? ` · leave ${hm(deps[i])}` : (target != null ? ` · leave by ${hm(deps[i])}` : "");
+    const txt = real ? `${g.mi.toFixed(1)} mi, ${fmtMins(g.min)}${g.trafficMin != null ? (g.trafficMin > g.min + 1 ? `, <b>${fmtMins(g.trafficMin)} with traffic</b>` : `, traffic normal`) : ""}`
+                     : `about ${g.mi.toFixed(1)} mi, ${fmtMins(g.min)}`;
+    rows += `<div class="pl-leg${isLate ? " pl-late" : ""}">↓ ${txt}${when}${isLate ? ` · may be late (arrive about ${hm(arrive)})` : ""}</div>`;
+    if (s){ const j = s.j;
+      rows += `<div class="pl-stop"><span class="pl-n" style="background:${MAP_TYPE_COL[j.type]||"#555"}">${i+1}</span>
+          <span class="pl-t">${esc(j.time || "No time")}</span>
+          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>`; }
+  });
+  return `<div class="pl-home">🏠 ${esc(home.label)}</div>${rows}${order.length ? `<div class="pl-home">🏠 ${esc(home.label)}</div>` : ""}
+    <div class="pl-tot">${real ? "" : "About "}<b>${totMi.toFixed(0)} miles</b> and <b>${fmtMins(totMin)}</b> driving${real ? " (Google road times, with expected traffic where it applies)" : ""}${order.length ? ` · mileage for the day: ${real ? "" : "about "}${totMi.toFixed(1)} mi` : ""}</div>
+    ${late ? `<div class="pl-note pl-late">${late === 1 ? "One stop" : late+" stops"} may be late with the visit times allowed.</div>` : ""}
+    ${note ? `<div class="pl-note">${note}</div>` : ""}
+    ${reordered ? `<div class="pl-note">Jobs with no time have been put in the order that saves the most driving.</div>` : ""}
+    ${missing.length ? `<div class="pl-note">Not placed (no postcode or not found): ${missing.map(j => esc(j.jobNo||"?")).join(", ")}.</div>` : ""}
+    ${gm ? `<a class="btn btn-ghost btn-sm pl-gm" href="${gm}" target="_blank" rel="noopener">Open in Google Maps</a>${order.length > 9 ? `<span class="c-dim"> (first 9 stops only)</span>` : ""}` : ""}`;
+}
 async function drawPlan(){
   if (window._planMap){ try { window._planMap.remove(); } catch(e){} window._planMap = null; }
   const list = document.getElementById("planList"), box = document.getElementById("planMap");
   if (!list || !state.planDay) return;
-  const seq = ++planSeq, jobs = planJobs(state.planDay), h = planHome(), home = { ll:[h.lat, h.lon], label:h.label };
+  const seq = ++planSeq, iso = state.planDay, jobs = planJobs(iso), h = planHome(), home = { ll:[h.lat, h.lon], label:h.label };
+  const alive = el => seq === planSeq && el && document.body.contains(el);
   try {
     const coords = await mapCoords(jobs.filter(j => j.postcode).map(j => j.postcode));
-    if (seq !== planSeq || !document.body.contains(list)) return;
+    if (!alive(list)) return;
     const stops = [], missing = [];
     jobs.forEach(j => { const c = coords[normPc(j.postcode)]; if (c) stops.push({ j, ll:c }); else missing.push(j); });
     const order = planOrder(home, stops);
-    const pts = [home.ll].concat(order.map(s => s.ll), [home.ll]);
-    let totMi = 0, totMin = 0, rows = "";
-    order.forEach((s, i) => {
-      const leg = legEstimate(pts[i], pts[i+1]); totMi += leg.mi; totMin += leg.min;
-      const j = s.j;
-      rows += `<div class="pl-leg">↓ about ${leg.mi.toFixed(1)} mi, ${fmtMins(leg.min)}</div>
-        <div class="pl-stop"><span class="pl-n" style="background:${MAP_TYPE_COL[j.type]||"#555"}">${i+1}</span>
-          <span class="pl-t">${esc(j.time || "No time")}</span>
-          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>`;
-    });
-    const back = order.length ? legEstimate(pts[pts.length-2], home.ll) : { mi:0, min:0 }; totMi += back.mi; totMin += back.min;
-    const gm = order.length ? "https://www.google.com/maps/dir/?api=1&travelmode=driving&origin="+encodeURIComponent(home.label.length > 3 ? home.label+(h.pc ? "" : ", Essex") : home.ll.join(","))
-      + "&destination="+encodeURIComponent(home.label.length > 3 ? home.label+(h.pc ? "" : ", Essex") : home.ll.join(","))
+    const pts = order.length ? [home.ll].concat(order.map(s => s.ll), [home.ll]) : [home.ll];
+    const est = []; for (let i=1; i<pts.length; i++){ const e = legEstimate(pts[i-1], pts[i]); est.push({ mi:e.mi, min:Math.round(e.min), trafficMin:null }); }
+    let deps = planDepartures(iso, order, est.map(e => e.min));
+    const where = home.label.length > 3 ? home.label+(h.pc ? "" : ", Essex") : home.ll.join(",");
+    const gm = order.length ? "https://www.google.com/maps/dir/?api=1&travelmode=driving&origin="+encodeURIComponent(where)+"&destination="+encodeURIComponent(where)
       + "&waypoints="+encodeURIComponent(order.slice(0, 9).map(s => fullAddress(s.j)).join("|")) : "";
     const reordered = order.some((s, i) => stops[i] !== s);
-    list.innerHTML = `<div class="pl-home">🏠 ${esc(home.label)}</div>${rows}${order.length ? `<div class="pl-leg">↓ about ${back.mi.toFixed(1)} mi, ${fmtMins(back.min)}</div><div class="pl-home">🏠 ${esc(home.label)}</div>` : ""}
-      <div class="pl-tot">About <b>${totMi.toFixed(0)} miles</b> and <b>${fmtMins(totMin)}</b> driving${order.length ? ` · mileage for the day: about ${totMi.toFixed(1)} mi` : ""}</div>
-      ${reordered ? `<div class="pl-note">Jobs with no time have been put in the order that saves the most driving.</div>` : ""}
-      ${missing.length ? `<div class="pl-note">Not placed (no postcode or not found): ${missing.map(j => esc(j.jobNo||"?")).join(", ")}.</div>` : ""}
-      ${gm ? `<a class="btn btn-ghost btn-sm pl-gm" href="${gm}" target="_blank" rel="noopener">Open in Google Maps</a>${order.length > 9 ? `<span class="c-dim"> (first 9 stops only)</span>` : ""}` : ""}`;
-    if (!box) return;
-    try { await loadLeaflet(); } catch(e){ box.innerHTML = `<div class="wm-msg">The map couldn't load. The list still works.</div>`; return; }
-    if (seq !== planSeq || !document.body.contains(box)) return;
-    const map = L.map(box, { scrollWheelZoom:false }); window._planMap = map;
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(map);
-    L.polyline(pts, { color:"#E8735A", weight:3, opacity:.8, dashArray:"6 6" }).addTo(map);
-    L.marker(home.ll, { icon: L.divIcon({ className:"pl-pin pl-pin-home", html:"🏠", iconSize:[26,26] }) }).addTo(map).bindTooltip(esc(home.label));
-    order.forEach((s, i) => L.marker(s.ll, { icon: L.divIcon({ className:"pl-pin", html:`<span style="background:${MAP_TYPE_COL[s.j.type]||"#555"}">${i+1}</span>`, iconSize:[26,26] }) })
-      .addTo(map).bindPopup(`<b>${esc(s.j.jobNo||"")}</b> · ${esc(typeMeta(s.j.type).code)}<br>${esc(s.j.time||"No time")}<br>${esc(fullAddress(s.j))}<br><a href="#" onclick="openEdit('${s.j.id}');return false;">Open job</a>`));
-    map.fitBounds(pts, { padding:[24,24], maxZoom:14 });
+    const canRoad = order.length && roadSignedIn();
+    list.innerHTML = planListHtml(iso, home, order, est, deps, false, missing, reordered, gm,
+      !order.length ? "" : canRoad ? "Getting Google road times with traffic…" : "Estimates only. Click Check everything now (signs in to Google) for road times with traffic.");
+    // map first with the straight dashed line, so the page never waits on the road lookup
+    let map = null, line = null;
+    if (box){
+      try { await loadLeaflet(); } catch(e){ box.innerHTML = `<div class="wm-msg">The map couldn't load. The list still works.</div>`; }
+      if (alive(box) && window.L){
+        map = L.map(box, { scrollWheelZoom:false }); window._planMap = map;
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(map);
+        line = L.polyline(pts, { color:"#E8735A", weight:3, opacity:.8, dashArray:"6 6" }).addTo(map);
+        L.marker(home.ll, { icon: L.divIcon({ className:"pl-pin pl-pin-home", html:"🏠", iconSize:[26,26] }) }).addTo(map).bindTooltip(esc(home.label));
+        order.forEach((s, i) => L.marker(s.ll, { icon: L.divIcon({ className:"pl-pin", html:`<span style="background:${MAP_TYPE_COL[s.j.type]||"#555"}">${i+1}</span>`, iconSize:[26,26] }) })
+          .addTo(map).bindPopup(`<b>${esc(s.j.jobNo||"")}</b> · ${esc(typeMeta(s.j.type).code)}<br>${esc(s.j.time||"No time")}<br>${esc(fullAddress(s.j))}<br><a href="#" onclick="openEdit('${s.j.id}');return false;">Open job</a>`));
+        map.fitBounds(pts, { padding:[24,24], maxZoom:14 });
+      }
+    }
+    if (!canRoad) return;
+    // road times: first pass with estimated departures, second pass only if the real times moved a departure
+    let road;
+    try {
+      road = await fetchRoad(pts, deps);
+      const deps2 = planDepartures(iso, order, road.map((r, i) => r ? (r.trafficMin != null ? r.trafficMin : r.min) : est[i].min));
+      if (deps2.some((d, i) => Math.abs(d - deps[i]) >= 900000)){ deps = deps2; road = await fetchRoad(pts, deps); }
+    } catch(e){
+      if (alive(list)) list.innerHTML = planListHtml(iso, home, order, est, deps, false, missing, reordered, gm, `Couldn't get Google road times (${esc(e.message || "no connection")}). Showing estimates.`);
+      return;
+    }
+    if (!alive(list)) return;
+    const legs = road.map((r, i) => r ? { mi: r.km * 0.621371, min: r.min, trafficMin: r.trafficMin, departUsed: r.departUsed, line: r.line } : est[i]);
+    const gaps = road.filter(r => !r).length;
+    const past = new Date(iso+"T23:59:59").getTime() < Date.now() || deps.every(d => d <= Date.now());
+    list.innerHTML = planListHtml(iso, home, order, legs, deps, true, missing, reordered, gm,
+      (gaps ? `${gaps} leg${gaps>1?"s":""} still estimated (Google had no route). ` : "") + (past ? "This day has passed, so no traffic times; normal road times shown." : ""));
+    if (map && alive(box)){
+      const ll = []; legs.forEach(g => { if (g.line) ll.push(decodeLine(g.line)); });
+      if (ll.length === legs.length){ map.removeLayer(line); L.polyline(ll, { color:"#E8735A", weight:4, opacity:.85 }).addTo(map); }
+    }
   } catch(e){
     if (seq === planSeq && document.body.contains(list)) list.innerHTML = `<div class="t-empty">Couldn't work out the route (${esc(e.message || "no connection")}).</div>`;
   }
