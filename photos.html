@@ -132,8 +132,9 @@
 
   /* ===== WPS look B (29 Sept): navy sidebar ===== */
   .shell{ display:flex; min-height:100vh; }
-  .sidebar{ width:248px; flex-shrink:0; background:var(--brand); color:#fff; display:flex; flex-direction:column; gap:24px; padding:22px 16px; position:sticky; top:0; height:100vh; overflow-y:auto; box-sizing:border-box; }
-  .side-logo{ width:206px; height:auto; display:block; flex-shrink:0; }
+  .sidebar{ width:248px; flex-shrink:0; background:var(--brand); color:#fff; display:flex; flex-direction:column; gap:24px; padding:22px 16px; position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; box-sizing:border-box; }
+  .sidebar > *{ min-width:0; max-width:100%; }   /* 18 Oct: no sideways scrollbar */
+  .side-logo{ width:206px; max-width:100%; height:auto; display:block; flex-shrink:0; }
   .side-nav{ display:flex; flex-direction:column; gap:4px; }
   .side-nav a{ display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:8px; color:var(--sky); text-decoration:none; font-size:15px; font-weight:500; }
   .side-nav a:hover{ background:rgba(255,255,255,.06); color:#fff; }
@@ -158,6 +159,9 @@
   .help-box{ display:none; background:#FFF8E6; border:1px solid #F0D58C; border-radius:10px; padding:10px 14px; margin:12px 0; font-size:13.5px; line-height:1.5; color:var(--ink); }
   .help-on .help-box{ display:block; }
   .help-box b{ font-weight:600; color:var(--brand-text); }
+  .help-box .hb-hide{ float:right; margin:-2px -4px 0 10px; background:none; border:0; padding:2px 6px; font:inherit; font-size:12px; font-weight:600; color:#8A5A00; cursor:pointer; border-radius:6px; }
+  html[data-theme="night"] .help-box .hb-hide{ color:#E8C26A; }
+  .help-on .help-box.hb-gone{ display:none; }
   .help-box .hb-t{ font-size:11px; font-weight:600; letter-spacing:.12em; color:#8A5A00; margin-bottom:2px; }
   .main{ flex:1; min-width:0; }
   .page-head{ padding:32px 0 4px; }
@@ -267,7 +271,7 @@
     <h1 class="page-title">Photo Tool</h1>
     <div class="page-sub" id="pageSub">Drop a day's photos in. They're split into jobs by the gaps between them and matched to the Job Log by where they were taken.</div>
   </div>
-  <div class="help-box"><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; download zip</b>. The photo link is saved to the job automatically. Your original photos are never changed.</div>
+  <div class="help-box" id="helpBox"><button class="hb-hide" id="hbHide" title="Hide this box. Switch Help hints off and on to bring it back.">Hide</button><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; download zip</b>. The photo link is saved to the job automatically. Your original photos are never changed.</div>
   <div id="jobsNote" class="notice info hidden"></div>
 
   <div id="dropZone" class="drop">
@@ -1511,9 +1515,14 @@ function applyHelp(){
   let on = true; try { on = localStorage.getItem(LS_HELP) !== "0"; } catch(e){}
   document.body.classList.toggle("help-on", on);
   $("helpLbl").textContent = on ? "Help hints: on ✓" : "Help hints: off";
+  $("helpBox").classList.toggle("hb-gone", helpHiddenList().includes("photos"));
 }
-$("lnkHelp").onclick = e => { e.preventDefault(); const on = !document.body.classList.contains("help-on"); try { localStorage.setItem(LS_HELP, on ? "1" : "0"); } catch(x){} applyHelp(); };
-window.addEventListener("storage", e => { if (e.key === LS_HELP) applyHelp(); });
+// "How this works" box can be hidden once read (18 Oct); same list as the Dashboard, cleared when Help is switched back on
+const LS_HELP_HIDDEN = "wps_help_hidden_v1";
+function helpHiddenList(){ try { const a = JSON.parse(localStorage.getItem(LS_HELP_HIDDEN) || "[]"); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
+$("hbHide").onclick = () => { const a = helpHiddenList(); if (!a.includes("photos")) a.push("photos"); try { localStorage.setItem(LS_HELP_HIDDEN, JSON.stringify(a)); } catch(x){} applyHelp(); };
+$("lnkHelp").onclick = e => { e.preventDefault(); const on = !document.body.classList.contains("help-on"); try { localStorage.setItem(LS_HELP, on ? "1" : "0"); if (on) localStorage.setItem(LS_HELP_HIDDEN, "[]"); } catch(x){} applyHelp(); };
+window.addEventListener("storage", e => { if (e.key === LS_HELP || e.key === LS_HELP_HIDDEN) applyHelp(); });
 applyHelp();
 
 
