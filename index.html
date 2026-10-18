@@ -309,6 +309,16 @@
   .page-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; padding:32px 0 6px; }
   .page-title{ margin:0; font-family:'Cormorant Garamond',Georgia,serif; font-style:italic; font-weight:600; font-size:42px; line-height:1.1; color:var(--brand); }
   .page-sub{ font-size:14px; color:var(--ink-soft); margin-top:2px; }
+  .milestone{ display:flex; align-items:center; gap:16px; margin-top:16px; border:2px solid var(--coral); background:linear-gradient(135deg,#FFF6F4,#FFFFFF); }
+  .milestone h3{ margin:0 0 4px; }
+  .milestone p{ margin:0; color:var(--ink-soft); line-height:1.45; }
+  .milestone .ms-body{ flex:1; }
+  .milestone .ms-star{ font-size:34px; color:var(--coral); line-height:1; }
+  .ms-wp{ border-color:#C9A227; background:linear-gradient(135deg,#FFF8E1,#FFFFFF); }
+  @media (max-width:640px){ .milestone{ flex-wrap:wrap; } .milestone .btn{ width:100%; } }
+  .done-count{ display:inline-flex; flex-wrap:wrap; gap:4px 10px; margin-top:6px; font-size:13px; color:var(--ink-soft); }
+  .done-count b{ color:var(--brand-text, var(--brand)); font-size:15px; }
+  .done-count .dc-lbl{ font-weight:600; color:var(--brand-text, var(--brand)); }
   .page-actions{ display:flex; gap:10px; flex-wrap:wrap; }
   .btn{ border-radius:8px; font-weight:500; letter-spacing:.01em; }
   .btn-coral{ background:var(--coral); color:var(--brand-dark); font-weight:600; }
@@ -498,6 +508,66 @@ function needsInvoice(j){ return REPORT_OUT.includes(j.status) && !j.invoice; }
 const DUE_STATUSES = ["booked","processing","completed"];   // report not yet sent
 // Finished jobs (13 Oct): paid, and the report is finished. Check-outs etc. at Sent or later; inventory &
 // check-ins at Signed, Deemed agreed or Archived. Hidden from the Job Log's main list, shown under "Finished".
+// Reports completed counter (Lex, 14 Oct; built 18 Oct). Every job type counts once its report is done:
+// inventory & check-ins at Signed, Deemed agreed or Archived; everything else at Sent or later.
+// Month/year come from the signed, deemed or sent date (else the visit date).
+// WPS jobs only, counting from zero (Lex, 18 Oct: no Wellington Parker starting figure).
+function reportDoneAt(j){
+  const done = j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status);
+  if (!done) return null;
+  const s = (j.type==="ICI" ? (j.signedAt || j.deemedAt) : "") || j.sentAt || (j.date ? j.date+"T12:00:00" : "");
+  const d = s ? new Date(s) : null;
+  return d && !isNaN(d) ? d : new Date(0);
+}
+function doneCounts(){
+  const now = new Date(); let all = 0, year = 0, month = 0;
+  state.jobs.forEach(j => {
+    const d = reportDoneAt(j); if (!d) return;
+    all++;
+    if (d.getFullYear()===now.getFullYear()){ year++; if (d.getMonth()===now.getMonth()) month++; }
+  });
+  return { all, year, month };
+}
+// Milestones (Lex, 18 Oct): a one-off message under the dashboard panel when WPS passes each figure, and a special one
+// the day WPS beats Wellington Parker's total. Shown once per device until "Thanks" is pressed.
+const WP_TOTAL = 3507;   // Wellington Parker reports, 2014 to Sep 2026 (17 Oct Dropbox index). Never shown, only the target.
+const MILESTONES = [50, 100, 250, 500, 1000, 2000, 3000];
+const LS_MILESTONES = "wps_milestones_seen_v1";
+function milestoneMessage(m, n){
+  if (m === "wp") return ["You've beaten Wellington Parker!", `${n.toLocaleString("en-GB")} reports under Wellington Property Services. That's more than all ${WP_TOTAL.toLocaleString("en-GB")} Wellington Parker reports. A new record, built by you.`];
+  const lines = {
+    50:   "50 reports done under WPS. A proper start.",
+    100:  "100 reports. Three figures under the new name.",
+    250:  "250 reports. A quarter of a thousand.",
+    500:  "500 reports. Half a thousand properties covered.",
+    1000: "1,000 reports. Four figures. WPS is well and truly established.",
+    2000: "2,000 reports. Double the thousand.",
+    3000: `3,000 reports. ${(WP_TOTAL - n > 0 ? (WP_TOTAL - n).toLocaleString("en-GB") + " to go" : "Nearly there")} to pass Wellington Parker.`
+  };
+  return ["Milestone: " + m.toLocaleString("en-GB") + " reports", lines[m]];
+}
+function seenMilestones(){ try { return JSON.parse(lsGet(LS_MILESTONES) || "[]"); } catch(e){ return []; } }
+function currentMilestone(){
+  const n = doneCounts().all, seen = seenMilestones();
+  if (n > WP_TOTAL && !seen.includes("wp")) return { m: "wp", n };
+  const hit = MILESTONES.filter(m => n >= m && !seen.includes(m));
+  return hit.length ? { m: hit[hit.length-1], n } : null;
+}
+function dismissMilestone(){
+  const n = doneCounts().all, seen = seenMilestones();
+  MILESTONES.forEach(m => { if (n >= m && !seen.includes(m)) seen.push(m); });   // the ones passed on the way count as seen
+  if (n > WP_TOTAL && !seen.includes("wp")) seen.push("wp");
+  lsSet(LS_MILESTONES, JSON.stringify(seen)); render();
+}
+function renderMilestone(){
+  const c = currentMilestone(); if (!c) return "";
+  const [h, msg] = milestoneMessage(c.m, c.n);
+  return `<div class="t-card d-card milestone${c.m === "wp" ? " ms-wp" : ""}"><div class="ms-star">${c.m === "wp" ? "🏆" : "★"}</div><div class="ms-body"><h3>${esc(h)}</h3><p>${esc(msg)}</p></div><button class="btn btn-coral btn-sm" onclick="dismissMilestone()">Thanks</button></div>`;
+}
+function renderDoneCount(){
+  const c = doneCounts();
+  return `<div class="done-count"${tip("Reports completed: inventories once signed or deemed agreed, everything else once sent")}><span class="dc-lbl">Reports completed</span><span><b>${c.month}</b> this month</span><span><b>${c.year}</b> this year</span><span><b>${c.all}</b> all time</span></div>`;
+}
 function isFinished(j){ return j.invoice==="paid" && (j.type==="ICI" ? ["signed","deemed","archived"].includes(j.status) : REPORT_OUT.includes(j.status)); }
 
 const DEFAULT_CLIENTS = [
@@ -871,6 +941,9 @@ function setJobStatus(j, code){
   if (!REPORT_OUT.includes(code)){ delete j.sentAt; delete j.reissuedAt; delete j.reissues; delete j.reminderAt; }
   if (code==="deemed" && !j.deemedAt) j.deemedAt = new Date().toISOString();
   if (code!=="deemed") delete j.deemedAt;
+  // signed date (18 Oct): used by the reports completed counter
+  if (code==="signed" && !j.signedAt) j.signedAt = new Date().toISOString();
+  if (code!=="signed" && code!=="archived") delete j.signedAt;
 }
 // ---------------------------------------------------------------- 7-day comment window (inventory & check-in)
 // Window starts when the report is sent; a re-issue after amendments restarts it (changed items only).
@@ -2482,7 +2555,7 @@ function renderToday(){
     <div class="t-card d-card d-panel">
       <h3>${esc(title)}</h3>
       ${body}
-    </div>`;
+    </div>${renderMilestone()}`;
 }
 
 function renderSideLinks(){
@@ -2512,7 +2585,7 @@ function renderPageHead(){
   const today = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
   const n = pendingQueue().length;
   return `<div class="page-head">
-    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div></div>
+    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : "Job Log"}</h1><div class="page-sub">${today}</div>${renderDoneCount()}</div>
     <div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
