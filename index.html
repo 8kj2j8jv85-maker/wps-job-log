@@ -868,7 +868,7 @@ function normalizeClients(arr){
   return out.length ? out : null;
 }
 function load(){
-  try { const j = localStorage.getItem(LS_JOBS); if (j) state.jobs = JSON.parse(j); } catch(e){}
+  try { const j = localStorage.getItem(LS_JOBS); if (j) state.jobs = cleanJobs(JSON.parse(j)); } catch(e){}
   state.jobs.forEach(j=>{ if (j.status==="report_sent") j.status = "sent"; });
   try {
     const c = localStorage.getItem(LS_CLIENTS);
@@ -1050,7 +1050,7 @@ async function cloudLoad(id, meta){
   const jobs = parse(r.valueRanges[0]);
   const clients = normalizeClients(parse(r.valueRanges[1]));
   if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return false; }
-  state.jobs = jobs; if (clients) state.clients = clients;
+  state.jobs = cleanJobs(jobs); if (clients) state.clients = clients;
   const contacts = hasContacts ? normalizeContacts(parse(r.valueRanges[2])) : null;
   if (contacts && contacts.length) state.contacts = contacts;   // a Sheet without a Contacts tab keeps this browser's list
   fillContactsFromData();
@@ -1128,6 +1128,23 @@ function renderCloudPill(){
 // ---------------------------------------------------------------- helpers
 function pad2(n){ return String(n).padStart(2,"0"); }
 function uid(){ return 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2,9); }
+// Security pass 19 Oct: job ids go into buttons on the page, so every job list loaded from the browser, the Google
+// Sheet, a backup file or another tab is checked: ids must be plain (letters, numbers, _ . : -), anything else gets a
+// new id; non-text dates and times become blank so the page can't break. Real ids are made by uid() and always pass.
+const JOB_ID_OK = /^[A-Za-z0-9_.:-]{1,80}$/;
+function cleanJobs(list){
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  return list.filter(j => j && typeof j === "object").map(j => {
+    if (typeof j.id !== "string" || !JOB_ID_OK.test(j.id) || seen.has(j.id)) j.id = uid();
+    seen.add(j.id);
+    if (typeof j.date !== "string") j.date = "";
+    if (typeof j.time !== "string") j.time = "";
+    return j;
+  });
+}
+function qDate(v){ return typeof v === "string" && /^\d{4}-\d\d-\d\d$/.test(v) ? v : ""; }
+function qTime(v){ return typeof v === "string" && /^\d\d:\d\d$/.test(v) ? v : ""; }
 
 function nextJobNumber(dateStr){
   const d = dateStr ? new Date(dateStr) : new Date();
@@ -1881,7 +1898,7 @@ function importData(file){
       const data = JSON.parse(reader.result);
       if (!Array.isArray(data.jobs)) throw new Error("bad shape");
       if (!confirm("Import " + data.jobs.length + " job(s)? This will replace your current data in this browser.")) return;
-      state.jobs = data.jobs;
+      state.jobs = cleanJobs(data.jobs);
       const norm = normalizeClients(data.clients);
       if (norm) state.clients = norm;
       saveJobs(); saveClients();
@@ -2239,7 +2256,7 @@ function jobFromItem(it){
   Object.assign(j, {
     type: TYPES.some(t=>t.code===it.type) ? it.type : "ICI",
     client: resolveClientName(it.client),
-    date: it.date||"", time: it.time||"",
+    date: qDate(it.date), time: qTime(it.time),
     address: it.address||"", town: it.town||"", postcode: it.postcode||"",
     notes: [it.notes, src].filter(Boolean).join("\n"),
   });
@@ -2299,8 +2316,8 @@ function qEdit(id){
 }
 function qApplyUpdate(id){
   const it = queueItem(id); const m = it && findMatch(it); if (!m) return;
-  if (it.date) m.date = it.date;
-  if (it.time) m.time = it.time;
+  if (qDate(it.date)) m.date = qDate(it.date);
+  if (qTime(it.time)) m.time = qTime(it.time);
   const extraNotes = applyItemContacts(m, it);
   if (it.summary || extraNotes.length) m.notes = [m.notes, it.summary ? "Update from email: "+it.summary : ""].concat(extraNotes).filter(Boolean).join("\n");
   saveJobs(); markQueueDone(id,"updated"); render();
@@ -3163,7 +3180,7 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
     </button>
-    <a class="btn-link" href="manual.pdf?v=20261019" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+    <a class="btn-link" href="manual.pdf?v=20261019b" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
@@ -3391,11 +3408,27 @@ function wxPlace(){
   const j = state.jobs.filter(x => x.status !== "archived" && x.date === today && x.postcode).sort((a,b) => (a.time||"99").localeCompare(b.time||"99"))[0];
   return j ? { pc: j.postcode, name: j.postcode.toUpperCase() } : null;
 }
+// Security pass 19 Oct: everything from the weather service is turned into plain numbers (or checked time text)
+// before the page uses it, so a bad reply can't put code into the page.
+function wxClean(d){
+  d = d || {};
+  const num = v => { const n = Number(v); return v === null || v === undefined || v === "" || !isFinite(n) ? null : n; };
+  const tm = v => typeof v === "string" && /^\d{4}-\d\d-\d\d(T\d\d:\d\d)?$/.test(v) ? v : "";
+  const pick = (o, keys) => { const out = {}; o = o || {}; keys.forEach(k => { out[k] = num(o[k]); }); return out; };
+  const arr = (a, f, n) => Array.isArray(a) ? a.slice(0, n).map(f) : [];
+  const h = d.hourly || {}, dl = d.daily || {};
+  return {
+    current: d.current ? pick(d.current, ["temperature_2m","apparent_temperature","weather_code","wind_speed_10m","wind_gusts_10m","is_day"]) : null,
+    hourly: { time: arr(h.time, tm, 72), temperature_2m: arr(h.temperature_2m, num, 72), precipitation_probability: arr(h.precipitation_probability, num, 72), weather_code: arr(h.weather_code, num, 72), is_day: arr(h.is_day, num, 72) },
+    daily: { time: arr(dl.time, tm, 7), weather_code: arr(dl.weather_code, num, 7), temperature_2m_max: arr(dl.temperature_2m_max, num, 7), temperature_2m_min: arr(dl.temperature_2m_min, num, 7),
+      precipitation_probability_max: arr(dl.precipitation_probability_max, num, 7), wind_speed_10m_max: arr(dl.wind_speed_10m_max, num, 7), sunrise: arr(dl.sunrise, tm, 7), sunset: arr(dl.sunset, tm, 7) }
+  };
+}
 async function loadWeather(force){
   if (state.wxBusy) return;
   const place = wxPlace(), key = place ? normPc(place.pc) : "HOME";
   let cached = null; try { cached = JSON.parse(lsGet(LS_WX) || "null"); } catch(e){}
-  if (!force && cached && cached.key === key && Date.now() - cached.at < 20*60000){ if (!state.wx || state.wx.at !== cached.at){ state.wx = cached; if (!state.editing) render(); } return; }
+  if (!force && cached && cached.key === key && Date.now() - cached.at < 20*60000){ if (!state.wx || state.wx.at !== cached.at){ state.wx = Object.assign({}, cached, { d: wxClean(cached.d), name: String(cached.name || "").slice(0, 80) }); if (!state.editing) render(); } return; }
   state.wxBusy = true;
   try {
     let lat = WX_HOME.lat, lon = WX_HOME.lon, name = WX_HOME.name;
@@ -3407,7 +3440,7 @@ async function loadWeather(force){
       + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,sunrise,sunset"
       + "&timezone=Europe%2FLondon&wind_speed_unit=mph&forecast_days=2";
     const r = await fetch(u); if (!r.ok) throw new Error("weather "+r.status);
-    const d = await r.json();
+    const d = wxClean(await r.json());
     state.wx = { key, at: Date.now(), name, d }; lsSet(LS_WX, JSON.stringify(state.wx)); state.wxErr = "";
   } catch(e){ state.wxErr = "Weather not available right now."; state.wxErrAt = Date.now(); }
   state.wxBusy = false;
@@ -3720,9 +3753,15 @@ const SLOT_ACCESS_KEYS = "Please use the keys";
 const SLOT_DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function slotSet(){
   let v = {}; try { v = JSON.parse(lsGet(LS_SLOT_SET) || "{}") || {}; } catch(e){}
-  const s = Object.assign({}, SLOT_DEFAULT, v);
-  if (!Array.isArray(s.days) || !s.days.length) s.days = SLOT_DEFAULT.days.slice();
-  return s;
+  // Security pass 19 Oct: settings can come from the Sheet's Meta tab, so each value is checked (same rules as the script)
+  const D = SLOT_DEFAULT, hm = x => typeof x === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(x) ? x : null;
+  const int = (x, lo, hi) => { const n = Number(x); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
+  const days = Array.isArray(v.days) ? [...new Set(v.days.map(x => int(x, 0, 6)).filter(x => x !== null))] : [];
+  let start = hm(v.start) || D.start, end = hm(v.end) || D.end;
+  if (end <= start){ start = D.start; end = D.end; }
+  const earliest = int(v.earliest, 0, 30) ?? D.earliest;
+  let latest = int(v.latest, 1, 60) ?? D.latest; if (latest < earliest) latest = earliest;
+  return { days: days.length ? days : D.days.slice(), start, end, slotMin: 30, earliest, latest, bufferMin: int(v.bufferMin, 0, 120) ?? D.bufferMin };
 }
 function slotSetSummary(s){
   s = s || slotSet();
@@ -4292,7 +4331,7 @@ window.addEventListener("storage", function(e){
   if (e.key === LS_CONTACTS && e.newValue){ try { const k = normalizeContacts(JSON.parse(e.newValue)); if (k) state.contacts = k; } catch(x){} if (!state.editing) render(); return; }
   if (e.key === LS_QUEUE_DONE && e.newValue){ try { state.queueDone = JSON.parse(e.newValue) || {}; } catch(x){} if (!state.editing) render(); return; }
   if (e.key !== LS_JOBS || !e.newValue) return;
-  try { state.jobs = JSON.parse(e.newValue) || []; } catch(x){ return; }
+  try { state.jobs = cleanJobs(JSON.parse(e.newValue)); } catch(x){ return; }
   if (state.gcalConnected && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) scheduleCloudSave();
   if (!state.editing) render();
 });

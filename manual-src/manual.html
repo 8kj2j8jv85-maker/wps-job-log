@@ -251,7 +251,7 @@
 
 <h2>4.11 …send a finished report?</h2>
 <div class="step"><div class="sn">1</div><div>Check the job: right client, type, address, postcode, photo link. For a check-in, every tenant row has an email.</div></div>
-<div class="step"><div class="sn">2</div><div>Save the PDF into <b>WPS Ready to send</b> with the job number in the name, e.g. <b>WPS261007.E32BX.12.10.26.MTI.pdf</b>.</div></div>
+<div class="step"><div class="sn">2</div><div>Save the PDF into <b>WPS Ready to send</b> with the job number in the name, e.g. <b>WPS000000.E39ZZ.12.10.26.MTI.pdf</b>.</div></div>
 <div class="step"><div class="sn">3</div><div>That's it. Within about 15 minutes it's emailed. Check-ins go to each tenant with their own signing link. The job shows Sent after your next Check everything now.</div></div>
 <div class="step"><div class="sn">4</div><div>If something was missing, info@ gets <b>"Report held, not sent"</b> with the reason. Fix it and move the PDF from Held back into WPS Ready to send.</div></div>
 <p class="small">More: sections 11 and 12.</p>
@@ -502,7 +502,7 @@
 
 <h2>How to send a report</h2>
 <div class="step"><div class="sn">1</div><div>Check the job in the Job Log: right <b>client</b>, <b>type</b>, address and postcode, and a <b>photo link</b>. On a check-in, check the tenant rows have emails.</div></div>
-<div class="step"><div class="sn">2</div><div>Save the finished PDF into the Drive folder <b>WPS Ready to send</b>. On the HP it is <b>G:\My Drive\WPS Ready to send</b> (Google Drive for desktop, signed in as info@). The file name must have the job number in it once, e.g. <b>WPS261007.E32BX.12.10.26.MTI.pdf</b>.</div></div>
+<div class="step"><div class="sn">2</div><div>Save the finished PDF into the Drive folder <b>WPS Ready to send</b>. On the HP it is <b>G:\My Drive\WPS Ready to send</b> (Google Drive for desktop, signed in as info@). The file name must have the job number in it once, e.g. <b>WPS000000.E39ZZ.12.10.26.MTI.pdf</b>.</div></div>
 <div class="step"><div class="sn">3</div><div>That's it. Every 15 minutes the script looks in the folder. A file saved in the last 3 minutes waits for the next run, so a half-copied file is never sent.</div></div>
 
 <h2>What happens when it sends</h2>
@@ -524,7 +524,7 @@
   <tr><td>WPS… is not in the Job Log / is on 2 rows</td><td>Add the job, or sort out the duplicate.</td></tr>
   <tr><td>File name says MTI but the Job Log says CO</td><td>Correct whichever is wrong.</td></tr>
   <tr><td>… reports are not sent automatically yet</td><td>Only check-outs, mid-terms, schedules and check-ins are sent. Send other types by hand.</td></tr>
-  <tr><td>Already sent by this script / Job Log has it at Sent already</td><td>To send again on purpose, put <b>RESEND</b> in the file name, e.g. WPS261007.E32BX.12.10.26.MTI RESEND.pdf.</td></tr>
+  <tr><td>Already sent by this script / Job Log has it at Sent already</td><td>To send again on purpose, put <b>RESEND</b> in the file name, e.g. WPS000000.E39ZZ.12.10.26.MTI RESEND.pdf.</td></tr>
   <tr><td>Job Log row has no address / postcode</td><td>Fill it in on the job.</td></tr>
   <tr><td>No recipient</td><td>Tick a Copy to on the job, or add the client's email on the Clients tab.</td></tr>
   <tr><td>No photo link</td><td>Put the photo link on the job (Photo Tool or paste it), or make sure page 1 of the report links to it.</td></tr>
