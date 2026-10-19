@@ -116,7 +116,7 @@
   /* compact dashboard (one screen) */
   .wrap-dash{ max-width:1560px; }
   .wrap-dash .page-head{ padding-top:20px; }
-  .d-tiles{ display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
+  .d-tiles{ display:grid; grid-template-columns:repeat(11,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
   .d-tile{ text-align:left; background:var(--card); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; min-width:0; }
   .d-tile:hover{ border-color:var(--peri); }
   .d-tile.on{ border-color:var(--brand); background:var(--sky); }
@@ -154,6 +154,16 @@
   .d-tel{ color:var(--coral-dark); font-weight:600; text-decoration:none; white-space:nowrap; }
   @media (max-width:600px){ .d-info{ padding-left:0; font-size:13px; } }
   .d-sect{ margin:2px 0 6px; font-size:12.5px; font-weight:600; color:var(--coral-dark); letter-spacing:.02em; }
+  .sl-set{ font-size:13px; margin:0 0 10px; }
+  .sl-edit{ padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+  .sl-row{ display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; margin:4px 0; }
+  .sl-row input[type=time], .sl-row input[type=number]{ width:auto; flex:0 0 auto; font:inherit; padding:3px 6px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); }
+  .sl-row input[type=number]{ width:58px; }
+  .sl-l{ min-width:62px; font-weight:600; }
+  .sl-dl{ white-space:nowrap; }
+  .sl-st{ font-size:12px; white-space:nowrap; }
+  .sl-picked{ color:var(--coral-dark); font-weight:600; white-space:normal; }
+  .d-mv.sl-ok{ background:var(--coral); color:#fff; }
   .d-mv{ white-space:nowrap; border:1px solid var(--coral); background:var(--card); color:var(--coral-dark); border-radius:6px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; }
   .d-mv:hover{ background:var(--coral-bg); }
   .pl-row{ display:flex; gap:6px; align-items:center; }
@@ -173,8 +183,8 @@
   .d-ghead.d-g-todo{ border-color:var(--coral); } .d-ghead.d-g-wait{ border-color:var(--peri); } .d-ghead.d-g-money{ border-color:var(--brand); } .d-ghead.d-g-perf{ border-color:var(--green); }
   .d-tile.zero{ opacity:.55; } .d-tile.zero:hover{ opacity:1; }
   @media (min-width:1251px){ .d-tile.d-gstart{ margin-left:6px; } .d-ghead.d-g-wait, .d-ghead.d-g-money, .d-ghead.d-g-perf{ margin-left:6px; } }
-  @media (max-width:1250px){ .d-ghead{ display:none; } .d-tile{ border-top-width:3px; } .d-tile.d-g-todo{ border-top-color:var(--coral); } .d-tile.d-g-wait{ border-top-color:var(--peri); } .d-tile.d-g-money{ border-top-color:var(--brand); } .d-tile.d-g-perf{ border-top-color:var(--green); } }
-  @media (max-width:1250px){ .d-tiles{ grid-template-columns:repeat(5,minmax(0,1fr)); } }
+  @media (max-width:1450px){ .d-ghead{ display:none; } .d-tile{ border-top-width:3px; } .d-tile.d-g-todo{ border-top-color:var(--coral); } .d-tile.d-g-wait{ border-top-color:var(--peri); } .d-tile.d-g-money{ border-top-color:var(--brand); } .d-tile.d-g-perf{ border-top-color:var(--green); } }
+  @media (max-width:1450px){ .d-tiles{ grid-template-columns:repeat(6,minmax(0,1fr)); } }   /* 11 tiles since the Mid-terms tile (19 Oct) */
   @media (max-width:900px){ .d-row{ grid-template-columns:1fr; } .d-tiles{ grid-template-columns:repeat(2,minmax(0,1fr)); } .c-row{ flex-wrap:wrap; } .c-job{ white-space:normal; } }
 
   /* status strip */
@@ -1004,7 +1014,7 @@ async function cloudSave(){
     const prev = await gapi(base+":batchGet?ranges=Jobs!A:A&ranges=Clients!A:A&ranges=Contacts!A:A&ranges=Meta!A:A");
     const prevLen = i => ((prev.valueRanges[i] && prev.valueRanges[i].values) || []).length;
     const pad = (rows, oldLen) => { const w = rows[0].length, out = rows.slice(); while (out.length < oldLen) out.push(new Array(w).fill("")); return out; };
-    const metaRows = [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())]];
+    const metaRows = [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())],["slotSettings", lsGet(LS_SLOT_SET) || meta.slotSettings || ""]];
     await gapi(base+":batchUpdate", { method:"POST", body: JSON.stringify({
       valueInputOption: "RAW",
       data: [
@@ -1041,6 +1051,7 @@ async function cloudLoad(id, meta){
   lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
   try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
+  if (meta.slotSettings) lsSet(LS_SLOT_SET, meta.slotSettings);   // slot picker settings saved from another device
   localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
   localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
   lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
@@ -2608,6 +2619,7 @@ function loadAmendments(quiet){
         const pT = ph.indexOf("Time"), pJ = ph.indexOf("Job"), pE = ph.indexOf("Email"), pW = ph.indexOf("Window"), pS = ph.indexOf("Status");
         prow.slice(1).forEach(r => { if (r[pE]==="D" && r[pS]==="Sent") autoRem[normJobNo(r[pJ])+"|"+String(r[pW]||"").replace(/^'/,"")] = (typeof r[pT]==="number") ? new Date(Math.round((r[pT]-25569)*86400000)) : new Date(); });
       } catch(e){ console.log("[WPS] process emails read failed", e); }
+      await loadSlots();   // mid-term slot picks (19 Oct), same Sheet and sign-in
       state.amend = { loaded:true, at:new Date(), autoRem, jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
       autoDeem();
     } catch(e){
@@ -2898,6 +2910,8 @@ function renderToday(){
   const queueN = pendingQueue().length;
   const am = state.amend || {};
   const amN = am.loaded ? am.jobs.length : null;
+  const mids = midtermsToBook(active);
+  const midPicked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
 
   // Tiles: [key, label, number shown, sub line, tone]
   const tc = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green)" : s.pct>=50 ? "var(--amber)" : "var(--red)";
@@ -2906,6 +2920,7 @@ function renderToday(){
     ["due", "Reports due", due.length, [overdue ? overdue+" overdue" : "", unconfirmed.length ? unconfirmed.length+" to confirm" : ""].filter(Boolean).join(" · "), overdue ? "late" : (due.length || unconfirmed.length) ? "warn" : ""],
     ["times", "Times to agree", timesToAgree.length, "", timesToAgree.length ? "warn" : ""],
     ["photos", "Photos not done", photosMissing.length, "", photosMissing.length ? "warn" : ""],
+    ["mid", "Mid-terms", mids.length, midPicked.length ? midPicked.length+" picked" : "", midPicked.length ? "late" : mids.length ? "warn" : ""],
     ["book", "New bookings", state.queueChecked ? queueN : "–", state.queueChecked ? "" : "not checked", queueN ? "warn" : ""],
     ["sig", "Out for signature", awaitingSig.length, "", ""],
     ["win", "Comment windows", openWin, remindersDue ? remindersDue+" reminder"+(remindersDue===1?"":"s")+" due" : "", remindersDue ? "warn" : ""],
@@ -2917,17 +2932,17 @@ function renderToday(){
   const countOf = k => { const t = tiles.find(x => x[0]===k); return typeof t[2]==="number" ? t[2] : 0; };
   // Default panel: the most urgent thing with something in it
   let panel = state.dashPanel;
-  if (!panel) panel = (overdue || unconfirmed.length) ? "due" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
+  if (!panel) panel = (overdue || unconfirmed.length) ? "due" : midPicked.length ? "mid" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
   const toneCol = { late:"var(--red)", warn:"var(--amber)", coral:"var(--coral-dark)" };
   const TILE_TIPS = {
     due:"Visited jobs whose report hasn't been sent yet, soonest due first. Jobs still at Booked after their visit time are listed separately to confirm", book:"Bookings Claude found in Gmail, waiting for you to check",
     sig:"Check-in reports sent and waiting for signatures in Acrobat", win:"The 7-day comment window on each sent check-in report",
     amend:"Tenant comments from the amendments form that are still open", times:"Booked jobs with no time agreed yet",
-    photos:"Visited jobs with no photo link saved yet", inv:"Reports sent but not invoiced yet", paid:"Invoiced but not paid yet",
+    photos:"Visited jobs with no photo link saved yet", mid:"Mid-terms with no date yet: send the tenant a slot link, then approve the time they pick", inv:"Reports sent but not invoiced yet", paid:"Invoiced but not paid yet",
     turn:"How many reports went out on time over the last 7 days. Click for the full performance view: this month, last month, streak and personal bests"
   };
-  const TILE_GROUP = { due:"todo", times:"todo", photos:"todo", book:"todo", sig:"wait", win:"wait", amend:"wait", inv:"money", paid:"money", turn:"perf" };
-  const GROUPS = [["todo","To do now",4],["wait","Waiting on others",3],["money","Money",2],["perf","Performance",1]];
+  const TILE_GROUP = { due:"todo", times:"todo", photos:"todo", mid:"todo", book:"todo", sig:"wait", win:"wait", amend:"wait", inv:"money", paid:"money", turn:"perf" };
+  const GROUPS = [["todo","To do now",5],["wait","Waiting on others",3],["money","Money",2],["perf","Performance",1]];
   const groupHead = GROUPS.map(([g, lbl, n]) => `<div class="d-ghead d-g-${g}" style="grid-column:span ${n}">${lbl}</div>`).join("");
   // Tiles as a compact strip (Lex, 18 Oct): number beside the label, so the strip is one short row on a PC and
   // a sideways-scrolling row on the phone. The full sub line is in the hover text, so nothing is cut off.
@@ -2949,12 +2964,15 @@ function renderToday(){
   const remindDue = windows.filter(x => x.st==="open" && needsManualReminder(x.j, now));
   if (amN) dnAdd(10, "late", amN+" job"+(amN===1?"":"s")+" with tenant comments", null, `<button class="d-mv" onclick="setDashPanel('amend')">Review</button>`);
   due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j));   // 18 Oct: no Rearrange once visited (Processing)
+  midPicked.forEach(j => { const r = slotFor(j); dnAdd(25, "warn", "Tenant picked "+r.slotText, j, `<button class="d-mv sl-ok" onclick="slotApprove('${j.id}')">Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')">Decline</button>`); });
   unconfirmed.forEach(x => dnAdd(30, "warn", "Visit passed, still Booked", x.j, `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${dnRr(x.j)}`));
   remindDue.forEach(x => dnAdd(40, "warn", "Comment reminder due", x.j, `<button class="d-mv" onclick="sendReminder('${x.j.id}')"${tip("Opens a ready-written reminder in Gmail. Check it, then send.")}>Write email</button>`));
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
   dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
   photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
-  timesToAgree.forEach(j => dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : "No date yet", j));
+  timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
+    const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
+    dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   if (toInvoice.length) dnAdd(90, "coral", toInvoice.length+" report"+(toInvoice.length===1?"":"s")+" sent, not invoiced", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
   const unpaidOldest = moneyByClient(unpaid, j => j.invoicedAt).reduce((m,r) => Math.max(m, r.oldest), 0);
   if (unpaid.length) dnAdd(95, unpaidOldest > 30 ? "late" : "", unpaid.length+" invoice"+(unpaid.length===1?"":"s")+" awaiting payment"+(unpaidOldest ? ", oldest "+unpaidOldest+"d" : ""), null, `<button class="d-mv" onclick="setDashPanel('paid')">See who owes</button>`);
@@ -3001,6 +3019,7 @@ function renderToday(){
         + (dated.length ? `<div class="d-sect"${noDate.length ? ' style="margin-top:14px"' : ""}>Date set, no time (${dated.length})</div>` + rows(dated, ttRow, "") : "")
         : `<div class="t-empty">Every booked job has a date and time.</div>`;
       body += note("Add the date and time once the tenant or agent confirms."); break; }
+    case "mid": title = "Mid-terms to book"; body = renderMidPanel(mids); break;
     case "photos": title = "Photos not done"; body = rows(photosMissing, j => cRow(j), "Every visited job has its photo link.") + note("Visited in the last 30 days, report not sent, no photo link saved. Run the Photo Tool for these."); break;
     case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
     case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: (j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
@@ -3619,6 +3638,199 @@ async function drawPlan(){
     if (seq === planSeq && document.body.contains(list)) list.innerHTML = `<div class="t-empty">Couldn't work out the route (${esc(e.message || "no connection")}).</div>`;
   }
 }
+
+// ---- Plan my day part 3 (Lex, 19 Oct): mid-terms to book and the tenant slot picker.
+// The tenant page and the free-time check live in the WPS Amendments script (file "Slots"); its "Slot requests" tab
+// is read here with the same sign-in as the amendments. Nothing is booked by the tenant: a pick shows here as a card
+// and Lex approves (date, time and calendar set on the job, confirmation email opened in Gmail) or declines (the
+// tenant picks again from the same link). Settings (days, hours, how far ahead) are saved in the Job Log Sheet's Meta
+// tab so the script and every device use the same ones.
+const LS_SLOT_SET = "wps_slot_settings_v1";
+const SLOT_DEFAULT = { days:[1,2,3,4,5], start:"10:00", end:"15:00", slotMin:30, earliest:2, latest:14, bufferMin:30 };   // Lex, 19 Oct
+const SLOT_ACCESS_KEYS = "Please use the keys";
+const SLOT_DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function slotSet(){
+  let v = {}; try { v = JSON.parse(lsGet(LS_SLOT_SET) || "{}") || {}; } catch(e){}
+  const s = Object.assign({}, SLOT_DEFAULT, v);
+  if (!Array.isArray(s.days) || !s.days.length) s.days = SLOT_DEFAULT.days.slice();
+  return s;
+}
+function slotSetSummary(s){
+  s = s || slotSet();
+  const d = s.days.slice().sort((a,b) => a-b), wk = d.join() === "1,2,3,4,5";
+  return (wk ? "Mon to Fri" : d.map(x => SLOT_DAY_NAMES[x]).join(", "))+", "+s.start+" to "+s.end+" (last start "+slotLastStart(s)+"), from "+s.earliest+" working day"+(s.earliest===1?"":"s")+" to "+s.latest+" days ahead";
+}
+function slotLastStart(s){ const p = s.end.split(":").map(Number), m = p[0]*60 + p[1] - s.slotMin; return pad2(Math.floor(m/60))+":"+pad2(m%60); }
+function saveSlotSettings(){
+  const g = id => (document.getElementById(id)||{}).value || "";
+  const days = Array.from(document.querySelectorAll(".sl-day:checked")).map(x => Number(x.value));
+  const s = { days, start:g("sl_start"), end:g("sl_end"), slotMin:30, earliest:Number(g("sl_earliest")), latest:Number(g("sl_latest")), bufferMin:Number(g("sl_buffer")) };
+  if (!days.length){ alert("Tick at least one day."); return; }
+  if (!/^\d\d:\d\d$/.test(s.start) || !/^\d\d:\d\d$/.test(s.end) || s.end <= s.start){ alert("The finish time must be after the start time."); return; }
+  const span = (Number(s.end.slice(0,2))*60+Number(s.end.slice(3))) - (Number(s.start.slice(0,2))*60+Number(s.start.slice(3)));
+  if (span < 30){ alert("Allow at least 30 minutes between start and finish."); return; }
+  if (!(s.earliest >= 0 && s.earliest <= 30) || !(s.latest >= 1 && s.latest <= 60) || s.latest < s.earliest){ alert("Check the days ahead: earliest 0 to 30 working days, latest 1 to 60 days, and latest not before earliest."); return; }
+  if (!(s.bufferMin >= 0 && s.bufferMin <= 120)){ alert("Travel buffer must be 0 to 120 minutes."); return; }
+  lsSet(LS_SLOT_SET, JSON.stringify(s));
+  state.slotEdit = false;
+  markLocalChange();   // saves to the Job Log Sheet (Meta tab), where the slot picker reads it
+  render();
+}
+function renderSlotSettings(){
+  const s = slotSet();
+  if (!state.slotEdit) return `<div class="sl-set"><span class="c-dim">Tenants can pick:</span> ${esc(slotSetSummary(s))} <button class="t-link" onclick="state.slotEdit=true;render()">Change</button></div>`;
+  const dayBox = [1,2,3,4,5,6,0].map(d => `<label class="sl-dl"><input type="checkbox" class="sl-day" value="${d}"${s.days.includes(d)?" checked":""}> ${SLOT_DAY_NAMES[d]}</label>`).join("");
+  return `<div class="sl-set sl-edit">
+    <div class="sl-row"><span class="sl-l">Days</span>${dayBox}</div>
+    <div class="sl-row"><label class="sl-l" for="sl_start">From</label><input type="time" id="sl_start" step="1800" value="${esc(s.start)}"><label for="sl_end">to</label><input type="time" id="sl_end" step="1800" value="${esc(s.end)}"><span class="c-dim">30-minute slots; the last one starts 30 minutes before the finish.</span></div>
+    <div class="sl-row"><label class="sl-l" for="sl_earliest">Earliest</label><input type="number" id="sl_earliest" min="0" max="30" value="${s.earliest}"> working days from today <label for="sl_latest">Latest</label><input type="number" id="sl_latest" min="1" max="60" value="${s.latest}"> days ahead</div>
+    <div class="sl-row"><label class="sl-l" for="sl_buffer">Travel</label><input type="number" id="sl_buffer" min="0" max="120" value="${s.bufferMin}"> minutes either side of a calendar entry with no postcode (with a postcode, Google's road time is used)</div>
+    <div class="sl-row"><button class="d-mv" onclick="saveSlotSettings()">Save</button><button class="t-link" onclick="state.slotEdit=false;render()">Cancel</button><span class="c-dim">Saved to the Job Log Sheet, so every device and the tenant page use them. Bank holidays and anything in the calendar are always left out.</span></div>
+  </div>`;
+}
+// Read the "Slot requests" tab (called with the amendments read, same token)
+async function loadSlots(){
+  try {
+    const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/"+encodeURIComponent("'Slot requests'!A:O"));
+    const rows = r.values || [], h = rows[0] || [], c = n => h.indexOf(n);
+    const list = rows.slice(1).map(x => ({ created:x[c("Created")]||"", job:normJobNo(x[c("Job")]||""), token:x[c("Token")]||"", status:x[c("Status")]||"", slot:x[c("Slot")]||"",
+      slotText:x[c("Slot text")]||"", access:x[c("Access")]||"", name:x[c("Name")]||"", phone:x[c("Phone")]||"", note:x[c("Note")]||"", picked:x[c("Picked")]||"", detail:x[c("Detail")]||"" }))
+      .filter(x => x.job && /^[0-9a-f]{64}$/.test(x.token));
+    state.slots = { loaded:true, at:new Date(), list };
+  } catch(e){
+    // the tab only appears after the first link is made: treat "not found" as empty
+    state.slots = /400|Unable to parse range/.test(String(e.message)) ? { loaded:true, at:new Date(), list:[] } : { error:"Couldn't read the Slot requests tab" };
+  }
+}
+// The live request for a job: Open or Picked first, else the latest
+function slotFor(j){
+  const L = (state.slots && state.slots.list || []).filter(x => x.job === normJobNo(j.jobNo||""));
+  return L.filter(x => x.status === "Open" || x.status === "Picked").pop() || null;
+}
+function midtermsToBook(active){
+  return active.filter(j => j.type === "MTI" && j.status === "booked" && (!j.date || j.rearrangePending || slotFor(j)))
+    .sort((a,b) => String(a.jobNo).localeCompare(String(b.jobNo)));
+}
+async function slotCall(body){
+  if (!roadSignedIn()) throw new Error("Sign in first: click Save & get latest in the sidebar.");
+  const r = await fetch(ROUTE_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ token: state.gcalToken }, body)) });
+  const d = await r.json();
+  if (!d || !d.ok) throw new Error((d && d.error) || "no answer");
+  return d;
+}
+function slotGreeting(j){ return "Dear "+rrTenantNames(j)+","; }
+function slotEmailUrl(j, su, body){
+  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
+    + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
+    + "&cc="+encodeURIComponent(RR_MIDTERM_CC)
+    + "&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
+}
+function slotInviteEmail(j, link){
+  const addr = fullAddress(j) || "[full address]", agent = (j.client||"").replace(/\s*-\s*.*$/, "") || "Your letting agent";
+  return slotEmailUrl(j, "Mid-Term Inspection - "+addr,
+    slotGreeting(j)+"\n\n"+agent+" has instructed us to carry out a routine mid-term inspection of\n\n"+addr+"\n\n"
+    + "The purpose of this visit is to make sure the property is in good order and to pick up any maintenance issues. The inspection usually takes less than 15 minutes.\n\n"
+    + "Please choose a time that suits you here:\n"+link+"\n\n"
+    + "The page only shows times that are still free. You can also tell us whether you will be there or would like us to use the access keys. Nothing is booked until we confirm by email.\n\n"
+    + "If none of the times suit you, just reply to this email.\n\n"
+    + "If you have any questions, reply to this email, call 07541 345053, or message us on WhatsApp: https://wa.me/447541345053\n\nKind regards,");
+}
+function slotConfirmEmail(j, req){
+  const addr = fullAddress(j) || "[full address]", keys = req.access === SLOT_ACCESS_KEYS;
+  return slotEmailUrl(j, "Mid-Term Inspection - "+addr+" - confirmed",
+    slotGreeting(j)+"\n\nThank you. Your mid-term inspection at\n\n"+addr+"\n\nis confirmed for "+req.slotText+".\n\n"
+    + (keys ? "As requested, we will use the access keys, so the inspection will go ahead even if nobody is home.\n\n"
+            : req.access ? "You told us: "+req.access.toLowerCase()+". If you can no longer be there, please reply to let us know whether we may use the access keys.\n\n" : "")
+    + "If anything changes, reply to this email or call or WhatsApp 07541 345053.\n\nKind regards,");
+}
+function slotDeclineEmail(j, req, link){
+  const addr = fullAddress(j) || "[full address]";
+  return slotEmailUrl(j, "Mid-Term Inspection - "+addr+" - please choose another time",
+    slotGreeting(j)+"\n\nThank you for choosing a time for the mid-term inspection at\n\n"+addr+"\n\n"
+    + "Unfortunately "+(req.slotText || "that time")+" is no longer available. Please choose another time using the same link:\n"+link+"\n\n"
+    + "If none of the times suit you, just reply to this email.\n\nKind regards,");
+}
+// Pop-ups have to open inside the click, so a blank tab opens first and gets the Gmail address once the script answers
+function slotTab(){ const w = window.open("", "_blank"); if (w) try { w.opener = null; w.document.title = "Opening Gmail…"; } catch(e){} return w; }
+function slotTabGo(w, url){ if (w && !w.closed) w.location.href = url; else window.open(url, "_blank", "noopener"); }
+async function slotSend(id){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  if (!j.tenantEmails && !confirm("No tenant email on "+(j.jobNo||"this job")+". Make the link anyway (the email opens with To blank)?")) return;
+  const w = slotTab();
+  state.slotBusy = id; render();
+  try {
+    const d = await slotCall({ action:"slotLink", job: j.jobNo });
+    j.slotLinkAt = new Date().toISOString(); saveJobs();
+    await loadSlots();
+    slotTabGo(w, slotInviteEmail(j, d.link));
+  } catch(e){ if (w) w.close(); alert("Couldn't make the link for "+(j.jobNo||"this job")+": "+e.message); }
+  state.slotBusy = null; render();
+}
+async function slotCopy(id){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  try {
+    const d = await slotCall({ action:"slotLink", job: j.jobNo });
+    try { await navigator.clipboard.writeText(d.link); alert("Link copied. Paste it into a WhatsApp or email to the tenant."); }
+    catch(e){ prompt("Copy this link:", d.link); }
+  } catch(e){ alert("Couldn't get the link: "+e.message); }
+}
+async function slotApprove(id){
+  const j = state.jobs.find(x => x.id === id), req = j && slotFor(j); if (!j || !req || req.status !== "Picked") return;
+  const m = /^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)$/.exec(req.slot); if (!m){ alert("The picked time couldn't be read."); return; }
+  if (!confirm("Approve "+(j.jobNo||"")+" for "+req.slotText+"?\n\nThis sets the date and time on the job, puts it in the calendar and opens the confirmation email in Gmail (CC "+RR_MIDTERM_CC+") for you to send.")) return;
+  const w = slotTab();
+  state.slotBusy = id; render();
+  try {
+    await slotCall({ action:"slotApprove", req: req.token });
+    j.date = m[1]; j.time = m[2]; delete j.rearrangePending;
+    const line = "Slot picker "+new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short"})+": tenant picked "+req.slotText+" ("+req.access+(req.name ? ", "+req.name : "")+(req.phone ? ", "+req.phone : "")+")"+(req.note ? ". Note: "+req.note : "")+". Approved.";
+    j.notes = j.notes ? line+"\n"+j.notes : line;
+    if (req.phone && !(j.tenants||"").includes(req.phone)) j.tenants = j.tenants ? j.tenants+"; "+req.phone : req.phone;
+    setJobStatus(j, "booked");
+    saveJobs();
+    if (state.gcalConnected) syncJobToCalendar(j);
+    await loadSlots();
+    slotTabGo(w, slotConfirmEmail(j, req));
+  } catch(e){ if (w) w.close(); alert("Couldn't approve: "+e.message+"\n\nNothing was changed on the job."); }
+  state.slotBusy = null; render();
+}
+async function slotDecline(id){
+  const j = state.jobs.find(x => x.id === id), req = j && slotFor(j); if (!j || !req || req.status !== "Picked") return;
+  if (!confirm("Decline "+req.slotText+" for "+(j.jobNo||"")+"?\n\nThe tenant can pick again from the same link. The email asking them to opens in Gmail for you to send.")) return;
+  const w = slotTab();
+  state.slotBusy = id; render();
+  try {
+    await slotCall({ action:"slotDecline", req: req.token });
+    const d = await slotCall({ action:"slotLink", job: j.jobNo });
+    await loadSlots();
+    slotTabGo(w, slotDeclineEmail(j, req, d.link));
+  } catch(e){ if (w) w.close(); alert("Couldn't decline: "+e.message); }
+  state.slotBusy = null; render();
+}
+function slotRowExtra(j){
+  const req = slotFor(j), busy = state.slotBusy === j.id;
+  if (busy) return `<span class="sl-st c-dim">Working…</span>`;
+  if (!state.slots || !state.slots.loaded) return `<span class="sl-st c-dim">Slot link: load the list first</span>`;
+  if (req && req.status === "Picked") return `<span class="sl-st sl-picked"${tip((req.name||"")+(req.phone ? " · "+req.phone : "")+(req.note ? " · Note: "+req.note : ""))}>Picked ${esc(req.slotText)} · ${esc(req.access === SLOT_ACCESS_KEYS ? "use keys" : req.access === "I will be there" ? "will be there" : req.access.toLowerCase())}</span>
+    <span class="d-acts"><button class="d-mv sl-ok" onclick="slotApprove('${j.id}')"${tip("Sets the date and time, adds it to the calendar and opens the confirmation email in Gmail")}>Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')"${tip("Frees the time; the tenant picks again from the same link")}>Decline</button></span>`;
+  if (req) return `<span class="sl-st c-dim">${/^Declined/.test(req.detail) ? "Declined, waiting for a new pick" : "Link sent"+(j.slotLinkAt ? " "+new Date(j.slotLinkAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "")+", no pick yet"}</span>
+    <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Opens the email with the same link again, e.g. as a chaser")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, e.g. for WhatsApp")}>Copy link</button></span>`;
+  return `<span class="sl-st c-dim">No link sent</span><span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail (CC "+RR_MIDTERM_CC+") for you to check and send")}>Send slot link</button></span>`;
+}
+function renderMidPanel(mids){
+  const sl = state.slots || {};
+  const head = !state.gcalToken ? `<div class="t-empty">Click Save & get latest in the sidebar to see slot links and tenants' picks.</div>`
+    : sl.error ? `<div class="t-empty">${esc(sl.error)}. <button class="t-link" onclick="refreshSlots()">Try again</button></div>` : "";
+  const picked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
+  const rest = mids.filter(j => !picked.includes(j));
+  const row = j => cRow(j, { extra: slotRowExtra(j) });
+  return renderSlotSettings() + head
+    + (picked.length ? `<div class="d-sect">Tenant picked a time, approve or decline (${picked.length})</div>` + picked.map(row).join("") : "")
+    + (rest.length ? `<div class="d-sect"${picked.length ? ' style="margin-top:14px"' : ""}>Need a date (${rest.length})</div>` + rest.map(row).join("") : "")
+    + (!mids.length ? `<div class="t-empty">No mid-terms waiting for a date.</div>` : "")
+    + `<div class="d-note">Mid-terms at Booked with no date (or rearranged). Send slot link opens the email in Gmail with the tenant's own link; they see only free times and tell you if they'll be there or want you to use the keys. Nothing is booked until you approve. ${sl.loaded && sl.at ? "Picks checked "+new Date(sl.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})+". " : ""}<button class="t-link" onclick="refreshSlots()">Check for picks now</button></div>`;
+}
+function refreshSlots(){ ensureSheetsToken(async function(){ await loadSlots(); render(); }); }
 
 function renderCalendar(){
   const y = state.calYear, m = state.calMonth;
