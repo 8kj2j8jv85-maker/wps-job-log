@@ -60,8 +60,9 @@ pg.evaluate("closePlan()"); pg.wait_for_timeout(200)
 pg.evaluate("state.moreTools=true; render()"); pg.wait_for_timeout(200)
 badges(h, "n10_more", [(".side-moretools summary", 1), ("button:has-text('Export backup')", 2), ("label:has-text('Import backup')", 3), ("button:has-text('Calendar connected')", 4)], clip_sel=".side-tools", pad=6)
 pg.evaluate("state.moreTools=false; render()")
-# 11. Board view
+# 11. Job Log list, then Board view
 pg.locator(".side-nav a:has-text('Job Log')").click(); pg.wait_for_timeout(200); real_look(pg)
+badges(h,"j1_log",[(".status-strip",1),(".view-toggle",2),(".search-wrap",3,"t"),(".filter-select >> nth=0",4),("tr:has-text('WPS261007') .jt-status .sel-box",5,"t"),("tr:has-text('WPS261007') .jt-inv .sel-box",6,"t"),("tr:has-text('WPS261007') button[title^='Open and edit']",7,"t"),("tr:has-text('WPS261007') button[title^='Delete']",8,"b"),(".status-card:has-text('Finished')",10,"b")])
 pg.evaluate("setView('board')"); pg.wait_for_timeout(300)
 badges(h, "n11_board", [(".bd-head >> nth=0", 1, "t"), (".bd-card >> nth=0", 2, "tl"), (".bd-card >> nth=0 >> .bd-sel", 3, "tr")], clip_sel=".board", pad=30)
 # 12. Help hints on: the new boxes
@@ -77,5 +78,10 @@ h.close()
 h = H(390, 844, mobile=True); pg = h.pg
 h.go(""); setup(pg); h.go(""); real_look(pg); slots(pg); pg.wait_for_timeout(300)
 badges(h, "n20_phone", [(".pt-ticker", 1, "b"), (".d-tiles", 2, "b"), (".dn-card h3", 3, "tr")])
+badges(h, "m1_phone_dash", [("#syncBtn", 1), (".side-menu-btn", 2, "tr")], full=True)
+pg.locator(".side-menu-btn").click(); pg.wait_for_timeout(200)
+h.shot("m2_phone_menu")
+pg.locator(".side-menu-btn").click(); pg.locator(".side-nav a:has-text('Job Log')").click(); pg.wait_for_timeout(300)
+h.shot("m3_phone_log")
 print("phone errors:", [e for e in h.errors if "ERR_FAILED" not in e and "Failed to load resource" not in e][:8])
 h.close()
