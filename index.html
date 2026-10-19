@@ -720,6 +720,27 @@ const LS_JOBNO_HIGH = "wps_job_log_jobno_high_v1";   // highest job number ever 
 const LS_LOCAL_SAVED_AT = "wps_job_log_local_saved_at_v1";   // when this browser last changed data
 const LS_CLOUD_SYNCED_AT = "wps_job_log_cloud_synced_at_v1"; // the Sheet's savedAt we last matched
 let gcalTokenClient = null;
+// ---- No-pop-up dashboard (Lex, 19 Oct): with a device key set, everything goes through the WPS Amendments script
+// (runs as info@, never expires) instead of Google sign-in. Google sign-in stays as the backup when no key is set
+// or the key is refused. The key is pasted once per device (More > Device key) and stays in this browser only.
+const LS_DASH_KEY = "wps_dash_key_v1";
+const LS_DIRTY = "wps_job_log_dirty_v1";     // what changed on this device since the last sync (survives a reload)
+const DASH_KEY_OK = /^wpsdk_[A-Za-z0-9_-]{43}$/;
+function dashKey(){ const k = lsGet(LS_DASH_KEY) || ""; return DASH_KEY_OK.test(k) ? k : ""; }
+function keyMode(){ return !!dashKey() && !state.dashRefused; }
+async function dashCall(op, data){
+  const r = await fetch(ROUTE_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
+    body: JSON.stringify(Object.assign({}, data || {}, { action:"dash", dk: dashKey(), op })) });
+  let d = null;
+  try { d = await r.json(); } catch(e){ throw new Error("No answer from the WPS script"); }
+  if (!d) throw new Error("No answer from the WPS script");
+  if (d.code === "key"){
+    // refused: fall back to Google sign-in and say so plainly
+    state.dashRefused = true; state.dashMsg = d.error || "Device key refused";
+    setCloud("error", "Device key refused. Paste this device's key again (More > Device key).");
+  }
+  return d;
+}
 
 const TYPES = [
   { code:"ICI", label:"Inventory & Check-In" },
@@ -856,6 +877,7 @@ let state = {
   calYear: TODAY.getFullYear(),
   calMonth: TODAY.getMonth()+1,   // 1-12
   gcalConnected: false,
+  dashRefused: false, dashMsg: "", dashDevice: "", dashBusy: false, keyEdit: false,
   gcalToken: null,
   gcalTokenExpiry: 0,
   gmailOk: false,
@@ -901,7 +923,44 @@ function mergeJobNoHigh(extra){
   try { localStorage.setItem(LS_JOBNO_HIGH, JSON.stringify(high)); } catch(e){}
   return high;
 }
-function saveJobs(){ mergeJobNoHigh(); localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); markLocalChange(); }
+function saveJobs(){ mergeJobNoHigh(); stampChanged(); localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); markLocalChange(); }
+// Each job remembers if it was changed on this device since the last sync, so loading another device's copy merges
+// job by job instead of throwing this device's changes away (19 Oct: the Cornell re-issue date was lost that way).
+const jobSnap = new Map();
+function snapKey(j){ const c = Object.assign({}, j); delete c.updatedAt; return JSON.stringify(c); }
+function snapAll(){ jobSnap.clear(); state.jobs.forEach(j => jobSnap.set(j.id, snapKey(j))); }
+function dirtyGet(){ try { const d = JSON.parse(lsGet(LS_DIRTY) || "{}"); return { any: !!d.any, seq: d.seq || 0, ids: d.ids || {}, gone: d.gone || {}, slot: !!d.slot }; } catch(e){ return { any:false, seq:0, ids:{}, gone:{}, slot:false }; } }
+function dirtySet(d){ lsSet(LS_DIRTY, JSON.stringify(d)); }
+function dirtyAny(){ const d = dirtyGet(); return d.any || Object.keys(d.ids).length > 0 || Object.keys(d.gone).length > 0; }
+function stampChanged(){
+  const now = new Date().toISOString(), d = dirtyGet(), ids = new Set(state.jobs.map(j => j.id));
+  state.jobs.forEach(j => { const k = snapKey(j); if (jobSnap.get(j.id) !== k){ j.updatedAt = now; jobSnap.set(j.id, k); d.ids[j.id] = ++d.seq; delete d.gone[j.id]; } });
+  [...jobSnap.keys()].forEach(id => { if (!ids.has(id)){ jobSnap.delete(id); d.gone[id] = now; delete d.ids[id]; } });
+  dirtySet(d);
+}
+// After a save reached the Sheet: forget the changes that were in it (not ones made while it was saving).
+function dirtyClearSent(sent){
+  const d = dirtyGet();
+  Object.keys(sent.ids).forEach(id => { if (d.ids[id] === sent.ids[id]) delete d.ids[id]; });
+  Object.keys(sent.gone).forEach(id => { if (d.gone[id] === sent.gone[id]) delete d.gone[id]; });
+  if (d.seq === sent.seq){ d.any = false; d.slot = false; }
+  dirtySet(d);
+}
+function mergeJobLists(local, cloud, dirty){
+  const L = new Map(local.map(j => [j.id, j])), C = new Map(cloud.map(j => [j.id, j]));
+  const at = j => Date.parse(j && j.updatedAt || "") || 0, out = [];
+  cloud.forEach(c => {
+    const l = L.get(c.id);
+    if (l) out.push(dirty.ids[c.id] && at(c) <= at(l) ? l : c);   // changed here: keep ours unless theirs is newer
+    else if (!dirty.gone[c.id] || at(c) > Date.parse(dirty.gone[c.id])) out.push(c);   // deleted here: stays deleted
+  });
+  local.forEach(l => { if (!C.has(l.id) && dirty.ids[l.id]) out.push(l); });   // added here; otherwise deleted elsewhere
+  return out;
+}
+function mergeByName(local, cloud, key){
+  const seen = new Set(cloud.map(x => String(x[key]||"").toLowerCase()));
+  return cloud.concat(local.filter(x => !seen.has(String(x[key]||"").toLowerCase())));
+}
 function saveClients(){ localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients)); markLocalChange(); }
 
 // ---------------------------------------------------------------- Google Sheet master copy
@@ -919,6 +978,8 @@ function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null
 function lsSet(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
 function markLocalChange(){
   lsSet(LS_LOCAL_SAVED_AT, new Date().toISOString());
+  const dd = dirtyGet(); dd.any = true; dd.seq++; dirtySet(dd);
+  if (keyMode()){ scheduleCloudSave(); return; }   // device key: no sign-in needed, save straight away
   if (!state.gcalConnected) return;
   // Ask for the Google token now, while we're still inside the click (pop-ups need a click).
   if (!(state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000)){
@@ -948,6 +1009,7 @@ function sheetsGranted(resp){
   try { return google.accounts.oauth2.hasGrantedAllScopes(resp, SHEETS_SCOPE, AMEND_SCOPE); } catch(e){ return false; }
 }
 function ensureSheetsToken(onReady){
+  if (keyMode()){ onReady(); return; }
   if (state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
   if (!gcalTokenClient){ initGCal(); }
   if (!gcalTokenClient){ setCloud("error","Google sign-in hasn't loaded"); return; }
@@ -963,6 +1025,14 @@ function ensureSheetsToken(onReady){
   gcalTokenClient.requestAccessToken({ prompt: state.sheetsOk ? "" : "consent" });
 }
 async function gapi(url, opts){
+  if (keyMode()){
+    const m = /\/spreadsheets\/([^/?]+)\/values\/([^?]+)/.exec(url);
+    if (!m || m[1] !== AMEND_SHEET_ID) throw new Error("Not available with a device key");
+    const tab = decodeURIComponent(m[2]).split("!")[0].replace(/^'(.*)'$/, "$1");
+    const d = await dashCall("amendRead", { tab, unformatted: /UNFORMATTED_VALUE/.test(url) });
+    if (!d.ok) throw new Error(d.error || "no answer");
+    return { values: d.values || [] };
+  }
   opts = opts || {};
   const res = await fetch(url, Object.assign({}, opts, {
     headers: Object.assign({ "Authorization": "Bearer "+state.gcalToken, "Content-Type": "application/json" }, opts.headers||{})
@@ -1012,6 +1082,7 @@ function clientsToRows(){
     state.clients.map(c=>[c.name, c.contactName||"", c.contactPhone||"", c.contactEmail||"", JSON.stringify(c)]));
 }
 async function cloudSave(){
+  if (keyMode()) return dashSave();
   if (!state.gcalToken){ setCloud("error","Google sign-in needed"); return; }
   try {
     const id = await findOrCreateSheet();
@@ -1023,6 +1094,7 @@ async function cloudSave(){
       return;
     }
     const savedAt = new Date().toISOString();
+    const sentDirty = dirtyGet();
     const base = "https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values";
     await ensureContactsTab(id);
     try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
@@ -1042,13 +1114,14 @@ async function cloudSave(){
       ]
     })});
     lsSet(LS_CLOUD_SYNCED_AT, savedAt);
+    dirtyClearSent(sentDirty);
     setCloud("saved");
   } catch(e){
     console.log("[WPS] cloud save failed", e);
     setCloud("error","Not saved to Google — will retry on next change");
   }
 }
-async function cloudLoad(id, meta){
+async function cloudLoad(id, meta, merge){
   // Replace this browser's copy with the Sheet's (used by Sync now and by link actions). Returns false if cancelled.
   const hasContacts = await ensureContactsTab(id);
   const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+id+"/values:batchGet?ranges=Jobs&ranges=Clients&ranges=Contacts");
@@ -1058,25 +1131,33 @@ async function cloudLoad(id, meta){
     const di = rows[0].indexOf("Data (do not edit)");
     return rows.slice(1).map(row => { try { return JSON.parse(row[di]); } catch(e){ return null; } }).filter(Boolean);
   };
-  const jobs = parse(r.valueRanges[0]);
-  const clients = normalizeClients(parse(r.valueRanges[1]));
-  if (!jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return false; }
-  state.jobs = cleanJobs(jobs); if (clients) state.clients = clients;
-  const contacts = hasContacts ? normalizeContacts(parse(r.valueRanges[2])) : null;
+  return applyCloudCopy(meta, parse(r.valueRanges[0]), parse(r.valueRanges[1]), hasContacts ? parse(r.valueRanges[2]) : null, merge);
+}
+// Puts the Sheet's copy into this browser. merge = keep this device's unsaved changes (job by job).
+function applyCloudCopy(meta, jobs, clientsRaw, contactsRaw, merge){
+  let clients = normalizeClients(clientsRaw);
+  if (!merge && !jobs.length && state.jobs.length && !confirm("The Google copy has no jobs but this browser has "+state.jobs.length+". Load the empty Google copy anyway?")){ setCloud("error","Sync cancelled"); return false; }
+  const dirty = dirtyGet();
+  state.jobs = cleanJobs(merge ? mergeJobLists(state.jobs, cleanJobs(jobs), dirty) : jobs);
+  if (clients) state.clients = merge ? mergeByName(state.clients, clients, "name") : clients;
+  let contacts = contactsRaw ? normalizeContacts(contactsRaw) : null;
+  if (contacts && merge) contacts = mergeByName(state.contacts, contacts, "email");
   if (contacts && contacts.length) state.contacts = contacts;   // a Sheet without a Contacts tab keeps this browser's list
   fillContactsFromData();
   lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
   try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
-  if (meta.slotSettings) lsSet(LS_SLOT_SET, meta.slotSettings);   // slot picker settings saved from another device
+  if (meta.slotSettings && !(merge && dirty.slot)) lsSet(LS_SLOT_SET, meta.slotSettings);   // slot picker settings saved from another device
   localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
   localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
   lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
-  lsSet(LS_LOCAL_SAVED_AT, meta.savedAt);
+  if (!merge){ lsSet(LS_LOCAL_SAVED_AT, meta.savedAt); dirtySet({ any:false, seq: dirty.seq, ids:{}, gone:{}, slot:false }); }
+  snapAll();
   return true;
 }
 async function cloudSyncNow(){
   // Called from the "Sync now" click: loads the Sheet if it's newer, otherwise pushes this browser's copy.
+  if (keyMode()){ dashSync(false); return; }
   setCloud("saving");   // show "Saving…" straight away, while Google signs in
   ensureSheetsToken(async function(){
     setCloud("saving");
@@ -1086,9 +1167,14 @@ async function cloudSyncNow(){
       const localAt = lsGet(LS_LOCAL_SAVED_AT) || "";
       const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
       const cloudNewer = meta.savedAt && meta.savedAt > synced;
-      const localChanged = localAt && localAt > synced && state.jobs.length > 0;
-      if (cloudNewer && localChanged && !confirm("The Job Log was changed both here and on another device since the last sync.\n\nOK = load the Google copy (this browser's unsynced changes are lost)\nCancel = keep this browser's copy and overwrite Google")){
-        lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt); await cloudSave(); return;
+      const localChanged = (dirtyAny() || (localAt && localAt > synced)) && state.jobs.length > 0;
+      if (cloudNewer && localChanged){
+        // 19 Oct: changed here and on another device. Merge job by job (each side keeps its own changes), then save.
+        if (!(await cloudLoad(id, meta, true))) return;
+        await cloudSave();
+        rememberGoogleConnected();
+        render();
+        return;
       }
       if (cloudNewer){
         if (!(await cloudLoad(id, meta))) return;
@@ -1127,11 +1213,11 @@ function rememberGoogleConnected(){
 function renderCloudPill(){
   const s = state.cloudStatus || "idle";
   const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
-  const label = s==="saved" ? "Saved to Google ✓ "+t
+  const label = s==="saved" ? "Saved to Google ✓ "+t+(keyMode() ? " · auto" : "")
     : s==="saving" ? "Saving to Google…"
     : s==="conflict" ? state.cloudMsg
     : s==="error" ? state.cloudMsg
-    : (state.gcalConnected ? "Google copy: click Save & get latest" : "Not backed up to Google");
+    : keyMode() ? "Device key on: syncing every 3 min" : (state.gcalConnected ? "Google copy: click Save & get latest" : "Not backed up to Google");
   const col = s==="saved" ? "var(--sky)" : (s==="error"||s==="conflict") ? "var(--coral)" : "inherit";
   return `<div id="cloudPill" style="font-size:12px;color:${col};padding:4px 0 6px">${esc(label)}</div>`;
 }
@@ -1953,6 +2039,7 @@ function disconnectGCal(){
   render();
 }
 function ensureGCalToken(onReady){
+  if (keyMode()){ onReady(); return; }
   if (state.gcalToken && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
   if (!gcalTokenClient){ alert("Google sign-in hasn't loaded yet — check your connection and try again."); return; }
   gcalTokenClient.callback = function(resp){
@@ -2000,6 +2087,16 @@ function syncJobToCalendar(job){
   ensureGCalToken(function(){
     const base = "https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(GCAL_CALENDAR_ID)+"/events";
     const isUpdate = !!job.gcalEventId;
+    if (keyMode()){
+      dashCall("calSave", { eventId: job.gcalEventId || "", body }).then(function(d){
+        if (!d.ok) throw new Error(d.error || "no answer");
+        if (d.id && job.gcalEventId !== d.id){ job.gcalEventId = d.id; saveJobs(); render(); }
+      }).catch(function(err){
+        console.error("Calendar sync failed", err);
+        alert("Couldn't update the calendar for "+(job.jobNo||"this job")+". Your change to the job is still kept in the Job Log.\n\n"+err.message);
+      });
+      return;
+    }
     const url = isUpdate ? base+"/"+job.gcalEventId : base;
     // PATCH merges with the existing event, so an all-day event changed to a timed one kept its old
     // "date" alongside the new "dateTime" and Google refused it (13 Oct). Clear the other kind explicitly.
@@ -2041,6 +2138,11 @@ function deleteJobCalendarEvent(job, onDone){
     if (onDone) onDone(false);
   };
   ensureGCalToken(function(){
+    if (keyMode()){
+      dashCall("calDelete", { eventId: job.gcalEventId }).then(function(d){ if (d.ok){ if (onDone) onDone(true); } else fail(d.error || "no answer"); })
+        .catch(function(err){ fail(String(err && err.message || err)); });
+      return;
+    }
     fetch("https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(GCAL_CALENDAR_ID)+"/events/"+job.gcalEventId, {
       method: "DELETE",
       headers: { "Authorization": "Bearer "+state.gcalToken }
@@ -2064,6 +2166,7 @@ function gmailGranted(resp){
   try { return google.accounts.oauth2.hasGrantedAllScopes(resp, GMAIL_SCOPE); } catch(e){ return false; }
 }
 function ensureGmailToken(onReady){
+  if (keyMode()){ onReady(); return; }
   if (state.gcalToken && state.gmailOk && Date.now() < state.gcalTokenExpiry - 60000){ onReady(); return; }
   if (!gcalTokenClient){ initGCal(); }
   if (!gcalTokenClient){ state.queueBusy=false; state.queueMsg="Google sign-in hasn't loaded yet — check your connection and try again."; render(); return; }
@@ -2135,24 +2238,51 @@ async function readQueuePayload(draftId){
   }
   return null;
 }
-function checkForBookings(){
+// Builds the review tray from the queue drafts' contents (same for Google sign-in and the device key).
+// quiet = background read: the tray only opens if something new arrived or a job was marked automatically.
+function queueFromPayloads(payloads, quiet){
+  const before = new Set(pendingQueue().map(i => i.id));
+  const byId = {};
+  payloads = payloads.filter(p => p && Array.isArray(p.items));
+  payloads.sort((a,b)=>String(a.generatedAt||"").localeCompare(String(b.generatedAt||"")));
+  payloads.forEach(p=>p.items.forEach(it=>{ if (queueItemOk(it)) byId[it.id] = Object.assign({ generatedAt:p.generatedAt }, it); }));
+  state.queue = Object.values(byId).sort((a,b)=>String(a.date||"9999").localeCompare(String(b.date||"9999")));
+  state.queueCheckedAt = new Date();
+  if (!quiet) state.autoSentMsg = "";
+  const msgBefore = state.autoSentMsg;
+  applySentItems();     // 17 Oct: reports the auto-send script emailed are marked Sent with no click
+  applySignedItems();   // 19 Oct: "signed" items from the signing page, if the script ever writes them
+  const fresh = pendingQueue().some(i => !before.has(i.id));
+  if (!quiet || fresh || state.autoSentMsg !== msgBefore) state.queueChecked = true;
+  if (!quiet && !payloads.length) state.queueMsg = "No queue from Claude in your drafts yet.";
+}
+async function dashQueue(quiet){
+  if (!quiet){ state.queueBusy = true; state.queueMsg = ""; render(); }
+  try {
+    const d = await dashCall("queue");
+    if (!d.ok) throw new Error(d.error || "no answer");
+    queueFromPayloads(d.payloads || [], quiet);
+  } catch(e){
+    console.error(e);
+    if (!quiet) state.queueMsg = "Couldn't read the booking queue: "+e.message;
+  } finally {
+    if (!quiet) state.queueBusy = false;
+    safeRender();
+  }
+}
+function checkForBookings(quiet){
+  if (keyMode()) return dashQueue(quiet === true);
   state.queueBusy = true; state.queueMsg = ""; state.autoSentMsg = ""; render();
   ensureGmailToken(async function(){
     try{
       const list = await gmailGet("drafts?maxResults=50&q="+encodeURIComponent('subject:"'+QUEUE_SUBJECT+'"'));
       const drafts = list.drafts || [];
-      const byId = {};
       const payloads = [];
       for (const d of drafts){
         try{ const p = await readQueuePayload(d.id); if (p && Array.isArray(p.items)) payloads.push(p); }
         catch(e){ console.warn("Skipped a queue draft", d.id, e); }
       }
-      payloads.sort((a,b)=>String(a.generatedAt||"").localeCompare(String(b.generatedAt||"")));
-      payloads.forEach(p=>p.items.forEach(it=>{ if (queueItemOk(it)) byId[it.id] = Object.assign({ generatedAt:p.generatedAt }, it); }));
-      state.queue = Object.values(byId).sort((a,b)=>String(a.date||"9999").localeCompare(String(b.date||"9999")));
-      state.queueChecked = true;
-      state.queueCheckedAt = new Date();
-      applySentItems();   // 17 Oct: reports the auto-send script emailed are marked Sent with no click
+      queueFromPayloads(payloads, false);
       if (!drafts.length) state.queueMsg = "No queue from Claude in your drafts yet.";
     } catch(e){
       console.error(e);
@@ -2442,6 +2572,68 @@ function applySentItems(){
   });
   if (done.length){ saveJobs(); state.autoSentMsg = "Reports emailed automatically: "+done.join("; ")+"."; }
 }
+// 19 Oct: Signed with no click. A job is marked Signed when every signer in its latest signing round has signed
+// (Signings tab), or from a "signed" queue item. Only ICIs at Sent; a round sent before this issue of the report
+// (more than 12 h before the send / re-issue date) doesn't count.
+function signedTarget(jobNo){
+  const c = state.jobs.filter(j => normJobNo(j.jobNo) === normJobNo(jobNo) && j.type === "ICI");
+  return c.length === 1 ? c[0] : null;
+}
+function markSignedAt(j, iso){
+  j.signedAt = iso;
+  setJobStatus(j, "signed");
+  return j.jobNo+" marked Signed ("+shortDay(new Date(iso))+")";
+}
+function applySignedItems(){
+  const done = [];
+  pendingQueue().filter(it => it.kind === "signed").forEach(it => {
+    const j = signedTarget(it.jobNo), d = new Date(it.signedAt || "");
+    if (j && j.status === "sent" && !isNaN(d) && d <= new Date(Date.now() + 5*60000)){ done.push(markSignedAt(j, d.toISOString())); markQueueDone(it.id, "auto-signed"); }
+    else markQueueDone(it.id, "auto-signed-skip");   // already Signed/Deemed, or not found: nothing to do
+  });
+  if (done.length){ saveJobs(); state.autoSentMsg = (state.autoSentMsg ? state.autoSentMsg+" " : "")+"Signed on the signing page: "+done.join("; ")+"."; }
+}
+function applySignedRounds(rows){
+  const rounds = {};
+  (rows || []).forEach(r => { if (r.mode !== "Live" || !r.round) return; (rounds[r.round] = rounds[r.round] || { job: normJobNo(r.job), rows: [] }).rows.push(r); });
+  const latest = {};
+  Object.values(rounds).forEach(g => { g.sent = Math.max(...g.rows.map(r => Date.parse(r.sent) || 0)); if (!latest[g.job] || g.sent > latest[g.job].sent) latest[g.job] = g; });
+  const done = [];
+  Object.values(latest).forEach(g => {
+    if (!g.rows.every(r => r.status === "Signed")) return;
+    const j = signedTarget(g.job);
+    if (!j || j.status !== "sent") return;
+    const start = windowStart(j);
+    if (start && g.sent < start.getTime() - 12*3600000) return;
+    const at = Math.max(...g.rows.map(r => Date.parse(r.signed) || 0));
+    done.push(markSignedAt(j, new Date(at || Date.now()).toISOString()));
+  });
+  if (done.length){
+    saveJobs();
+    state.autoSentMsg = (state.autoSentMsg ? state.autoSentMsg+" " : "")+"Signed by everyone on the signing page: "+done.join("; ")+".";
+    state.queueChecked = true; state.queueCheckedAt = state.queueCheckedAt || new Date();
+  }
+}
+async function loadSignings(){
+  try {
+    let rows;
+    if (keyMode()){
+      const d = await dashCall("signings");
+      if (!d.ok) throw new Error(d.error || "no answer");
+      rows = d.rows || [];
+    } else {
+      // Google sign-in backup: read the tab, keep only who/when (no links or emails kept)
+      const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/"+encodeURIComponent("'Signings'!A:X")+"?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING");
+      const v = r.values || [], h = v[0] || [], c = n => h.indexOf(n);
+      const iso = x => { const d = new Date(x); return isNaN(d) ? "" : d.toISOString(); };
+      rows = v.slice(1).map(x => ({ round: String(x[c("Round")]||""), job: String(x[c("Job")]||""), status: String(x[c("Status")]||""), mode: String(x[c("Mode")]||""), sent: iso(x[c("Sent")]), signed: iso(x[c("Signed")]) }));
+    }
+    state.signings = { at: new Date(), rows };
+    applySignedRounds(rows);
+  } catch(e){
+    console.log("[WPS] signings read failed", e);
+  }
+}
 function renderSentCard(it){
   const r = sentItemState(it);
   return `<div class="qcard">
@@ -2505,7 +2697,7 @@ function renderQueueTray(){
       </div>
       <button class="btn btn-text btn-sm" onclick="qCloseTray()"${tip("Hide this tray. Anything not handled shows again next check.")}>Hide</button>
     </div>
-    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b>, a <b>cancellation</b> or an <b>invoice sent</b> from Tide. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click. The one exception: reports the auto-send script has emailed are marked <b>Sent</b> by themselves, listed here; a <b>Report sent</b> card only shows if one couldn't be marked.`)}
+    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b>, a <b>cancellation</b> or an <b>invoice sent</b> from Tide. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click. The exceptions: reports the auto-send script has emailed are marked <b>Sent</b>, and check-ins everyone has signed on the signing page are marked <b>Signed</b>, by themselves, listed here; a <b>Report sent</b> card only shows if one couldn't be marked. With a device key this is checked every 3 minutes.`)}
     ${state.queueMsg ? `<div class="qwarn" style="margin-top:10px;">${esc(state.queueMsg)}</div>` : ""}
     ${state.autoSentMsg ? `<div class="qline" style="margin-top:10px;">${esc(state.autoSentMsg)} ✓</div>` : ""}
     ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing new to review ✓</div>` : ""}
@@ -2656,6 +2848,7 @@ function loadAmendments(quiet){
       } catch(e){ console.log("[WPS] process emails read failed", e); }
       await loadSlots();   // mid-term slot picks (19 Oct), same Sheet and sign-in
       await loadHealth();  // system health (19 Oct), same Sheet and sign-in
+      await loadSignings();  // 19 Oct: marks Signed when everyone in the latest round has signed
       state.amend = { loaded:true, at:new Date(), autoRem, jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
       autoDeem();
     } catch(e){
@@ -2938,7 +3131,7 @@ function renderToday(){
   const awaitingSig = live.filter(j => j.status === "sent" && j.type === "ICI").sort(byTime);
   const toInvoice = live.filter(needsInvoice).sort(byTime);
   const unpaid = live.filter(j => j.invoice === "invoiced").sort(byTime);
-  if (!state.amend && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) setTimeout(loadAmendments, 0);
+  if (!state.amend && (keyMode() || (state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000))) setTimeout(loadAmendments, 0);
   const now = new Date();
   const timesToAgree = active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
   const photosMissing = active.filter(j => ["processing","completed"].includes(j.status) && !j.photoLink && visitTime(j) && visitTime(j) <= now && visitTime(j) > addDays(now, -30)).sort(byTime);
@@ -3201,7 +3394,7 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
-    ${state.gcalConnected ? "" : CAL_BTN()}
+    ${state.gcalConnected || keyMode() ? "" : CAL_BTN()}
     <details class="side-moretools"${state.moreTools ? " open" : ""} ontoggle="state.moreTools=this.open">
       <summary class="btn-link"${tip("Backups and the calendar connection. Rarely needed: the Google Sheet is the main copy.")}>More ▸</summary>
     <button class="btn-link" onclick="exportData()"${hint("Saves a copy of every job to this computer")}>
@@ -3213,8 +3406,10 @@ function renderUtilityRow(){
       Import backup
       <input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])" />
     </label>
-    ${state.gcalConnected ? CAL_BTN() : ""}
+    ${keyMode() ? "" : (state.gcalConnected ? CAL_BTN() : "")}
+    ${renderKeyRow()}
     </details>
+    ${dashKey() && state.dashRefused ? `<button class="btn-link" style="color:var(--coral)" onclick="state.moreTools=true;state.keyEdit=true;render()">Device key refused: paste it again ⚠</button>` : ""}
   </div>`;
 }
 // Sidebar "More" (Lex, 18 Oct): the calendar button sits in view until it's connected, then moves under More
@@ -3651,7 +3846,7 @@ function decodeLine(str){   // Google's encoded polyline -> [[lat, lon], ...]
   return pts;
 }
 const roadCache = {};   // this page only; the script also caches for 6 hours
-function roadSignedIn(){ return !!(state.gcalToken && Date.now() < (state.gcalTokenExpiry||0) - 60000); }
+function roadSignedIn(){ return keyMode() || !!(state.gcalToken && Date.now() < (state.gcalTokenExpiry||0) - 60000); }
 async function fetchRoad(pts, deps){
   const legs = [], keys = [], out = [];
   for (let i=1; i<pts.length; i++){
@@ -3660,9 +3855,9 @@ async function fetchRoad(pts, deps){
     keys.push(k); if (!roadCache[k]) legs.push({ from:pts[i-1], to:pts[i], depart:dep, k });
   }
   if (legs.length){
-    const r = await fetch(ROUTE_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
-      body: JSON.stringify({ action:"route", token: state.gcalToken, legs: legs.map(l => ({ from:l.from, to:l.to, depart:l.depart })) }) });
-    const d = await r.json();
+    const plain = legs.map(l => ({ from:l.from, to:l.to, depart:l.depart }));
+    const d = keyMode() ? await dashCall("route", { legs: plain }) : await (await fetch(ROUTE_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify({ action:"route", token: state.gcalToken, legs: plain }) })).json();
     if (!d || !d.ok) throw new Error((d && d.error) || "no answer");
     d.legs.forEach((x, i) => { if (x && x.ok) roadCache[legs[i].k] = x; });
   }
@@ -3846,6 +4041,7 @@ function saveSlotSettings(){
   if (!(s.earliest >= 0 && s.earliest <= 30) || !(s.latest >= 1 && s.latest <= 60) || s.latest < s.earliest){ alert("Check the days ahead: earliest 0 to 30 working days, latest 1 to 60 days, and latest not before earliest."); return; }
   if (!(s.bufferMin >= 0 && s.bufferMin <= 120)){ alert("Travel buffer must be 0 to 120 minutes."); return; }
   lsSet(LS_SLOT_SET, JSON.stringify(s));
+  const dd = dirtyGet(); dd.slot = true; dirtySet(dd);
   state.slotEdit = false;
   markLocalChange();   // saves to the Job Log Sheet (Meta tab), where the slot picker reads it
   render();
@@ -3887,6 +4083,11 @@ function midtermsToBook(active){
 }
 async function slotCall(body){
   if (!roadSignedIn()) throw new Error("Sign in first: click Save & get latest in the sidebar.");
+  if (keyMode()){
+    const k = await dashCall(body.action, { job: body.job, req: body.req });
+    if (!k || !k.ok) throw new Error((k && k.error) || "no answer");
+    return k;
+  }
   const r = await fetch(ROUTE_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ token: state.gcalToken }, body)) });
   const d = await r.json();
   if (!d || !d.ok) throw new Error((d && d.error) || "no answer");
@@ -3993,7 +4194,7 @@ function slotRowExtra(j){
 }
 function renderMidPanel(mids){
   const sl = state.slots || {};
-  const head = !state.gcalToken ? `<div class="t-empty">Click Save & get latest in the sidebar to see slot links and tenants' picks.</div>`
+  const head = !roadSignedIn() ? `<div class="t-empty">Click Save & get latest in the sidebar to see slot links and tenants' picks.</div>`
     : sl.error ? `<div class="t-empty">${esc(sl.error)}. <button class="t-link" onclick="refreshSlots()">Try again</button></div>` : "";
   const picked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
   const rest = mids.filter(j => !picked.includes(j));
@@ -4398,7 +4599,9 @@ window.addEventListener("storage", function(e){
   if (e.key === LS_QUEUE_DONE && e.newValue){ try { state.queueDone = JSON.parse(e.newValue) || {}; } catch(x){} if (!state.editing) render(); return; }
   if (e.key !== LS_JOBS || !e.newValue) return;
   try { state.jobs = cleanJobs(JSON.parse(e.newValue)); } catch(x){ return; }
-  if (state.gcalConnected && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) scheduleCloudSave();
+  snapAll();   // the other tab already recorded what it changed
+  if (keyMode()) scheduleCloudSave();
+  else if (state.gcalConnected && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) scheduleCloudSave();
   if (!state.editing) render();
 });
 
@@ -4412,6 +4615,7 @@ function autoRefresh(){
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
+  if (keyMode()){ dashCycle(); return; }   // device key: save, get the latest, read the queue and amendments
   // Re-read the amendments in the background when the list is stale and Google is already signed in (no pop-up).
   if (state.amend && state.amend.loaded && !amendFresh() && state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000) loadAmendments(true);
   autoDeem();
@@ -4421,6 +4625,111 @@ function autoRefresh(){
 }
 setInterval(autoRefresh, 3*60*1000);
 document.addEventListener("visibilitychange", function(){ if (!document.hidden) autoRefresh(); });
+window.addEventListener("pageshow", function(e){ if (e.persisted) autoRefresh(); });   // iPhone: back to the open tab
+window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (state.dashCycleAt || 0) > 60000) autoRefresh(); });
+
+// ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
+// (merging if another device saved first), load other devices' changes, read the queue, amendments and signings.
+function safeRender(){
+  if (state.editing || state.rearrangeId) return;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  const y = window.scrollY; render(); window.scrollTo(0, y);
+}
+async function dashSave(){
+  if (state.dashSaving){ state.dashSaveAgain = true; return; }
+  state.dashSaving = true;
+  try {
+    for (let tries = 0; tries < 3; tries++){
+      const sent = dirtyGet();
+      const d = await dashCall("jlSave", { base: lsGet(LS_CLOUD_SYNCED_AT) || "", jobs: jobsToRows(), clients: clientsToRows(), contacts: contactsToRows(), meta: dashMetaRows() });
+      if (d.ok){ lsSet(LS_CLOUD_SYNCED_AT, d.savedAt); dirtyClearSent(sent); setCloud("saved"); return; }
+      if (d.code === "key") return;
+      if (d.conflict){ applyCloudCopy(d.meta, rowsToObjects(d.jobs), rowsToObjects(d.clients), d.hasContacts ? rowsToObjects(d.contacts) : null, true); safeRender(); continue; }   // another device saved first: merge, try again
+      setCloud("error", d.busy ? "Busy, will retry" : "Not saved: "+(d.error || "no answer"));
+      return;
+    }
+    setCloud("error", "Not saved: other devices kept saving. Will retry.");
+  } catch(e){
+    console.log("[WPS] dash save failed", e);
+    setCloud("error", "Not saved (no connection?). Will retry.");
+  } finally {
+    state.dashSaving = false;
+    if (state.dashSaveAgain){ state.dashSaveAgain = false; setTimeout(dashSave, 300); }
+  }
+}
+function dashMetaRows(){
+  return [["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())],["slotSettings", lsGet(LS_SLOT_SET) || ""]];
+}
+function rowsToObjects(rows){
+  rows = rows || [];
+  if (rows.length < 2) return [];
+  const di = rows[0].indexOf("Data (do not edit)");
+  return rows.slice(1).map(row => { try { return JSON.parse(row[di]); } catch(e){ return null; } }).filter(Boolean);
+}
+async function dashSync(quiet){
+  setCloud("saving");
+  try {
+    if (dirtyAny()){ await dashSave(); return; }
+    const d = await dashCall("jlRead");
+    if (!d.ok){ if (d.code !== "key") setCloud("error", "Couldn't read the Job Log: "+(d.error || "no answer")); return; }
+    if (d.meta && d.meta.savedAt && d.meta.savedAt !== (lsGet(LS_CLOUD_SYNCED_AT) || "")){
+      if (dirtyAny()){ await dashSave(); return; }   // changed here while reading: save (merges)
+      if (!applyCloudCopy(d.meta, rowsToObjects(d.jobs), rowsToObjects(d.clients), d.hasContacts ? rowsToObjects(d.contacts) : null, false)) return;
+      setCloud("saved");
+      if (quiet) safeRender(); else render();
+    } else setCloud("saved");
+  } catch(e){
+    console.log("[WPS] dash sync failed", e);
+    setCloud("error", "Couldn't reach the WPS script (no connection?). Will retry.");
+  }
+}
+async function dashCycle(){
+  if (!keyMode() || state.dashBusy) return;
+  state.dashBusy = true; state.dashCycleAt = Date.now();
+  try {
+    if (!state.dashDevice){ try { const h = await dashCall("hello"); if (h.ok) state.dashDevice = h.device; } catch(e){} }   // the device name for the sidebar
+    if (!keyMode()) return;
+    await dashSync(true);
+    if (!keyMode()) return;
+    await dashQueue(true);
+    loadAmendments(true);
+    autoDeem();
+  } finally { state.dashBusy = false; }
+}
+// Device key box (More > Device key)
+async function saveDeviceKey(){
+  const el = document.getElementById("dk_input"), k = String(el && el.value || "").trim();
+  if (!DASH_KEY_OK.test(k)){ alert("That doesn't look like a device key. It starts wpsdk_ and is 49 characters long. Copy it again from LastPass."); return; }
+  lsSet(LS_DASH_KEY, k);
+  state.dashRefused = false; state.dashMsg = ""; state.keyEdit = false;
+  try {
+    const d = await dashCall("hello");
+    if (!d.ok){ render(); alert(d.code === "key" ? "Key refused. Check it's this device's newest key." : "The WPS script answered: "+(d.error || "no answer")); return; }
+    state.dashDevice = d.device; state.gcalConnected = true;
+    render();
+    showActionBar("Device key saved: this is \""+d.device+"\". No more Google pop-ups on this device.");
+    dashCycle();
+  } catch(e){ render(); alert("Couldn't reach the WPS script: "+e.message+". The key is kept; it will be tried again."); }
+}
+function removeDeviceKey(){
+  if (!confirm("Remove the device key from this browser? The dashboard goes back to Google sign-in (pop-ups).")) return;
+  try { localStorage.removeItem(LS_DASH_KEY); } catch(e){}
+  state.dashRefused = false; state.dashDevice = ""; state.keyEdit = false;
+  render();
+}
+function renderKeyRow(){
+  const k = dashKey();
+  const status = !k ? "Device key: not set (Google sign-in)" : state.dashRefused ? "Device key: refused ⚠" : "Device key: on ✓"+(state.dashDevice ? " ("+state.dashDevice+")" : "");
+  const col = k && state.dashRefused ? "var(--coral)" : k ? "var(--sky)" : "inherit";
+  if (!state.keyEdit) return `<button class="btn-link" style="color:${col}" onclick="state.keyEdit=true;render()"${hint("A long random key for this device, made in the WPS Amendments script. With it, nothing needs Google sign-in.")}>${esc(status)}</button>`;
+  return `<div class="dk-box">
+    <div style="font-size:12px;color:${col};margin-bottom:4px">${esc(status)}${state.dashRefused && state.dashMsg ? "<br>"+esc(state.dashMsg) : ""}</div>
+    <input id="dk_input" type="password" autocomplete="off" spellcheck="false" placeholder="wpsdk_..." style="width:100%;font-size:13px;padding:6px;box-sizing:border-box">
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button class="btn btn-sm btn-coral" onclick="saveDeviceKey()">Save key</button>${k ? `<button class="btn btn-sm btn-ghost" onclick="removeDeviceKey()">Remove</button>` : ""}<button class="btn btn-sm btn-ghost" onclick="state.keyEdit=false;render()">Cancel</button></div>
+    <div class="d-note" style="font-size:11.5px">Paste this device's key from LastPass ("WPS Dashboard key - PC / iPhone / Tablet"). It stays in this browser only.</div>
+  </div>`;
+}
 
 // ---------------------------------------------------------------- link actions (tracker item 22)
 // A link such as ?do=sent&job=WPS260916&tenants=a@x.com,b@y.com&copyto=c@z.com&sent=2026-10-12T15:48
@@ -4521,6 +4830,12 @@ function confirmUrlAction(){
   setCloud("saving");   // so a closed/blocked Google pop-up reports back (initGCal error_callback)
   ensureSheetsToken(async function(){
     try {
+      if (keyMode()){
+        const d = await dashCall("jlRead");
+        if (!d.ok){ urlActionFail("Couldn't read the Job Log ("+(d.error || "no answer")+"). Nothing changed."); return; }
+        const kNewer = d.meta && d.meta.savedAt && d.meta.savedAt !== (lsGet(LS_CLOUD_SYNCED_AT) || "");
+        if (kNewer && !applyCloudCopy(d.meta, rowsToObjects(d.jobs), rowsToObjects(d.clients), d.hasContacts ? rowsToObjects(d.contacts) : null, dirtyAny())){ urlActionFail("Sync cancelled; nothing changed."); return; }
+      } else {
       const id = await findOrCreateSheet();
       const meta = await readCloudMeta(id);
       const synced = lsGet(LS_CLOUD_SYNCED_AT) || "";
@@ -4529,13 +4844,16 @@ function confirmUrlAction(){
       const localChanged = localAt && synced && localAt > synced && state.jobs.length > 0;
       if (cloudNewer && localChanged){ urlActionFail("This browser and the Google copy were both changed since the last sync. Click Save & get latest first, then open the link again."); return; }
       if (cloudNewer){ if (!(await cloudLoad(id, meta))){ urlActionFail("Sync cancelled; nothing changed."); return; } }
+      }
       const c = checkUrlAction(a);                       // re-check against the fresh copy
       if (c.problem){ urlActionFail(c.problem); return; }
       if (c.replaces.length && JSON.stringify(c.replaces) !== JSON.stringify(pre.replaces)){ urlActionFail("The emails on this job changed when the Google copy loaded. Nothing changed; open the link again to check."); return; }
       applyUrlAction(a, c.job, c);
       mergeJobNoHigh();
+      stampChanged();
       localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
       lsSet(LS_LOCAL_SAVED_AT, new Date().toISOString());
+      { const dd = dirtyGet(); dd.any = true; dd.seq++; dirtySet(dd); }
       await cloudSave();
       rememberGoogleConnected();
       if (state.cloudStatus !== "saved"){ urlActionFail("Changed in this browser but NOT saved to Google ("+(state.cloudMsg||"unknown")+"). Click Save & get latest."); return; }
@@ -4705,9 +5023,12 @@ window.addEventListener("beforeunload", function(e){ if (formDirty()){ e.prevent
 
 // ---------------------------------------------------------------- init
 load();
+snapAll();
+if (keyMode()) state.gcalConnected = true;   // device key: calendar and Sheet saves work without Google sign-in
 state.urlAction = parseUrlAction();
 render();
 initGCal();
+if (keyMode() && !state.urlAction) setTimeout(dashCycle, 400);   // on open: save, get the latest, read the queue
 </script>
 </body>
 </html>
