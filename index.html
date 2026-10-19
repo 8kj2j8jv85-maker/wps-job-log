@@ -599,6 +599,12 @@
   .page-head > div:first-child{ min-width:0; max-width:100%; }
   .perf-top.pt-ticker{ width:100%; }
   @media (max-width:600px){ .perf-top.pt-ticker{ font-size:13.5px; max-width:calc(100vw - 32px); } }
+  /* News headlines in the ticker (Lex, 19 Oct): alternate with the messages; tap opens the article */
+  .pt-ticker a.pt-news{ color:var(--ink); text-decoration:none; cursor:pointer; }
+  .pt-ticker a.pt-news:hover .pt-head, .pt-ticker a.pt-news:focus-visible .pt-head{ text-decoration:underline; }
+  .pt-ticker .pt-src{ font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#E8735A; border:1px solid rgba(232,115,90,.45); border-radius:999px; padding:0 7px; line-height:17px; align-self:center; }
+  .pt-ticker .pt-head{ font-weight:600; }
+  .news-warn{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
 
   /* Clock and weather (Lex, 18 Oct) */
   .live-clock{ font-weight:600; color:var(--brand-text); font-variant-numeric:tabular-nums; }
@@ -2498,6 +2504,7 @@ function render(){
   drawWeekMap();
   drawPlan();
   if (state.view === "today" && !state.wxBusy && (!state.wx || Date.now() - state.wx.at > 20*60000) && !state.wxTried && !(state.wxErrAt && Date.now() - state.wxErrAt < 5*60000)){ state.wxTried = true; setTimeout(() => { state.wxTried = false; loadWeather(); }, 0); }
+  if (state.view === "today" && !state.newsBusy && (!state.news || Date.now() - state.news.at > 30*60000) && !state.newsTried && !(state.newsErrAt && Date.now() - state.newsErrAt < 5*60000)){ state.newsTried = true; setTimeout(() => { state.newsTried = false; loadNews(); }, 0); }
   if (keepSearch){
     const el = document.getElementById("jobSearch");
     if (el){ el.focus(); try { el.setSelectionRange(keepSearch.s, keepSearch.e); } catch(e){} }
@@ -2774,12 +2781,19 @@ function renderPerfTop(){
   const now = new Date(), x = perfInputs(state.jobs, now), q = perfPick(x.tm, x.lm, x.dm, x.dl, x.st, now);
   // Scrolling ticker (Lex, 18 Oct): today's message first, then the rest for the same mood, in the coral of the
   // highlighted house icon, with a soft glow. Stops on hover; holds still if the device asks for less motion.
+  // 19 Oct: messages alternate with the latest inventory and lettings headlines (newsItems); tap a headline to open it.
   const list = PERF_LINES[q.tier] || [], start = Math.max(0, list.findIndex(l => l[1] === q.main));
   const order = list.slice(start).concat(list.slice(0, start));
-  const one = order.map(([ic, m, sb]) => `<span class="pt-item"><span class="pt-icon">${ic}</span><span class="pt-main">${esc(m)}</span> <span class="pt-sub">${esc(sb)}</span></span>`).join("");
-  return `<div class="perf-top pt-ticker pq-${q.tier}"${tip("Today's message. Click the On time tile for the full Performance view.")} aria-label="${esc(q.main+" "+q.sub)}">
-    <div class="pt-track" style="animation-duration:${Math.max(24, order.length*9)}s"><span class="pt-run">${one}</span><span class="pt-run" aria-hidden="true">${one}</span></div>
-  </div>`;
+  const msg = ([ic, m, sb]) => `<span class="pt-item"><span class="pt-icon">${ic}</span><span class="pt-main">${esc(m)}</span> <span class="pt-sub">${esc(sb)}</span></span>`;
+  const head = h => `<a class="pt-item pt-news" href="${esc(h.u)}" target="_blank" rel="noopener noreferrer"${tip(h.s+" · "+newsAge(h.d)+". Opens in a new tab.")}><span class="pt-src">${esc(h.s)}</span><span class="pt-head">${esc(h.t)}</span></a>`;
+  const news = newsItems(), parts = [];
+  if (!news.length || !order.length) order.forEach(l => parts.push(msg(l)));
+  else for (let i = 0; i < Math.max(news.length, order.length); i++){ parts.push(msg(order[i % order.length])); parts.push(head(news[i % news.length])); }
+  const one = parts.join("");
+  const warn = renderNewsWarn();
+  return `<div class="perf-top pt-ticker pq-${q.tier}"${tip(news.length ? "Today's message and the latest inventory and lettings headlines. Tap a headline to open it; hover to pause." : "Today's message. Click the On time tile for the full Performance view.")} aria-label="${esc(q.main+" "+q.sub)}">
+    <div class="pt-track" style="animation-duration:${Math.max(24, parts.length*9)}s"><span class="pt-run">${one}</span><span class="pt-run" aria-hidden="true">${one}</span></div>
+  </div>${warn}`;
 }
 function renderPerformance(jobs, now){
   // last month up to the same day and time, so early in the month it's a fair comparison (perfInputs)
@@ -3431,6 +3445,60 @@ function renderWxCard(){
 // live clock beside the date (no page redraw)
 function clockText(){ const d = new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 setInterval(() => { const el = document.getElementById("liveClock"); if (el) el.textContent = clockText(); }, 15000);
+
+// ---------------------------------------------------------------- news in the ticker (Lex, 19 Oct)
+// Headlines come from the WPS Amendments script (file "News"): it reads the trade sites every hour, keeps only
+// inventory, deposit, Renters' Rights, AIIC and regulation stories, and repairs itself when a site changes.
+// This page only reads the stored list (<web app>?news=1, public, read-only) and checks every link before showing it.
+const LS_NEWS = "wps_news_v1";
+const NEWS_HOSTS = ["lettingagenttoday.co.uk","landlordtoday.co.uk","property118.com","landlordlawblog.co.uk","thenegotiator.co.uk","theaiic.co.uk","propertymark.co.uk"];
+function newsSafeUrl(u){
+  try { const x = new URL(String(u)); const h = x.hostname.replace(/^www\./, "");
+    return x.protocol === "https:" && NEWS_HOSTS.includes(h) && !x.username && !x.password ? x.href : ""; } catch(e){ return ""; }
+}
+function newsClean(d){
+  const items = (Array.isArray(d && d.items) ? d.items : []).map(i => ({
+      t: String((i && i.t) || "").replace(/\s+/g, " ").trim().slice(0, 160), u: newsSafeUrl(i && i.u),
+      s: String((i && i.s) || "").slice(0, 30), d: Number(i && i.d) || 0 }))
+    .filter(i => i.t.length >= 8 && i.u && i.s);
+  const broken = (Array.isArray(d && d.broken) ? d.broken : []).slice(0, 10).map(b => ({ name: String((b && b.name) || "").slice(0, 30), since: Number(b && b.since) || 0, error: String((b && b.error) || "").slice(0, 160) })).filter(b => b.name);
+  return { items, broken, refreshed: Number(d && d.refreshed) || 0 };
+}
+function newsItems(){
+  const n = state.news; if (!n || !n.items) return [];
+  const cutoff = Date.now() - 30*86400000;   // last 30 days, newest 8
+  return n.items.filter(i => i.d >= cutoff).slice(0, 8);
+}
+function newsAge(ms){
+  if (!ms) return "";
+  const d = Math.floor((Date.now() - ms) / 86400000);
+  return d <= 0 ? "today" : d === 1 ? "yesterday" : d + " days ago";
+}
+function renderNewsWarn(){
+  const n = state.news; if (!n || !n.broken || !n.broken.length) return "";
+  const names = n.broken.map(b => b.name), since = Math.min(...n.broken.map(b => b.since || Date.now()));
+  const when = new Date(since).toLocaleDateString("en-GB", { day:"numeric", month:"short" });
+  return `<div class="news-warn"${tip(n.broken.map(b => b.name+": "+(b.error || "no reply")).join("\n"))}>News: ${esc(names.join(", "))} not loading since ${esc(when)}. The script keeps trying its backup addresses.</div>`;
+}
+async function loadNews(force){
+  if (state.newsBusy) return;
+  let cached = null; try { cached = JSON.parse(lsGet(LS_NEWS) || "null"); } catch(e){}
+  let changed = false;
+  if (cached && cached.items && (!state.news || state.news.at !== cached.at)){ state.news = Object.assign(newsClean(cached), { at: cached.at }); changed = true; }
+  if (!force && cached && Date.now() - cached.at < 30*60000){ if (changed && !state.editing && state.view === "today") render(); return; }
+  state.newsBusy = true;
+  try {
+    const r = await fetch(ROUTE_URL + "?news=1", { method:"GET", cache:"no-store", credentials:"omit" });
+    if (!r.ok) throw new Error("news " + r.status);
+    const d = await r.json();
+    if (!d || d.ok !== true) throw new Error("news reply");
+    state.news = Object.assign(newsClean(d), { at: Date.now() });
+    lsSet(LS_NEWS, JSON.stringify(state.news)); state.newsErrAt = 0;
+  } catch(e){ state.newsErrAt = Date.now(); }   // keep whatever was showing; messages carry on
+  state.newsBusy = false;
+  if (!state.editing && state.view === "today") render();
+}
+setInterval(() => { if (state.view === "today") loadNews(); }, 30*60000);
 
 // ---------------------------------------------------------------- plan my day (Lex, 18 Oct: "do the Inventory Hive kind of thing properly")
 // Part 1, no new accounts: a day's jobs in visit order on a map with numbered stops, start and finish at home,
