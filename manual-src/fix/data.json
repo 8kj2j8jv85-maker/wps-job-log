@@ -43,6 +43,8 @@
    "bedrooms": "2",
    "extraAreas": "",
    "propertyType": "Flat",
+   "invoiceAmount": "\u00a395.00",
+   "invoicedAt": "2026-10-03T16:00:00Z",
    "sentAt": "2026-10-03T15:00:00Z",
    "processingAt": "2026-10-02T14:00:00Z"
   },
@@ -335,6 +337,62 @@
    "bedrooms": "2",
    "extraAreas": "",
    "propertyType": "Flat"
+  },
+  {
+   "id": "job_WPS261015",
+   "jobNo": "WPS261015",
+   "type": "MTI",
+   "status": "booked",
+   "date": "",
+   "time": "",
+   "address": "Flat 5, Test Point, 9 Example Rise",
+   "town": "London",
+   "postcode": "E3 9ZS",
+   "client": "Example Lettings",
+   "tenants": "Kim Example",
+   "tenantEmails": "kim.example@example.com",
+   "agentEmail": "",
+   "notes": "",
+   "invoice": "",
+   "invoiceNo": "",
+   "bedrooms": "2",
+   "extraAreas": "",
+   "propertyType": "Flat",
+   "tenantList": [
+    {
+     "name": "Kim Example",
+     "phone": "07700 900444",
+     "email": "kim.example@example.com"
+    }
+   ]
+  },
+  {
+   "id": "job_WPS261016",
+   "jobNo": "WPS261016",
+   "type": "MTI",
+   "status": "booked",
+   "date": "",
+   "time": "",
+   "address": "31 Sample Row",
+   "town": "London",
+   "postcode": "E2 9ZT",
+   "client": "Sample Estates",
+   "tenants": "Ray Sample",
+   "tenantEmails": "ray.sample@example.com",
+   "agentEmail": "",
+   "notes": "",
+   "invoice": "",
+   "invoiceNo": "",
+   "bedrooms": "2",
+   "extraAreas": "",
+   "propertyType": "Flat",
+   "tenantList": [
+    {
+     "name": "Ray Sample",
+     "phone": "07700 900555",
+     "email": "ray.sample@example.com"
+    }
+   ]
   },
   {
    "id": "job_WPS260915",

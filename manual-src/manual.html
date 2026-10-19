@@ -45,6 +45,7 @@
   .small{ font-size:9pt; color:var(--soft); }
   .stage{ display:inline-block; border-radius:99px; padding:1px 9px; font-size:9pt; font-weight:600; }
   .sidebar-sec table{ font-size:9pt; } .sidebar-sec td{ padding:3.5px 6px; }
+  .part{ font-size:9.5pt; letter-spacing:.12em; text-transform:uppercase; color:var(--coral); font-weight:700; margin:-2mm 0 4mm; }
 </style>
 </head>
 <body>
@@ -54,118 +55,257 @@
   <div>
     <div class="band">
       <h1>WPS Tools Manual</h1>
-      <div class="sub">Dashboard &middot; Job Log &middot; Report auto-send &middot; Photo Tool &middot; Dictation</div>
+      <div class="sub">The plain-words guide to the Dashboard, Job Log, report sending, Photo Tool and Dictation</div>
       <div class="bar"></div>
     </div>
-    <p style="margin-top:10mm;font-size:12pt">A step-by-step guide for Wellington Property Services, written for someone opening these tools for the first time.</p>
-    <h2 style="margin-top:10mm">What's inside</h2>
+    <p style="margin-top:9mm;font-size:12pt">Written for someone who has never opened these tools. Part 1 gets you going in ten minutes. Part 2 answers "How do I…?" one job at a time. Part 3 is the full detail, for when you need it.</p>
+    <h2 style="margin-top:8mm">What's inside</h2>
     <div class="toc">
+      <div><b>Part 1. Quick start</b></div>
       <div>1. Start here</div>
-      <div>2. Your day, step by step</div>
-      <div>3. The Dashboard</div>
-      <div>4. Missed visits: Mark visited and Rearrange</div>
-      <div>5. Job stages and Undo</div>
-      <div>6. The Job Log</div>
-      <div>7. Adding and editing a job</div>
-      <div>8. The To review tray: bookings, invoices, sent reports</div>
-      <div>9. Sending reports automatically</div>
-      <div>10. The check-in signing page (not live yet)</div>
-      <div>11. Comment windows, reminders and amendments</div>
-      <div>12. The Photo Tool</div>
-      <div>13. Dictation</div>
-      <div>14. Using it on your phone</div>
-      <div>15. The sidebar menu</div>
-      <div>16. What runs by itself, what you do</div>
-      <div>17. If something looks wrong</div>
-      <div>18. Known gaps</div>
+      <div>2. Your day in five steps</div>
+      <div>3. Words you'll see</div>
+      <div><b>Part 2. How do I…?</b></div>
+      <div>4. Sixteen everyday jobs, step by step</div>
+      <div><b>Part 3. The full detail</b></div>
+      <div>5. The Dashboard</div>
+      <div>6. Missed visits: Mark visited and Rearrange</div>
+      <div>7. Job stages and Undo</div>
+      <div>8. The Job Log: List, Board, Calendar</div>
+      <div>9. Adding and editing a job</div>
+      <div>10. The To review tray</div>
+      <div>11. Sending reports automatically</div>
+      <div>12. The check-in signing page</div>
+      <div>13. Comment windows and amendments</div>
+      <div>14. The Photo Tool</div>
+      <div>15. Dictation</div>
+      <div>16. Mid-terms and the tenant slot link</div>
+      <div>17. Plan my day, Route and Map</div>
+      <div>18. Using it on your phone</div>
+      <div>19. The sidebar menu</div>
+      <div>20. What runs by itself, what you do</div>
+      <div>21. If something goes wrong</div>
+      <div>22. Known gaps</div>
     </div>
   </div>
   <div class="small">
-    Version of 18 October 2026 (replaces the 14 October version). It matches the live tools as of 18 October 2026: the Dashboard and Job Log at version 6adbff1, the Photo Tool with the zip name fix (pull request #29), and the report auto-send script as written on 17 October. Screenshots are taken with made-up jobs, addresses and names (Example Lettings, Sample Estates, example.com emails and so on), so no real tenant details appear. The screenshot clock is set to Tuesday 13 October. The lettering is slightly different from your screen. The buttons and layout are the same.
+    Version of 19 October 2026 (replaces the 18 October version). It matches the live tools after the 19 October changes: Do next and Park, the Board view, the Map, Plan my day with Google road times, mid-terms and the tenant slot link, and the news line. Screenshots use made-up jobs, addresses and names (Example Lettings, Sample Estates, example.com emails), so no real tenant details appear. The screenshot clock is set to Tuesday 13 October, so dates in the pictures won't match today. The lettering is slightly different from your screen; the buttons and layout are the same. The news headlines in the pictures are made-up examples.
   </div>
 </section>
 
-<!-- ============ 1 START HERE ============ -->
+<!-- ============ PART 1 ============ -->
 <h1>1. Start here</h1>
-<h2>The tools</h2>
+<p class="part">Part 1. Quick start</p>
+
+<h2>The tools, in one line each</h2>
 <table>
-  <tr><th style="width:22%">Tool</th><th>What it's for</th><th style="width:28%">How to open it</th></tr>
-  <tr><td><b>Dashboard</b></td><td>Your home page. One screen showing what needs doing: reports due, missed visits, new bookings, comment windows, invoices, and how you're doing.</td><td>The web address below. It always opens here.</td></tr>
-  <tr><td><b>Job Log</b></td><td>Every job, as a list or a calendar. Where you add, edit and move jobs along.</td><td><span class="k">Job Log</span> in the sidebar.</td></tr>
-  <tr><td><b>Report auto-send</b></td><td>Emails finished check-out, mid-term and schedule of condition reports for you. You save the PDF into one Drive folder; it does the rest.</td><td>Nothing to open: save the PDF into <b>WPS Ready to send</b> (section 9).</td></tr>
-  <tr><td><b>Photo Tool</b></td><td>Turns a day's site photos into renamed, watermarked zip files, one per job, and saves the photo link to the job.</td><td><span class="k">Photo Tool</span> in the sidebar. Use it on the PC.</td></tr>
-  <tr><td><b>Dictation</b></td><td>Talk your notes into the phone room by room, then copy them to Claude to write up.</td><td><span class="k">Dictation</span> under LINKS in the sidebar. Use it on the phone.</td></tr>
+  <tr><th style="width:22%">Tool</th><th>What it does for you</th></tr>
+  <tr><td><b>Dashboard</b></td><td>Your home page. Tells you what to do next, today's jobs, the week ahead, and the money.</td></tr>
+  <tr><td><b>Job Log</b></td><td>Every job you've ever logged. Add, change and move jobs along.</td></tr>
+  <tr><td><b>Report sending</b></td><td>You save a finished report as a PDF into one Drive folder. It emails itself to the right people.</td></tr>
+  <tr><td><b>Photo Tool</b></td><td>Turns a day's photos into named, watermarked zips, one per job. Use it on the PC.</td></tr>
+  <tr><td><b>Dictation</b></td><td>Talk your notes into the phone, room by room. Use it on the phone.</td></tr>
 </table>
 
-<h2>Opening the tools</h2>
-<p>The Dashboard, Job Log, Photo Tool and Dictation live at one web address. Bookmark it in Chrome on the PC and on the phone:</p>
-<p style="font-size:11.5pt"><b>https://8kj2j8jv85-maker.github.io/wps-job-log/</b></p>
-<p>When Google asks you to sign in, always choose <b>info@wellingtonparker.com</b>. That's the account that holds the Job Log Sheet, the calendar, the inbox and the Drive folders the tools use.</p>
-<p><b>The web address follows the screen.</b> The Job Log is <b>…/wps-job-log/#log</b>, the calendar <b>#calendar</b>, and an open job <b>#job=WPS261006</b>. So the browser's Back button steps back through what you looked at, refreshing keeps you where you were, and you can bookmark a job.</p>
-<div class="tip"><b>After Claude changes the tools,</b> press <span class="k">Ctrl+Shift+R</span> on the PC to load the new version. An open tab keeps the old one, and the website can take up to about 10 minutes to hand out the new copy.</div>
+<h2>How to open them</h2>
+<div class="step"><div class="sn">1</div><div>Open Chrome (Safari on the iPhone) and go to <b>https://8kj2j8jv85-maker.github.io/wps-job-log/</b>. Bookmark it. It always opens on the Dashboard.</div></div>
+<div class="step"><div class="sn">2</div><div>When Google asks you to sign in, <b>always pick info@wellingtonparker.com</b>. Everything (the Job Log Sheet, calendar, inbox, Drive) lives there.</div></div>
+<div class="step"><div class="sn">3</div><div>The other tools are in the sidebar on the left (on the phone, along the top): <span class="k">Dashboard</span> <span class="k">Job Log</span> <span class="k">Photo Tool</span> <span class="k">Dictation</span>.</div></div>
 
 <h2>Where your jobs are kept</h2>
-<p>Your jobs are saved in two places at once:</p>
+<p>Each device keeps its own copy so it works fast, even without a signal. The master copy is the Google Sheet "WPS Job Log" on info@. On the PC, changes save to Google by themselves within seconds once you're signed in. The sidebar says <span class="k">Saved to Google ✓ 08:45</span> when all is well. On the phone, tap <span class="k">Save &amp; get latest</span> each time you open it and after you change something.</p>
+<div class="warn"><b>Never type in the Google Sheet.</b> Change jobs only in the Job Log. Anything typed into the Sheet is ignored and gets written over.</div>
+
+<h2>Getting help on the screen</h2>
 <ul>
-  <li><b>In the browser</b> on each device, so the pages open fast and work without a signal.</li>
-  <li><b>In the Google Sheet "WPS Job Log"</b> on info@. This is the master copy that keeps the PC and the phone in step. It also holds your clients, your saved contacts (the Copy to list) and the bookings you've already dealt with, so another device doesn't offer them again. The report auto-send reads it too.</li>
+  <li><b>Hover</b> the mouse over anything on the PC for a second: a short explanation pops up.</li>
+  <li><b>Help hints</b> in the sidebar (under TOOLS) switches on a yellow "How this works" box on each screen, plus a line of text under the main buttons. Good on the phone, where you can't hover. <span class="k">Hide</span> on a box puts that one away; switch Help hints off and on to bring it back.</li>
+  <li><b>Manual</b> in the sidebar opens this manual.</li>
 </ul>
-<p>On the PC, once Google is signed in, every change saves to Google by itself within a few seconds. The sidebar then shows <span class="k">Saved to Google ✓ 08:45</span> (with the time). If it says <span class="k">Google copy: click Save &amp; get latest</span>, the tab isn't signed in yet: click <span class="k">Save &amp; get latest</span>. On the phone, tap <span class="k">Save &amp; get latest</span> each time you open it (section 14).</p>
-<div class="tip"><b>Don't edit the Google Sheet by hand.</b> Make every change in the Job Log. Anything typed straight into the Sheet is ignored and will be overwritten. The sidebar link says so: <b>Job Log Sheet (view only, don't edit)</b>.</div>
+<figure><img src="img/n13_help_dash.jpg"><figcaption>The Dashboard's "How this works" box (Help hints on).</figcaption></figure>
+<div class="tip"><b>After Claude changes the tools,</b> press <span class="k">Ctrl+Shift+R</span> on the PC to load the new version. An open tab keeps the old one, and it can take up to 10 minutes for the new copy to reach you.</div>
 
-<h2>Help hints</h2>
-<ul>
-  <li><b>Hover hints.</b> On the PC, rest the mouse on any button, tile or box for a second and a short explanation pops up. These are always on.</li>
-  <li><b>Help hints switch.</b> In the sidebar under TOOLS, <span class="k">Help hints: on ✓</span> shows a yellow "How this works" box at the top of each page and a short line of text under the main buttons. That works on the phone too, where there's no hovering. Click it again to switch the hints off. The switch applies to the Dashboard, Job Log, Photo Tool and Dictation together.</li>
-</ul>
-<figure><img src="img/h1_help_dash.jpg"><figcaption>The Dashboard with Help hints switched on.</figcaption></figure>
-<p>The <span class="k">Manual</span> link just under the switch opens this manual.</p>
+<h1>2. Your day in five steps</h1>
+<p>That's really all there is to it. Part 2 shows each step in detail.</p>
+<figure><img src="img/n0_dashboard.jpg"><figcaption>The Dashboard. The numbers are explained in section 5.</figcaption></figure>
+<div class="step"><div class="sn">1</div><div><b>Open the Dashboard and click <span class="k">Check everything now</span></b> (top right). It saves, gets the latest from Google, looks for new bookings, picks up reports that sent themselves, and loads tenant comments. If a <b>To review</b> tray appears, go through the cards (4.5).</div></div>
+<div class="step"><div class="sn">2</div><div><b>Work down "Do next".</b> It lists what needs doing, most urgent first, each with one button. Do the top one, then the next. Not ready for one? Press <span class="k">Park</span> (4.2).</div></div>
+<div class="step"><div class="sn">3</div><div><b>Go to your visits.</b> <span class="k">Plan my day</span> shows the order, the miles and when to leave (4.3). Dictate on the phone as you go (4.10). After each visit, move the job to <b>Processing</b> (4.7).</div></div>
+<div class="step"><div class="sn">4</div><div><b>Finish reports and send them.</b> Photos through the Photo Tool (4.9), then save the finished PDF into <b>WPS Ready to send</b>. It emails itself and the job moves to Sent (4.11).</div></div>
+<div class="step"><div class="sn">5</div><div><b>Money.</b> Invoice in Tide with the WPS number in the message line; click <span class="k">Mark invoiced</span> on the card that appears, and <span class="k">Paid</span> when the money comes in (4.13).</div></div>
+<div class="tip"><b>Once a week:</b> Export backup (4.16), and look at the On time tile to see how the week went.</div>
 
-<!-- ============ 2 YOUR DAY ============ -->
-<h1>2. Your day, step by step</h1>
-<p>This is the normal rhythm. Each step is explained in more detail later in the manual.</p>
-
-<h2>Morning</h2>
-<div class="step"><div class="sn">1</div><div>Open the <b>Dashboard</b> and click <span class="k">Check everything now</span>. In one go it saves to the Google Sheet and gets the latest copy, checks for new bookings, picks up reports the auto-send has emailed, and loads the amendments. Google may ask you to sign in: choose info@.</div></div>
-<div class="step"><div class="sn">2</div><div>If anything was found, a <b>To review</b> tray opens at the top. Claude checks the inbox at 7:51, 12:51 and 15:51 (Monday to Saturday) and lines up new bookings, changes, cancellations and Tide invoices you've sent. Go through each card (section 8). Nothing goes in the log until you click.</div></div>
-<div class="step"><div class="sn">3</div><div>Look at the tiles. Red numbers are the urgent ones. The list at the bottom opens on the most urgent tile by itself.</div></div>
-<div class="step"><div class="sn">4</div><div>Click the <b>Times to agree</b> tile. These are booked jobs with no time yet. Contact the tenant and add the time to the job.</div></div>
-<div class="step"><div class="sn">5</div><div>In the <b>Today</b> box, each job shows the tenant and the notes (keys, access). On the phone, tap a phone number to call it. <span class="k">Today's route</span> opens Google Maps with today's jobs as stops, in time order.</div></div>
-
-<h2>After each visit</h2>
-<div class="step"><div class="sn">6</div><div>Move the job to <span class="stage" style="background:#FFF1D0;color:#8A5A00">Processing</span>: pick it in the job's stage box, or click <span class="k">Mark visited</span> in the Reports due list. Check-outs are due 48 hours after the visit, everything else 72 hours.</div></div>
-<div class="step"><div class="sn">7</div><div>Visit didn't happen? Click <span class="k">Rearrange</span> on that job in the Reports due list (section 4).</div></div>
-<div class="step"><div class="sn">8</div><div>On the phone, use <b>Dictation</b> as you walk round (section 13). Back at the PC, run the day's photos through the <b>Photo Tool</b> (section 12).</div></div>
-
-<h2>When a report is finished</h2>
-<div class="step"><div class="sn">9</div><div>Set the stage to <span class="stage" style="background:#E7EAF3;color:#4A5B8A">Completed</span> when the report is written.</div></div>
-<div class="step"><div class="sn">10</div><div><b>Check-outs, mid-terms and schedules of condition:</b> save the PDF into the Drive folder <b>WPS Ready to send</b> (section 9). Within about 15 minutes it is emailed from reports@ to the right people, and the job is marked <span class="stage" style="background:#C9D6E8;color:#1F2D5A">Sent</span> the next time you click Check everything now. If something is missing, the PDF is held and info@ gets an email saying why.</div></div>
-<div class="step"><div class="sn">11</div><div><b>Inventories and check-ins:</b> for now, still send them for signature in Acrobat with the comments form link (the WPS signing page isn't live yet, section 10). Then set the stage to Sent. The 7-day comment window starts from the sent date. When Claude sends a check-in for you, Claude marks it Sent with a link and you click <span class="k">Confirm and save</span>.</div></div>
-<div class="step"><div class="sn">12</div><div>Keep an eye on the <b>Comment windows</b> and <b>Amendments</b> tiles for check-ins (section 11). When Acrobat's signed copy comes back, set the stage to <span class="stage" style="background:#E0F0E6;color:#2E6B45">Signed</span>.</div></div>
-
-<h2>Money</h2>
-<div class="step"><div class="sn">13</div><div>The <b>To invoice</b> tile lists reports sent but not invoiced. Raise the invoice in Tide and put the <b>WPS job number in the invoice's message line</b> (or note). Tide emails a copy to info@; the next inbox check turns it into an <b>Invoice sent</b> card in the To review tray. Click <span class="k">Mark invoiced</span> and the job is set to Invoiced with the invoice number and date.</div></div>
-<div class="step"><div class="sn">14</div><div>When the money arrives, open the <b>Awaiting payment</b> tile and click <span class="k">Paid</span> on that job.</div></div>
-
-<h2>Once a week</h2>
-<div class="step"><div class="sn">15</div><div>Click <span class="k">Export backup</span> in the sidebar to save a copy of every job to the PC. Look at the <b>Performance</b> panel to see how the week went (section 3).</div></div>
-
-<!-- ============ 3 DASHBOARD ============ -->
-<h1>3. The Dashboard</h1>
-<p>The Dashboard is the first page you see. It fits on one screen of the PC.</p>
-<figure><img src="img/d1_dashboard.jpg"><figcaption>The Dashboard. The numbers match the list below.</figcaption></figure>
+<h1>3. Words you'll see</h1>
+<h2>Job types</h2>
 <table>
-  <tr><td style="width:6%"><span class="n">1</span></td><td><b>Pages.</b> Dashboard, Job Log and Photo Tool. The one you're on is highlighted.</td></tr>
-  <tr><td><span class="n">2</span></td><td><b>LINKS.</b> One-click shortcuts to Dictation, the amendments pages, Acrobat, Gmail, Calendar, Dropbox and the website (section 15).</td></tr>
-  <tr><td><span class="n">3</span></td><td><b>TOOLS.</b> Saving to Google, the Theme box, backups, the calendar connection, Help hints and this manual (section 15).</td></tr>
-  <tr><td><span class="n">4</span></td><td><b>Check everything now.</b> Saves and gets the latest from the Google Sheet, checks new bookings, picks up reports the auto-send emailed and loads amendments, in one click. It says <b>Checking…</b> while it works. A small coral number shows how many cards are waiting to review.</td></tr>
-  <tr><td><span class="n">5</span></td><td><b>+ New job.</b> Log a job by hand (section 7).</td></tr>
-  <tr><td><span class="n">6</span></td><td><b>Tiles</b>, in four groups: To do now, Waiting on others, Money, Performance. Click a tile to show its list in box 9. A tile with nothing in it is faded.</td></tr>
-  <tr><td><span class="n">7</span></td><td><b>Today.</b> Today's jobs in time order, with the tenant and notes under each one, and Today's route for Google Maps.</td></tr>
-  <tr><td><span class="n">8</span></td><td><b>Next 7 days.</b> The coming week, a day per column. Click a job to open it. Click + on a day to add a job on that date. "Any time" means no time agreed yet. "Free" means nothing booked.</td></tr>
-  <tr><td><span class="n">9</span></td><td><b>The list panel.</b> Shows the list for whichever tile is selected (highlighted). It shows up to 7 lines, then Show all. When you open the Dashboard it picks the most urgent tile that has something in it.</td></tr>
+  <tr><td style="width:12%"><b>ICI</b></td><td>Inventory and check-in. The tenant signs it and has 7 days to comment.</td></tr>
+  <tr><td><b>CO</b></td><td>Check-out. Report due 48 hours after the visit.</td></tr>
+  <tr><td><b>MTI</b></td><td>Mid-term inspection. Always copied to bowpropman@winkworth.co.uk.</td></tr>
+  <tr><td><b>SOC</b></td><td>Schedule of condition.</td></tr>
+  <tr><td><b>CLN</b></td><td>Clean check.</td></tr>
 </table>
-<p>Everywhere on the Dashboard: click a job (the blue job number and address) to open it. Use a job's coloured stage box to change its stage (section 5). The page refreshes itself every 3 minutes, and when you come back to the tab, but never while a job form or Rearrange panel is open or you're typing.</p>
+<h2>Stages (the coloured box on every job)</h2>
+<table>
+  <tr><td style="width:22%"><span class="stage" style="background:#FBE7E1;color:#C8553A">Booked</span></td><td>In the diary, not visited yet.</td></tr>
+  <tr><td><span class="stage" style="background:#FFF1D0;color:#8A5A00">Processing</span></td><td>Visited, report being written. The report clock is running.</td></tr>
+  <tr><td><span class="stage" style="background:#E7EAF3;color:#4A5B8A">Completed</span></td><td>Report written, not sent.</td></tr>
+  <tr><td><span class="stage" style="background:#C9D6E8;color:#1F2D5A">Sent</span></td><td>Report has gone out. Set by itself when the report emails itself.</td></tr>
+  <tr><td><span class="stage" style="background:#E0F0E6;color:#2E6B45">Signed</span></td><td>Check-in signed by everyone. You set this when the signed copy arrives.</td></tr>
+  <tr><td><span class="stage" style="background:#E0F0E6;color:#2E6B45">Deemed agreed</span></td><td>Check-in: 7 days passed, no signature, no comments open. Set by itself.</td></tr>
+  <tr><td><span class="stage" style="background:#EEF0F3;color:#7A8493">Archived</span></td><td>All done and filed.</td></tr>
+</table>
+<h2>Other words</h2>
+<table>
+  <tr><td style="width:24%"><b>Do next</b></td><td>The Dashboard's to-do list, most urgent first.</td></tr>
+  <tr><td><b>Park</b></td><td>Take a job off Do next for now. <b>Un-park</b> puts it back. It still shows everywhere else.</td></tr>
+  <tr><td><b>Tile</b></td><td>The small counters across the top of the Dashboard. Click one to see its list.</td></tr>
+  <tr><td><b>To review tray</b></td><td>Bookings, changes, cancellations and Tide invoices Claude found in the inbox, waiting for your click.</td></tr>
+  <tr><td><b>Times to agree</b></td><td>Booked jobs with no time (or no date) yet.</td></tr>
+  <tr><td><b>Comment window</b></td><td>The 7 days a tenant has to comment on a check-in.</td></tr>
+  <tr><td><b>Amendments</b></td><td>Tenant comments sent through the comments form.</td></tr>
+  <tr><td><b>Slot link</b></td><td>A mid-term tenant's own web link where they pick a free time.</td></tr>
+  <tr><td><b>WPS Ready to send</b></td><td>The Google Drive folder you save finished reports into (G:\My Drive\WPS Ready to send on the HP).</td></tr>
+  <tr><td><b>Held</b></td><td>A report the sender wouldn't send because something was missing. info@ gets an email saying why.</td></tr>
+  <tr><td><b>Undo bar</b></td><td>The bar at the bottom for 8 seconds after a change, with an Undo button.</td></tr>
+  <tr><td><b>Save &amp; get latest</b></td><td>Saves to Google and brings in changes from your other devices.</td></tr>
+</table>
+
+<!-- ============ PART 2 ============ -->
+<h1>4. How do I…?</h1>
+<p class="part">Part 2. Sixteen everyday jobs, step by step</p>
+<p>Each job is a few numbered steps. The coral numbers on the pictures match the steps. For more detail, the section in Part 3 is named at the end.</p>
+
+<h2>4.1 …start my day?</h2>
+<div class="step"><div class="sn">1</div><div>Open the Dashboard (bookmark). Sign in as info@ if Google asks.</div></div>
+<div class="step"><div class="sn">2</div><div>Click <span class="k">Check everything now</span> (top right). Wait until it stops saying "Checking…".</div></div>
+<div class="step"><div class="sn">3</div><div>If the <b>To review</b> tray opens, go through each card (4.5).</div></div>
+<div class="step"><div class="sn">4</div><div>Look at <b>Do next</b> and the <b>Today</b> box. Today shows each visit's time, tenant, phone and notes (keys, access).</div></div>
+<p class="small">More: section 5.</p>
+
+<h2>4.2 …work through Do next, and Park?</h2>
+<figure><img src="img/n3_donext.jpg"><figcaption><span class="n">1</span> What needs doing. <span class="n">2</span> The job (click to open it). <span class="n">3</span> The one button that does it. <span class="n">4</span> Park.</figcaption></figure>
+<div class="step"><div class="sn">1</div><div>Read the top line <span class="n">1</span>. Red = late, amber = soon, plain = when you can.</div></div>
+<div class="step"><div class="sn">2</div><div>Press its button <span class="n">3</span>, for example <span class="k">Approve</span>, <span class="k">Mark visited</span>, <span class="k">Write email</span>, <span class="k">Photo Tool</span> or <span class="k">See who owes</span>. Or click the job <span class="n">2</span> to open it.</div></div>
+<div class="step"><div class="sn">3</div><div>When it's done, the line disappears by itself. The next one moves up.</div></div>
+<div class="step"><div class="sn">4</div><div>Can't do it yet (waiting on the agent, say)? Press <span class="k">Park</span> <span class="n">4</span>. It drops off Do next but still shows in the tiles and lists.</div></div>
+<figure><img src="img/n4_parked.jpg"><figcaption>Parked jobs are listed at the bottom of Do next. <span class="n">1</span> Un-park puts one back.</figcaption></figure>
+<p>Do next shows 6 lines; <span class="k">Show all</span> shows the rest. "Nothing urgent. All caught up." means exactly that.</p>
+<p class="small">More: section 5.</p>
+
+<h2>4.3 …plan my driving for the day?</h2>
+<figure><img src="img/n9_plan.jpg" style="width:70%;margin:0 auto"><figcaption>Plan my day (the list part). <span class="n">1</span> Change where you start. <span class="n">2</span> Total miles and driving. <span class="n">3</span> Open in Google Maps.</figcaption></figure>
+<div class="step"><div class="sn">1</div><div>On the Dashboard, click <span class="k">Plan my day</span> in the Today box. For another day, click <span class="k">Route</span> on that day in Next 7 days, or pick the day from the box at the top of the plan.</div></div>
+<div class="step"><div class="sn">2</div><div>Read it top to bottom: home, each leg with miles, drive time and "leave by", each job, back home. A red line means you may be late.</div></div>
+<div class="step"><div class="sn">3</div><div>Want real road times with traffic? Click <span class="k">Save &amp; get latest</span> in the sidebar first (that signs you in to Google). Without it the times say "about".</div></div>
+<div class="step"><div class="sn">4</div><div>Click <span class="k">Open in Google Maps</span> for turn-by-turn directions. <span class="k">Close</span> puts the plan away.</div></div>
+<p class="small">More: section 17.</p>
+
+<h2>4.4 …book a mid-term with the tenant's slot link?</h2>
+<figure><img src="img/n5_mid.jpg"><figcaption>Mid-terms to book. <span class="n">1</span> Which days and hours tenants can pick. <span class="n">2</span> Approve. <span class="n">3</span> Decline. <span class="n">4</span> Send slot link. <span class="n">5</span> Check for picks now.</figcaption></figure>
+<div class="step"><div class="sn">1</div><div>Click the <b>Mid-terms</b> tile. You'll see mid-terms at Booked with no date. (If it asks you to, click Save &amp; get latest in the sidebar first.)</div></div>
+<div class="step"><div class="sn">2</div><div>On a job, press <span class="k">Send slot link</span> <span class="n">4</span>. Gmail opens with the email to the tenant, CC bowpropman@winkworth.co.uk, with their own link. Check it and press Send in Gmail. Nothing goes until you do.</div></div>
+<div class="step"><div class="sn">3</div><div>The tenant opens the link, sees only free times, picks one and says if they'll be there or you can use the keys. You get an email at info@.</div></div>
+<div class="step"><div class="sn">4</div><div>Their pick shows in Do next and here. Press <span class="k">Approve</span> <span class="n">2</span>: the job gets the date and time, goes in the calendar, and the confirmation email opens in Gmail for you to send. Or <span class="k">Decline</span> <span class="n">3</span>: they pick again from the same link (that email opens too).</div></div>
+<div class="tip"><b>Nothing is booked until you press Approve.</b> No reply? <span class="k">Send again</span> sends a chaser with the same link. <span class="k">Copy link</span> copies it for a WhatsApp.</div>
+<p class="small">More: section 16.</p>
+
+<h2>4.5 …add a booking that came by email?</h2>
+<div class="step"><div class="sn">1</div><div>Click <span class="k">Check everything now</span>. Claude also checks the inbox by itself at 7:51, 12:51 and 15:51, Monday to Saturday.</div></div>
+<div class="step"><div class="sn">2</div><div>In the <b>To review</b> tray, read the card. <span class="k">Open email</span> shows the original.</div></div>
+<div class="step"><div class="sn">3</div><div>New booking: <span class="k">Add to log</span> (or <span class="k">Edit &amp; add</span> to check it first). Change: <span class="k">Apply change</span>. Cancellation: <span class="k">Delete cancelled job</span>. Tide invoice: <span class="k">Mark invoiced</span>. Not needed: <span class="k">Dismiss</span>.</div></div>
+<p>WhatsApp bookings can't be seen: add those by hand (4.6).</p>
+<p class="small">More: section 10.</p>
+
+<h2>4.6 …add or change a job by hand?</h2>
+<div class="step"><div class="sn">1</div><div>Click <span class="k">+ New job</span> (top right, or the round coral + on the phone), or the + on a day.</div></div>
+<div class="step"><div class="sn">2</div><div>Paste the agent's email into the box at the top and click <span class="k">Extract job details</span>, or type the details. Check what it filled in.</div></div>
+<div class="step"><div class="sn">3</div><div>Pick the agent, add each tenant on their own row (name, phone, email), tick who gets the report under Copy to.</div></div>
+<div class="step"><div class="sn">4</div><div>Click <span class="k">Save job</span> at the bottom. To change a job later, click it anywhere and <span class="k">Save changes</span>.</div></div>
+<p class="small">More: section 9.</p>
+
+<h2>4.7 …move a job to the next stage?</h2>
+<div class="step"><div class="sn">1</div><div>Click the coloured stage box on the job (Dashboard, Job Log, or in the job) and pick the new stage.</div></div>
+<div class="step"><div class="sn">2</div><div>Or, in the Job Log, click <span class="k">Board</span> and drag the card into the next column (PC). On the phone, pick from the box on the card.</div></div>
+<div class="step"><div class="sn">3</div><div>Wrong one? Click <span class="k">Undo</span> on the bar at the bottom (8 seconds).</div></div>
+<figure><img src="img/n11_board.jpg"><figcaption>The Board. <span class="n">1</span> One column per stage. <span class="n">2</span> A job card (drag it). <span class="n">3</span> Or pick the stage here.</figcaption></figure>
+<p class="small">More: sections 7 and 8.</p>
+
+<h2>4.8 …deal with a visit that didn't happen?</h2>
+<div class="step"><div class="sn">1</div><div>Do next says "Visit passed, still Booked". If you did go, press <span class="k">Mark visited</span>.</div></div>
+<div class="step"><div class="sn">2</div><div>If you didn't, press <span class="k">Rearrange</span>. Put the new date and time if you know it, or leave them blank.</div></div>
+<div class="step"><div class="sn">3</div><div>Leave "Open an email to the tenant" ticked and press <span class="k">Save</span>. Gmail opens with the email. Check it and send.</div></div>
+<p class="small">More: section 6.</p>
+
+<h2>4.9 …do the photos?</h2>
+<div class="step"><div class="sn">1</div><div>On the PC, open the <b>Photo Tool</b> from the sidebar.</div></div>
+<div class="step"><div class="sn">2</div><div>Drag the day's photos onto the dashed box. They're split into one set per visit and matched to the job.</div></div>
+<div class="step"><div class="sn">3</div><div>Check each set's job. Click the first photo of each room and pick the room.</div></div>
+<div class="step"><div class="sn">4</div><div>Click <span class="k">Process &amp; download zip</span>. The zip goes to Downloads and the photo link is saved to the job. Upload the zip to the photos server as usual.</div></div>
+<p class="small">More: section 14.</p>
+
+<h2>4.10 …dictate on the phone?</h2>
+<div class="step"><div class="sn">1</div><div>Open <b>Dictation</b> (top bar on the phone). Type the job number; the address fills in.</div></div>
+<div class="step"><div class="sn">2</div><div>Tap a room, tap the microphone, talk. Tap again to stop. Next room.</div></div>
+<div class="step"><div class="sn">3</div><div>At the end, tap <span class="k">Copy for Claude</span> and paste it into the WPS project chat.</div></div>
+<p class="small">More: section 15.</p>
+
+<h2>4.11 …send a finished report?</h2>
+<div class="step"><div class="sn">1</div><div>Check the job: right client, type, address, postcode, photo link. For a check-in, every tenant row has an email.</div></div>
+<div class="step"><div class="sn">2</div><div>Save the PDF into <b>WPS Ready to send</b> with the job number in the name, e.g. <b>WPS261007.E32BX.12.10.26.MTI.pdf</b>.</div></div>
+<div class="step"><div class="sn">3</div><div>That's it. Within about 15 minutes it's emailed. Check-ins go to each tenant with their own signing link. The job shows Sent after your next Check everything now.</div></div>
+<div class="step"><div class="sn">4</div><div>If something was missing, info@ gets <b>"Report held, not sent"</b> with the reason. Fix it and move the PDF from Held back into WPS Ready to send.</div></div>
+<p class="small">More: sections 11 and 12.</p>
+
+<h2>4.12 …handle tenant comments on a check-in?</h2>
+<div class="step"><div class="sn">1</div><div>The <b>Amendments</b> tile (and Do next) shows jobs with comments open.</div></div>
+<div class="step"><div class="sn">2</div><div>Say <b>"review amendments WPS…"</b> to Claude in the WPS project chat. Then decide each point on the review page.</div></div>
+<div class="step"><div class="sn">3</div><div>Re-send the corrected report and click <span class="k">Re-issued today</span> in the job. The 7 days start again.</div></div>
+<p class="small">More: section 13.</p>
+
+<h2>4.13 …invoice and get paid?</h2>
+<figure><img src="img/n7_money.jpg"><figcaption>Awaiting payment: who owes, how much, how long.</figcaption></figure>
+<div class="step"><div class="sn">1</div><div>The <b>To invoice</b> tile lists reports sent but not invoiced.</div></div>
+<div class="step"><div class="sn">2</div><div>Raise the invoice in Tide. Put the <b>WPS job number in the message line</b>.</div></div>
+<div class="step"><div class="sn">3</div><div>An <b>Invoice sent</b> card appears in the To review tray. Click <span class="k">Mark invoiced</span>.</div></div>
+<div class="step"><div class="sn">4</div><div>When the money arrives, open <b>Awaiting payment</b> and click <span class="k">Paid</span> on that job. The top of the panel shows each client's total and the oldest invoice; older than 30 days turns red.</div></div>
+<p class="small">More: section 5.</p>
+
+<h2>4.14 …read the news line?</h2>
+<figure><img src="img/n1_ticker.jpg"><figcaption><span class="n">1</span> Today's message. <span class="n">2</span> A headline, with the website's name in the coral box (made-up example).</figcaption></figure>
+<p>The moving line under the date takes turns: an encouraging message, then a headline from the inventory and lettings news (AIIC, Propertymark, Letting Agent Today, Landlord Today, Property118, Landlord Law Blog, The Negotiator). <b>Click or tap a headline</b> to read it in a new tab. Rest the mouse on the line to pause it. New headlines are fetched every hour. If a news site stops working for more than a day, a small line under it says which.</p>
+
+<h2>4.15 …use it on my phone?</h2>
+<div class="step"><div class="sn">1</div><div>First time only: open the address, tap <span class="k">Load my jobs from Google</span>, sign in as info@.</div></div>
+<div class="step"><div class="sn">2</div><div>Every time: tap <span class="k">Save &amp; get latest</span> (or <span class="k">Check everything now</span>).</div></div>
+<div class="step"><div class="sn">3</div><div>Swipe the tiles sideways to see them all. <span class="k">Menu ☰</span> opens the links and tools. The round coral <b>+</b> adds a job.</div></div>
+<p class="small">More: section 18.</p>
+
+<h2>4.16 …back up my jobs?</h2>
+<div class="step"><div class="sn">1</div><div>In the sidebar, under TOOLS, click <span class="k">More ▸</span>.</div></div>
+<div class="step"><div class="sn">2</div><div>Click <span class="k">Export backup</span>. A file goes into Downloads. Do it once a week.</div></div>
+<p>Don't use <span class="k">Import backup</span> unless Claude tells you to: it replaces the jobs on that device.</p>
+<p class="small">More: section 19.</p>
+<!-- ============ 3 DASHBOARD ============ -->
+<h1>5. The Dashboard</h1>
+<p class="part">Part 3. The full detail</p>
+<p>The Dashboard is the first page you see. It fits on one screen of the PC.</p>
+<figure><img src="img/n0_dashboard.jpg"><figcaption>The Dashboard. The numbers match the list below.</figcaption></figure>
+<table>
+  <tr><td style="width:6%"><span class="n">1</span></td><td><b>The news line.</b> Takes turns: an encouraging message, then an industry headline. Click a headline to read it (4.14).</td></tr>
+  <tr><td><span class="n">2</span></td><td><b>Check everything now.</b> Saves and gets the latest from the Google Sheet, checks new bookings, picks up reports that emailed themselves and loads amendments, in one click. It says <b>Checking…</b> while it works. A small coral number shows how many cards are waiting to review. <span class="k">+ New job</span> next to it logs a job by hand (section 9).</td></tr>
+  <tr><td><span class="n">3</span></td><td><b>Tiles</b>, in four groups: To do now, Waiting on others, Money, Performance. Each shows its number beside its name. Click a tile to show its list in box 7. A tile with nothing in it is faded.</td></tr>
+  <tr><td><span class="n">4</span></td><td><b>Do next.</b> What to do now, most urgent first, one button each (below).</td></tr>
+  <tr><td><span class="n">5</span></td><td><b>Today.</b> Today's jobs in time order, with the tenant, phone and notes under each, the weather, <span class="k">Plan my day</span> (section 17) and <span class="k">Today's route</span> (Google Maps with today's jobs in time order).</td></tr>
+  <tr><td><span class="n">6</span></td><td><b>Next 7 days</b> or <b>Map.</b> The coming week, a day per column, with <span class="k">Route</span> on each day that has jobs and + to add a job on that day. Days with nothing booked show "Free". <span class="k">Map</span> shows the jobs as pins instead (section 17). "2 with no date" opens the jobs still waiting for a date.</td></tr>
+  <tr><td><span class="n">7</span></td><td><b>The list panel.</b> Shows the list for whichever tile is selected. It shows up to 7 lines, then Show all. When you open the Dashboard it picks the most urgent tile that has something in it.</td></tr>
+  <tr><td><span class="n">8</span></td><td><b>Pages:</b> Dashboard, Job Log, Photo Tool, Dictation. Under them, <b>LINKS</b> (section 19).</td></tr>
+  <tr><td><span class="n">9</span></td><td><b>TOOLS:</b> saving to Google, Theme, Help hints, Manual, and <span class="k">More ▸</span> for backups and the calendar (section 19).</td></tr>
+</table>
+<h2>Do next and Park</h2>
+<figure><img src="img/n3_donext.jpg"><figcaption><span class="n">1</span> What needs doing. <span class="n">2</span> The job. <span class="n">3</span> Its button. <span class="n">4</span> Park.</figcaption></figure>
+<p>Do next puts everything that needs you in one list, in this order: tenant comments to review; reports overdue; a tenant has picked a mid-term time (<span class="k">Approve</span> / <span class="k">Decline</span>); visits passed but still at Booked (<span class="k">Mark visited</span> / <span class="k">Rearrange</span>); comment reminders due (<span class="k">Write email</span>); bookings from Gmail to check (<span class="k">Open tray</span>); reports due within a day; photos not done (<span class="k">Photo Tool</span>); times or dates to agree (mid-terms get <span class="k">Send slot link</span>); reports sent but not invoiced (<span class="k">See list</span>); invoices awaiting payment (<span class="k">See who owes</span>, red once the oldest is over 30 days). It shows 6 lines, then <span class="k">Show all</span>.</p>
+<p><span class="k">Park</span> takes a job off Do next until you un-park it. It still counts in the tiles and shows in every list. Parked jobs are listed at the bottom of Do next with an <span class="k">Un-park</span> button each.</p>
+<p>Everywhere on the Dashboard: click a job (the blue job number and address) to open it. Use a job's coloured stage box to change its stage (section 7). The page refreshes itself every 3 minutes, and when you come back to the tab, but never while a job form or Rearrange panel is open or you're typing.</p>
 
 <h2>Reports completed</h2>
 <figure class="narrow"><img src="img/c1_counter.jpg"><figcaption><span class="n">1</span> The counter under the date, on the Dashboard and the Job Log.</figcaption></figure>
@@ -174,14 +314,15 @@
 <figure><img src="img/c2_milestone.jpg"><figcaption>A milestone card. <span class="n">1</span> Thanks puts it away.</figcaption></figure>
 
 <h2>The tiles</h2>
-<figure><img src="img/d2_tiles.jpg"><figcaption>The tiles in their four groups.</figcaption></figure>
+<figure><img src="img/n2_tiles.jpg"><figcaption>The tiles: number first, then the name. On the phone they sit in one row you swipe sideways.</figcaption></figure>
 <table>
   <tr><th style="width:19%">Tile</th><th>What it counts</th><th style="width:30%">What to do</th></tr>
   <tr><td colspan="3" style="background:#F5F7FB"><b>To do now</b></td></tr>
-  <tr><td><b>Reports due</b></td><td>Jobs you've visited whose report hasn't been sent, soonest first. The line underneath shows how many are overdue and how many are "to confirm" (still at Booked after the visit time).</td><td>Confirm visits or rearrange them (section 4); write the reports and move them on.</td></tr>
+  <tr><td><b>Reports due</b></td><td>Jobs you've visited whose report hasn't been sent, soonest first. The line underneath shows how many are overdue and how many are "to confirm" (still at Booked after the visit time).</td><td>Confirm visits or rearrange them (section 6); write the reports and move them on.</td></tr>
   <tr><td><b>Times to agree</b></td><td>Booked jobs with no time set (today or later, or no date). Rearranged jobs waiting on a new date show a <b>Rearranged</b> tag.</td><td>Agree a time, open the job, add it.</td></tr>
   <tr><td><b>Photos not done</b></td><td>Jobs visited in the last 30 days, report not sent, no photo link saved.</td><td>Run the Photo Tool for them, or paste a link into the job.</td></tr>
-  <tr><td><b>New bookings</b></td><td>Cards from the inbox check you haven't dealt with (bookings and Tide invoices). Shows "–" with "not checked" until you click Check everything now.</td><td>Check everything now, then work through the tray (section 8).</td></tr>
+  <tr><td><b>Mid-terms</b></td><td>Mid-terms at Booked with no date (or rearranged). The line underneath shows how many tenants have picked a time.</td><td>Send slot links; approve or decline picks (section 16).</td></tr>
+  <tr><td><b>New bookings</b></td><td>Cards from the inbox check you haven't dealt with (bookings and Tide invoices). Shows "–" with "not checked" until you click Check everything now.</td><td>Check everything now, then work through the tray (section 10).</td></tr>
   <tr><td colspan="3" style="background:#F5F7FB"><b>Waiting on others</b></td></tr>
   <tr><td><b>Out for signature</b></td><td>Inventory and check-in reports at Sent, waiting for signatures.</td><td>Set to Signed when the signed copy arrives.</td></tr>
   <tr><td><b>Comment windows</b></td><td>The 7-day comment window on each sent check-in report. The line underneath shows reminders due.</td><td>Section 11.</td></tr>
@@ -213,10 +354,11 @@
 </figure>
 
 <h2>Marking an invoice Paid</h2>
-<figure><img src="img/d10_paid.jpg"><figcaption>Awaiting payment: <span class="n">1</span> Paid.</figcaption></figure>
-<p>Click <span class="k">Paid</span> and the job is marked Paid with today's date. An Undo bar shows for 8 seconds in case you clicked the wrong one (section 5). <span class="k">Open in Job Log</span> shows the same jobs in the full list.</p>
+<figure><img src="img/n7_money.jpg"><figcaption>Awaiting payment: who owes what at the top, then each invoice with its Paid button.</figcaption></figure>
+<p>At the top, one line per client: how many invoices, the total (from the amount on the Tide card) and how long the oldest has been waiting; over 30 days shows red. The To invoice panel has the same summary for reports not yet invoiced.</p>
+<p>Click <span class="k">Paid</span> and the job is marked Paid with today's date. An Undo bar shows for 8 seconds in case you clicked the wrong one (section 7). <span class="k">Open in Job Log</span> shows the same jobs in the full list.</p>
 <!-- ============ 4 MISSED VISITS ============ -->
-<h1>4. Missed visits: Mark visited and Rearrange</h1>
+<h1>6. Missed visits: Mark visited and Rearrange</h1>
 <p>Click the <b>Reports due</b> tile. The list has two parts:</p>
 <figure><img src="img/d8_due.jpg"><figcaption>Reports due: visits to confirm at the top, reports to write underneath.</figcaption></figure>
 <ul>
@@ -248,16 +390,16 @@
 </ul>
 
 <!-- ============ 5 STAGES ============ -->
-<h1>5. Job stages and Undo</h1>
-<p>Every job has a stage, shown as a coloured box (on the Dashboard, in the Job Log and in the job form). Click the box and pick the stage you want. You can go forwards or backwards in one go.</p>
+<h1>7. Job stages and Undo</h1>
+<p>Every job has a stage, shown as a coloured box (on the Dashboard, in the Job Log and in the job form). Click the box and pick the stage you want. You can go forwards or backwards in one go. In the Job Log's Board view you can also drag a job's card to another column (section 8).</p>
 <table>
   <tr><th style="width:20%">Stage</th><th>Means</th><th style="width:34%">Move it here when…</th></tr>
   <tr><td><span class="stage" style="background:#FBE7E1;color:#C8553A">Booked</span></td><td>In the diary, not visited yet.</td><td>Automatic for new jobs.</td></tr>
   <tr><td><span class="stage" style="background:#FFF1D0;color:#8A5A00">Processing</span></td><td>Visited, report being written.</td><td>You've done the visit (stage box or Mark visited).</td></tr>
   <tr><td><span class="stage" style="background:#E7EAF3;color:#4A5B8A">Completed</span></td><td>Report written, not sent yet.</td><td>The report is finished.</td></tr>
-  <tr><td><span class="stage" style="background:#C9D6E8;color:#1F2D5A">Sent</span></td><td>Report has gone out. The sent date is recorded. For check-ins, the 7-day comment window starts. The job also joins "To invoice".</td><td>Set by itself when the auto-send emails it (section 9). Otherwise, the day you send it (or send it for signature).</td></tr>
+  <tr><td><span class="stage" style="background:#C9D6E8;color:#1F2D5A">Sent</span></td><td>Report has gone out. The sent date is recorded. For check-ins, the 7-day comment window starts. The job also joins "To invoice".</td><td>Set by itself when the auto-send emails it (section 11). Otherwise, the day you send it (or send it for signature).</td></tr>
   <tr><td><span class="stage" style="background:#E0F0E6;color:#2E6B45">Signed</span></td><td>Check-in report signed.</td><td>The signed copy comes back, from Acrobat or the WPS signing page. The Dashboard can't see either yet, so this is always your choice in the box.</td></tr>
-  <tr><td><span class="stage" style="background:#E0F0E6;color:#2E6B45">Deemed agreed</span></td><td>Check-in window closed with no signature and no open comments.</td><td>You don't: it's set by itself (section 11).</td></tr>
+  <tr><td><span class="stage" style="background:#E0F0E6;color:#2E6B45">Deemed agreed</span></td><td>Check-in window closed with no signature and no open comments.</td><td>You don't: it's set by itself (section 13).</td></tr>
   <tr><td><span class="stage" style="background:#EEF0F3;color:#7A8493">Archived</span></td><td>Finished and filed. Drops off the Dashboard lists.</td><td>The job is fully done.</td></tr>
 </table>
 <div class="tip"><b>Check-outs, mid-terms, schedules and clean checks aren't signed.</b> Once they're sent and invoiced, pick Archived in the box.</div>
@@ -271,23 +413,33 @@
 <p>If lots of jobs show as overdue, it's usually because reports were sent but their stage wasn't changed. Set each one to Sent (or further) and the count drops. Reports emailed by the auto-send are set to Sent for you.</p>
 
 <!-- ============ 6 JOB LOG ============ -->
-<h1>6. The Job Log</h1>
+<h1>8. The Job Log: List, Board, Calendar</h1>
 <p>Click <span class="k">Job Log</span> in the sidebar. It shows every job, with the ones needing a report first, then the newest.</p>
 <figure><img src="img/j1_log.jpg"><figcaption>The Job Log as a list.</figcaption></figure>
 <table>
   <tr><td style="width:6%"><span class="n">1</span></td><td><b>Count cards.</b> How many jobs at each stage, plus Reports overdue, To invoice and Awaiting payment. Click a card to show only those jobs. Click it again to show all.</td></tr>
-  <tr><td><span class="n">2</span></td><td><b>List / Calendar.</b> Switch between the list and a month calendar.</td></tr>
+  <tr><td><span class="n">2</span></td><td><b>List / Board / Calendar.</b> Three ways to see the same jobs: a list, a board with a column per stage, or a month calendar.</td></tr>
   <tr><td><span class="n">3</span></td><td><b>Search.</b> Type part of an address, postcode, agent, tenant name or email, job number or invoice number.</td></tr>
   <tr><td><span class="n">4</span></td><td><b>Filters.</b> Show one job type, one agent or one month.</td></tr>
   <tr><td><span class="n">5</span></td><td><b>Stage box.</b> Pick the stage. The line underneath says when the report is due, or "Visit done? Move to Processing" once the visit time has passed.</td></tr>
   <tr><td><span class="n">6</span></td><td><b>Invoice box.</b> Pick Not invoiced, Invoiced or Paid. It shows "To invoice" in coral once the report is sent. Undo shows for 8 seconds.</td></tr>
   <tr><td><span class="n">7</span></td><td><b>Pencil.</b> Open and edit the job.</td></tr>
   <tr><td><span class="n">8</span></td><td><b>Bin.</b> Delete the job. It asks first. There's no undo, and it also removes the calendar entry.</td></tr>
-  <tr><td><span class="n">9</span></td><td><b>Calendar icon</b> (only when the calendar is connected). Puts the job on the info@ calendar, or updates it. Blue = already on the calendar.</td></tr>
+  <tr><td></td><td><b>Calendar icon</b> (last on each row) (only when the calendar is connected). Puts the job on the info@ calendar, or updates it. Blue = already on the calendar.</td></tr>
   <tr><td><span class="n">10</span></td><td><b>Finished.</b> Jobs that are paid and whose report is done (check-ins at Signed, Deemed agreed or Archived; other jobs at Sent or later). They're hidden from the main list so it stays short. Click the card to see them. Search still finds them.</td></tr>
 </table>
 <p>The Job Log keeps your place: open a job, close it, and the list is where you left it. <span class="k">Check for new bookings</span> (top right) does the bookings part of Check everything now.</p>
 <p class="small">"Finished" is not the same as the "Completed" stage: Completed means the report is written but not sent.</p>
+
+<h2>Board view</h2>
+<figure><img src="img/n11_board.jpg"><figcaption><span class="n">1</span> One column per stage, with how many jobs. <span class="n">2</span> A job card. <span class="n">3</span> Its stage box.</figcaption></figure>
+<p>Click <span class="k">Board</span>. Each column is a stage: Booked, Processing, Completed, Sent, Signed, Deemed agreed (Archived only when you've clicked the Archived card). Cards are in the same order as the list, report due first. Each card shows the job number, type, address, date, time, agent, when the report is due, and whether it's to invoice. Overdue cards are red.</p>
+<ul>
+  <li><b>On the PC:</b> drag a card into another column to move it to that stage.</li>
+  <li><b>On the phone:</b> pick the stage from the box on the card.</li>
+  <li>Click the address to open the job. The Undo bar shows after every move. The search box and filters work on the board too.</li>
+</ul>
+<figure><img src="img/n12_help_board.jpg"><figcaption>The Board's help box (Help hints on).</figcaption></figure>
 
 <h2>Calendar view</h2>
 <figure><img src="img/j4_calendar.jpg"><figcaption>The month calendar. Each job is coloured by its stage.</figcaption></figure>
@@ -296,17 +448,17 @@
 <span class="n">4</span> Click a job to open it. Hover over it on the PC to see the full address.</p>
 
 <!-- ============ 7 ADD / EDIT ============ -->
-<h1>7. Adding and editing a job</h1>
+<h1>9. Adding and editing a job</h1>
 <p>Click <span class="k">+ New job</span> (top right of the Dashboard or Job Log), the + on a day, or an empty calendar day. To change a job, click its address or the pencil. The same form opens either way.</p>
 <figure><img src="img/j2_form.jpg"><figcaption>An existing job open in the form.</figcaption></figure>
 <table>
   <tr><td style="width:6%"><span class="n">1</span></td><td><b>Paste box.</b> Paste the agent's booking email and click <span class="k">Extract job details</span>. It fills in the date, address, postcode and job type it can find. It works best when the address and postcode sit on their own line. Always check what it fills in.</td></tr>
   <tr><td><span class="n">2</span></td><td><b>Job number.</b> Fills itself: WPS + year + month + number, e.g. WPS261015. Numbers are never reused, even after a delete. You can type over it (e.g. for an old Parker number).</td></tr>
   <tr><td><span class="n">3</span></td><td><b>Status.</b> The stage, the same as the stage box in the lists.</td></tr>
-  <tr><td><span class="n">4</span></td><td><b>Invoice</b> and <b>Invoice number</b> (from Tide). Usually filled by Mark invoiced (section 8).</td></tr>
+  <tr><td><span class="n">4</span></td><td><b>Invoice</b> and <b>Invoice number</b> (from Tide). Usually filled by Mark invoiced (section 10).</td></tr>
   <tr><td><span class="n">5</span></td><td><b>Agent / client.</b> Pick from the list. Choose <b>+ Add new agent…</b> at the bottom to add one. The box underneath shows that agent's saved contact; <b>Edit agent contact details</b> changes it for every job with that agent.</td></tr>
-  <tr><td><span class="n">6</span></td><td><b>Tenants.</b> One row per tenant: name, phone, email. <span class="k">+ Add tenant</span> adds a row (up to 6); ✕ removes one. The emails get the signing links on check-ins (section 10), the 7-day reminder and the Rearrange emails. A tenant email that doesn't look right stops the save until it's fixed. Older jobs that had tenants typed as one line are split into rows for you, with a pink "Split from the old text" line: check the rows, then save.</td></tr>
-  <tr><td><span class="n">7</span></td><td><b>Copy to (agent / landlord).</b> Tick who gets the reports the auto-send emails (unless a client rule says otherwise, section 9) and the "amendments in progress", "signed" and "deemed agreed" emails. The job's agent's contacts are listed first; <b>Other contacts</b> folds the rest away. <span class="k">+ Add contact</span> saves a new name and email and ticks it. <span class="k">Remove contacts</span> lets you delete saved contacts (jobs that already copy to them keep the address). The line underneath says who will get the emails; with nothing ticked they go to the agent's saved email.</td></tr>
+  <tr><td><span class="n">6</span></td><td><b>Tenants.</b> One row per tenant: name, phone, email. <span class="k">+ Add tenant</span> adds a row (up to 6); ✕ removes one. The emails get the signing links on check-ins (section 12), the 7-day reminder and the Rearrange emails. A tenant email that doesn't look right stops the save until it's fixed. Older jobs that had tenants typed as one line are split into rows for you, with a pink "Split from the old text" line: check the rows, then save.</td></tr>
+  <tr><td><span class="n">7</span></td><td><b>Copy to (agent / landlord).</b> Tick who gets the reports the auto-send emails (unless a client rule says otherwise, section 11) and the "amendments in progress", "signed" and "deemed agreed" emails. The job's agent's contacts are listed first; <b>Other contacts</b> folds the rest away. <span class="k">+ Add contact</span> saves a new name and email and ticks it. <span class="k">Remove contacts</span> lets you delete saved contacts (jobs that already copy to them keep the address). The line underneath says who will get the emails; with nothing ticked they go to the agent's saved email.</td></tr>
   <tr><td><span class="n">8</span></td><td><b>Photo link.</b> Saved by the Photo Tool, or paste a link (e.g. Dropbox) by hand. The auto-send puts it in the report email. <span class="k">Open</span> opens it, <span class="k">Copy</span> copies it for the report email. It must start with http:// or https://. Clear the box and save to remove it. A link the Photo Tool saves while the form is open is kept, unless you changed the box.</td></tr>
   <tr><td><span class="n">9</span></td><td><b>Delete job</b> (existing jobs only). Asks first, removes the calendar event too, can't be undone. To keep a record, set Status to Archived instead.</td></tr>
   <tr><td><span class="n">10</span></td><td><b>Save job</b> (or <b>Save changes</b>). If the calendar is connected, the job goes on the info@ calendar too. <span class="k">Cancel</span>, the browser's Back button or the <span class="k">Esc</span> key close it without saving. If you've changed anything, it asks first: OK throws the changes away, Cancel keeps you editing. Leaving for another page or closing the tab with unsaved changes also asks first.</td></tr>
@@ -320,7 +472,7 @@
 <p>Click it the day you re-send. The job goes back to Sent and a new 7-day window starts, covering the changed items only. The original sent date is kept, so turnaround figures aren't affected.</p>
 
 <!-- ============ 8 BOOKINGS ============ -->
-<h1>8. The To review tray: bookings, invoices, sent reports</h1>
+<h1>10. The To review tray</h1>
 <p>Three times a day (7:51, 12:51 and 15:51, Monday to Saturday) Claude reads the info@ inbox (mail to every WPS and old Wellington Parker address lands there) and lines up:</p>
 <ul>
   <li><b>New bookings</b>, including short requests like "check-in at 402a on the 17th" (the month, address and postcode are completed from the sender's older emails and flagged).</li>
@@ -345,8 +497,8 @@
 
 
 <!-- ============ 9 AUTO-SEND ============ -->
-<h1>9. Sending reports automatically</h1>
-<p>Check-outs, mid-terms and schedules of condition are emailed for you. Inventories and check-ins go out through the signing page (section 10). You only save the finished PDF into one folder.</p>
+<h1>11. Sending reports automatically</h1>
+<p>Check-outs, mid-terms and schedules of condition are emailed for you. Inventories and check-ins go out through the signing page (section 12). You only save the finished PDF into one folder.</p>
 
 <h2>How to send a report</h2>
 <div class="step"><div class="sn">1</div><div>Check the job in the Job Log: right <b>client</b>, <b>type</b>, address and postcode, and a <b>photo link</b>. On a check-in, check the tenant rows have emails.</div></div>
@@ -382,8 +534,8 @@
 <div class="tip"><b>The first real auto-sent report hasn't been checked end to end yet.</b> When it goes, check info@'s Sent mail (from reports@, to the right person), the Report sends tab, that the PDF is in Sent, and that the job shows Sent after Check everything now.</div>
 
 <!-- ============ 10 SIGNING PAGE ============ -->
-<h1>10. The check-in signing page</h1>
-<p>Inventory and check-in reports are signed on WPS's own signing page instead of Acrobat. It went live on 18 October 2026, 01:38. You send a check-in the same way as any other report: save the PDF into <b>WPS Ready to send</b> (section 9).</p>
+<h1>12. The check-in signing page</h1>
+<p>Inventory and check-in reports are signed on WPS's own signing page instead of Acrobat. It went live on 18 October 2026, 01:38. You send a check-in the same way as any other report: save the PDF into <b>WPS Ready to send</b> (section 11).</p>
 
 <h2>Before you save the PDF</h2>
 <ul>
@@ -391,7 +543,7 @@
   <li>The <b>client</b> is right. Clients whose name starts with Winkworth, Move Lettings, McQueens, Chestertons or JAGS are letting agents: they get a copy, they don't sign. Any other client is treated as a <b>private landlord</b>, who signs too and needs an email on the Clients tab. To skip the landlord, put <b>Landlord signs: no</b> in the job notes.</li>
   <li>The report is made from the <b>ICI_2</b> template and its <b>last page is the Declaration</b> with the six Name / Signature / Date rows. Not password-protected.</li>
 </ul>
-<p>If any of these isn't right, the PDF is held and info@ is told why, as in section 9.</p>
+<p>If any of these isn't right, the PDF is held and info@ is told why, as in section 11.</p>
 
 <h2>What happens</h2>
 <div class="step"><div class="sn">1</div><div>Each tenant (and a private landlord) gets <b>their own email</b> from reports@ with the report attached and a <b>Review and sign the report</b> button. Each link works only for that person, so tenants are never copied in on each other's emails. The email also gives the comments form link and the date the 7-day window closes.</div></div>
@@ -405,29 +557,29 @@
 <p>The <b>Signings</b> tab in the WPS Amendments Sheet has one row per signer: when the link was sent, first opened, signed, and how (typed or drawn).</p>
 <ul>
   <li><b>Need to send a corrected report?</b> Put <b>RESEND</b> in the file name and save it into the folder again. A new signing round starts and the old links stop working.</li>
-  <li><b>Nobody signs and no comments are open?</b> Deemed agreed works as before (section 11).</li>
+  <li><b>Nobody signs and no comments are open?</b> Deemed agreed works as before (section 13).</li>
   <li>If the signed copy can't be made, info@ gets "Signed copy NOT finished" with what to do. Tell Claude.</li>
 </ul>
 <div class="tip"><b>The first real check-in on the signing page hasn't been watched end to end yet.</b> Tell Claude when you save it, and Claude will check info@'s Sent mail (one email per tenant, and the agent's copy) and the Signings tab.</div>
 <p class="small">Acrobat stays available (sidebar link) for anything the signing page can't take, for example more than 6 tenants.</p>
 <!-- ============ 11 WINDOWS ============ -->
-<h1>11. Comment windows, reminders and amendments</h1>
+<h1>13. Comment windows and amendments</h1>
 <p>This only applies to inventory and check-in reports. Tenants have 7 days from when the report is sent to send comments through the comments form. If they don't comment or sign, the report is deemed agreed.</p>
 
 <h2>The Comment windows tile</h2>
 <figure><img src="img/d3_windows.jpg"><figcaption>Each sent check-in report with its window: when it was sent, when it closes, days left.</figcaption></figure>
 <p>Each line shows when the report was sent and when the window closes. Amber means 2 days or less left.</p>
-<p><b>The 7-day reminder.</b> At 9am each day the reminder email to tenants goes out by itself from reports@ for any check-in with 2 days or less left, as long as the job has tenant emails. Check-ins sent through the signing page get the signing page's own reminder instead (section 10). The line then says "Reminder sent automatically" and you don't need to do anything.</p>
+<p><b>The 7-day reminder.</b> At 9am each day the reminder email to tenants goes out by itself from reports@ for any check-in with 2 days or less left, as long as the job has tenant emails. Check-ins sent through the signing page get the signing page's own reminder instead (section 12). The line then says "Reminder sent automatically" and you don't need to do anything.</p>
 <p>If it hasn't gone (for example no tenant emails were on the job), <span class="n">1</span> a coral <span class="k">Reminder due: write email</span> button appears. It opens a ready-written reminder in Gmail, addressed to the tenant emails on the job. Pick reports@ as the From address, check it and send. The line then says "Reminder sent" with an undo link if you clicked by mistake.</p>
 
 <h2>When the window closes</h2>
 <figure><img src="img/d4_windows_hold.jpg"><figcaption>After the window: one report on hold because comments are open.</figcaption></figure>
 <ul>
   <li><b>No comments open:</b> the job moves to Deemed agreed by itself. To be safe this only happens when the amendments were loaded in the last 30 minutes, so a job with comments waiting is never deemed agreed by mistake. With Google signed in, the page re-reads the amendments quietly when it refreshes.</li>
-  <li><b>Comments still open:</b> it shows <b>On hold: amendments</b>. Deal with the comments, re-send, and click Re-issued today on the job (section 7).</li>
+  <li><b>Comments still open:</b> it shows <b>On hold: amendments</b>. Deal with the comments, re-send, and click Re-issued today on the job (section 9).</li>
   <li><b>Not checked yet:</b> "Deemed agreed (pending)" means the amendments haven't been loaded recently. Click Check everything now, or the Amendments tile and Load amendments.</li>
 </ul>
-<p>The automatic emails to the agent or landlord (the job's Copy to) are covered in section 16.</p>
+<p>The automatic emails to the agent or landlord (the job's Copy to) are covered in section 20.</p>
 
 <h2>The Amendments tile</h2>
 <p>Click the tile, then <span class="k">Load amendments</span> (Check everything now does this too). Google may ask you to sign in. It reads the WPS Amendments Sheet and lists every job with tenant comments still open:</p>
@@ -440,7 +592,7 @@
 <span class="k">Amendments Sheet</span> opens the raw list. <span class="k">Refresh</span> reads it again.</p>
 
 <!-- ============ 12 PHOTO TOOL ============ -->
-<h1>12. The Photo Tool</h1>
+<h1>14. The Photo Tool</h1>
 <p>Use it on the <b>PC</b>, after a day of visits. It does four things for each job: splits the day's photos into jobs, names them by room, adds the watermark, and makes one zip per job. Everything happens on the PC. <b>Your original photos are never changed.</b></p>
 <p><b>Your work is kept.</b> You can go to the Dashboard or another page and come back, or close and reopen the tab: the photos, sets and rooms you've marked are kept on that device until you click Start again. The page shows <b>Kept on this device ✓ — safe to switch pages</b>.</p>
 <div class="tip"><b>Before you start:</b> open the Photo Tool from the sidebar, in the same Chrome you use for the Job Log, so it can see your jobs. On the iPhone, set Settings › Camera › Formats to <b>Most Compatible</b> so it shoots JPG. HEIC photos work but lose their "time taken", which the tool relies on.</div>
@@ -490,7 +642,7 @@
 <figure><img src="img/p5_done.jpg"><figcaption><span class="n">1</span> The photo link. <span class="n">2</span> Copy link.</figcaption></figure>
 <ul>
   <li>The zip and the cover photo are in your <b>Downloads</b> folder.</li>
-  <li>The <b>photo link</b> is saved to the job in the Job Log by itself, which clears it from the "Photos not done" tile. You can see it, open it and copy it in the job form too (section 7). <span class="k">Copy link</span> copies it for the report.</li>
+  <li>The <b>photo link</b> is saved to the job in the Job Log by itself, which clears it from the "Photos not done" tile. You can see it, open it and copy it in the job form too (section 9). <span class="k">Copy link</span> copies it for the report.</li>
   <li>The link is only saved to the job when the job was <b>picked from the Job Log list</b>. If you typed the job number by hand, paste the link into the job form yourself.</li>
   <li>The tool doesn't upload the zip. Put it on the photos server as you do now, so the link works.</li>
 </ul>
@@ -509,8 +661,8 @@
 </ul>
 
 <!-- ============ 13 DICTATION ============ -->
-<h1>13. Dictation</h1>
-<p>Use it on the <b>phone</b> during a visit. Open it from <span class="k">Dictation</span> under LINKS in the sidebar (on the phone, it's under <span class="k">Menu ☰</span>). Add it to the home screen so it opens like an app. The notes are kept <b>on that phone only</b>, until you copy them out.</p>
+<h1>15. Dictation</h1>
+<p>Use it on the <b>phone</b> during a visit. Open it from <span class="k">Dictation</span> in the sidebar (on the phone, in the bar along the top). Add it to the home screen so it opens like an app. The notes are kept <b>on that phone only</b>, until you copy them out.</p>
 <figure class="phone">
   <div><img src="img/x1_dictate.jpg"><figcaption>The job and the rooms.</figcaption></div>
   <div><img src="img/x2_dictate_room.jpg"><figcaption>Dictating a room.</figcaption></div>
@@ -553,9 +705,53 @@
 </ul>
 <div class="warn">The microphone needs permission the first time. If the phone asks, tap Allow. The live text comes from the phone's own speech recognition, which usually needs a signal.</div>
 
+<!-- ============ 16 MID-TERMS ============ -->
+<h1>16. Mid-terms and the tenant slot link</h1>
+<p>Instead of phoning or emailing back and forth to agree a mid-term time, you send the tenant a link. They see only the times you're free and pick one. You approve it. Nothing is booked without your click.</p>
+<figure><img src="img/n5_mid.jpg"><figcaption>Mid-terms to book. <span class="n">1</span> Change the days and hours. <span class="n">2</span> Approve. <span class="n">3</span> Decline. <span class="n">4</span> Send slot link. <span class="n">5</span> Check for picks now.</figcaption></figure>
+<h2>Where to find it</h2>
+<p>The <b>Mid-terms</b> tile on the Dashboard opens the <b>Mid-terms to book</b> panel: every mid-term at Booked with no date, or rearranged, or with a link out. Picks waiting for you come first ("Tenant picked a time, approve or decline"), then "Need a date". Picks also show in Do next. The panel needs Google sign-in: if it says so, click <span class="k">Save &amp; get latest</span> in the sidebar.</p>
+<h2>What each row says</h2>
+<table>
+  <tr><th style="width:34%">Row says</th><th>Buttons</th></tr>
+  <tr><td>No link sent</td><td><span class="k">Send slot link</span>: makes the tenant's own link and opens the email in Gmail, to the tenant emails on the job, CC bowpropman@winkworth.co.uk. Check and send it in Gmail. No tenant email on the job? It asks first, and the email opens with To blank.</td></tr>
+  <tr><td>Link sent (date), no pick yet</td><td><span class="k">Send again</span>: the same email and link again, as a chaser. <span class="k">Copy link</span>: copies the link, e.g. for WhatsApp.</td></tr>
+  <tr><td>Picked (day, time) · will be there / use keys</td><td><span class="k">Approve</span> or <span class="k">Decline</span>. Rest the mouse on the line to see the tenant's name, phone and note.</td></tr>
+  <tr><td>Declined, waiting for a new pick</td><td>Send again / Copy link, as above.</td></tr>
+</table>
+<h2>What the tenant sees</h2>
+<p>A WPS page with the property address and the free 30-minute times. A time is free when it's inside your days and hours, not a bank holiday, not clashing with anything in the info@ calendar, and leaves time to drive from and to your other visits (Google's road time between postcodes, or the travel buffer when a calendar entry has no postcode). A time another tenant has picked but you haven't approved is held. They choose a time and say <b>I will be there</b>, <b>Please use the keys</b> or <b>Someone else will let you in</b>, with a name, phone and note if they like. You get a short email at info@ when they pick.</p>
+<h2>Approve or decline</h2>
+<ul>
+  <li><span class="k">Approve</span> asks you to confirm, then sets the job's date and time, adds a line to the notes (the time, how they'll let you in, name, phone, note), adds the phone to the tenants if it's new, puts it in the calendar, and opens the confirmation email in Gmail for you to send. If they said keys, the email says the inspection goes ahead even if nobody is home.</li>
+  <li><span class="k">Decline</span> asks you to confirm, frees the time, and opens an email asking them to pick another time from the same link.</li>
+  <li>If something goes wrong, a message says so and nothing on the job is changed.</li>
+</ul>
+<h2>Settings: which times tenants can pick</h2>
+<figure><img src="img/n6_slotset.jpg"><figcaption><span class="n">1</span> Days. <span class="n">2</span> From and to. <span class="n">3</span> How far ahead. <span class="n">4</span> Travel buffer. <span class="n">5</span> Save.</figcaption></figure>
+<p>Click <span class="k">Change</span> on the "Tenants can pick" line. Set the days, the hours (30-minute slots; the last one starts 30 minutes before the finish), the earliest (working days from today) and latest (days ahead), and the travel buffer. Click <span class="k">Save</span>. The settings are saved to the Job Log Sheet, so every device and the tenant page use the same ones. Starting settings: Monday to Friday, 10:00 to 15:00, from 2 working days to 14 days ahead, 30 minutes buffer.</p>
+<div class="tip"><b>Not yet tried with a real tenant.</b> The first time, try it with a test mid-term and your own email (use Copy link, so nothing goes to the agent).</div>
+<!-- ============ 17 PLAN MY DAY ============ -->
+<h1>17. Plan my day, Route and Map</h1>
+<h2>Plan my day</h2>
+<p>Click <span class="k">Plan my day</span> in the Today box, or <span class="k">Route</span> on a day in Next 7 days. A card opens under the week.</p>
+<figure><img src="img/n9_plan.jpg" style="width:72%;margin:0 auto"><figcaption><span class="n">1</span> Change where you start and finish. <span class="n">2</span> Total miles and driving. <span class="n">3</span> Open in Google Maps.</figcaption></figure>
+<ul>
+  <li><b>The order.</b> Jobs with a time stay in time order. Jobs with no time are put where they add the least driving (a line says so).</li>
+  <li><b>Each leg</b> shows miles, drive time and when to leave. "May be late" in red means the time allowed at the job before isn't enough.</li>
+  <li><b>Time at each job</b> (including parking and getting in): ICI, CO and SOC 1 h 30, MTI 30 min, clean check 1 h. If the first job has no time, you leave home at 08:30.</li>
+  <li><b>Road times with traffic.</b> When you're signed in to Google (Save &amp; get latest), the times come from Google Maps with the traffic expected at that time of day. Otherwise they're straight-line estimates and say "about". A day that has passed gets normal times.</li>
+  <li><b>Start and finish</b> is Grays. <span class="k">Change</span> lets you type another postcode; blank goes back to Grays. It's kept on that device only.</li>
+  <li>The total gives the day's mileage. <span class="k">Open in Google Maps</span> gives turn-by-turn directions (first 9 stops). A job with no postcode is listed as "Not placed".</li>
+  <li>Pick another day from the box at the top. <span class="k">Close</span> puts the card away.</li>
+</ul>
+<h2>The Map</h2>
+<p>In the Next 7 days box, click <span class="k">Map</span>. Upcoming jobs show as pins coloured by type (ICI blue, CO red, MTI amber, SOC purple, CLN green). Pick <b>Next 7 days</b>, <b>Next 30 days</b> or <b>Times to agree</b> from the box. Click a pin to see the job and open it. Use it to offer a tenant a day when you're already nearby. <span class="k">Days</span> goes back to the list.</p>
+<p class="small">The map comes from OpenStreetMap and the postcode positions from postcodes.io. Only postcodes are sent, never names. It needs the internet; if the map can't load, the list still works.</p>
+<figure><img src="img/n8_week.jpg"><figcaption>Next 7 days: <span class="n">1</span> Route for that day. <span class="n">2</span> Map. <span class="n">3</span> + adds a job on that day.</figcaption></figure>
 <!-- ============ 14 PHONE ============ -->
-<h1>14. Using it on your phone</h1>
-<p>The Dashboard and Job Log work on the phone and tablet. The sidebar folds into a bar at the top, the tiles sit three across, and each job in the Job Log shows as a card. Rearrange, Paid, Mark visited and the job form (tenant rows, Copy to, photo link, Delete job) all work on the phone.</p>
+<h1>18. Using it on your phone</h1>
+<p>The Dashboard and Job Log work on the phone and tablet. The sidebar folds into a bar at the top with the four pages, the tiles sit in one row you swipe sideways, each job in the Job Log shows as a card, and a round coral <b>+</b> in the corner adds a job. Rearrange, Paid, Mark visited and the job form (tenant rows, Copy to, photo link, Delete job) all work on the phone.</p>
 <figure class="phone">
   <div><img src="img/m1_phone_dash.jpg"><figcaption>Dashboard on the phone.</figcaption></div>
   <div><img src="img/m2_phone_menu.jpg"><figcaption>Menu ☰ opened.</figcaption></div>
@@ -574,10 +770,11 @@
   <li><span class="n">2</span> <span class="k">Menu ☰</span> opens the links and tools. <span class="k">Close ✕</span> folds them away.</li>
   <li>In the Today box, tap a tenant's phone number to call it.</li>
 </ul>
+<figure class="narrow"><img src="img/n20_phone.jpg" style="width:46%"><figcaption><span class="n">1</span> The news line. <span class="n">2</span> Tiles: swipe sideways. <span class="n">3</span> Do next, with the buttons above each job.</figcaption></figure>
 <p class="small">The Photo Tool is meant for the PC (big batches of photos and downloads). Dictation is meant for the phone.</p>
 
 <!-- ============ 15 SIDEBAR ============ -->
-<h1>15. The sidebar menu</h1>
+<h1>19. The sidebar menu</h1>
 <div class="two sidebar-sec">
 <div>
 <h2 style="margin-top:0">Pages</h2>
@@ -585,12 +782,12 @@
   <tr><td style="width:36%"><b>Dashboard</b></td><td>The overview of what needs doing.</td></tr>
   <tr><td><b>Job Log</b></td><td>Every job, list or calendar.</td></tr>
   <tr><td><b>Photo Tool</b></td><td>Photos to zips.</td></tr>
+  <tr><td><b>Dictation</b></td><td>Voice notes, for the phone.</td></tr>
 </table>
 <h2>LINKS</h2>
 <p class="small">Shown on the Dashboard. Links to other sites open in a new tab.</p>
 <table>
-  <tr><td style="width:36%"><b>Dictation</b></td><td>Voice notes, for the phone.</td></tr>
-  <tr><td><b>Amendments review</b></td><td>Your page for deciding tenant comments.</td></tr>
+  <tr><td style="width:36%"><b>Amendments review</b></td><td>Your page for deciding tenant comments.</td></tr>
   <tr><td><b>Amendments form</b></td><td>The form tenants fill in (the link that goes in the Acrobat email).</td></tr>
   <tr><td><b>Acrobat (e-sign)</b></td><td>Send check-in reports for signature.</td></tr>
   <tr><td><b>Gmail (info@)</b></td><td>The info@ inbox.</td></tr>
@@ -602,29 +799,28 @@
 </div>
 <div>
 <h2 style="margin-top:0">TOOLS</h2>
-<figure style="margin-top:0"><img src="img/h2_help_sidebar.jpg" style="width:46%;margin:0 auto"><figcaption>The TOOLS list (Help hints on).</figcaption></figure>
+<figure style="margin-top:0"><img src="img/n10_more.jpg" style="width:46%;margin:0 auto"><figcaption>TOOLS with More opened: <span class="n">1</span> More. <span class="n">2</span> Export backup. <span class="n">3</span> Import backup. <span class="n">4</span> Calendar.</figcaption></figure>
 <table>
   <tr><td style="width:40%"><b>Saved to Google ✓</b> (status line)</td><td>When the last save to Google happened. "Saving to Google…" while it saves. Coral text (e.g. "Google copy: click Save &amp; get latest" or "Not backed up to Google") means something needs attention: click Save &amp; get latest.</td></tr>
   <tr><td><b>Save &amp; get latest</b></td><td>Saves to Google and loads changes made on other devices. If both changed, it asks which copy to keep.</td></tr>
-  <tr><td><b>Theme</b></td><td>Classic, Light or Night colours on this device, for every page (section 3).</td></tr>
-  <tr><td><b>Export backup</b></td><td>Saves every job to a file in Downloads. Do it weekly.</td></tr>
-  <tr><td><b>Import backup</b></td><td>Replaces this browser's jobs with a backup file. It asks first. Only for emergencies.</td></tr>
-  <tr><td><b>Connect Google Calendar</b> / Calendar connected ✓</td><td>When connected, every job you save goes on the info@ calendar. Click to disconnect.</td></tr>
-  <tr><td><span class="n">1</span> <b>Help hints</b></td><td>Hint text on or off (section 1).</td></tr>
-  <tr><td><span class="n">2</span> <b>Manual</b></td><td>This manual.</td></tr>
+  <tr><td><b>Theme</b></td><td>Classic, Light or Night colours on this device, for every page (section 5).</td></tr>
+  <tr><td><b>Help hints</b></td><td>Hint text on or off (section 1).</td></tr>
+  <tr><td><b>Manual</b></td><td>This manual.</td></tr>
+  <tr><td><b>Connect Google Calendar</b></td><td>Shows here until the calendar is connected. Then every job you save goes on the info@ calendar, and the button moves under More.</td></tr>
+  <tr><td><b>More ▸</b></td><td>Click to open:<br><b>Export backup</b>: saves every job to a file in Downloads. Do it weekly.<br><b>Import backup</b>: replaces this browser's jobs with a backup file. It asks first. Only for emergencies.<br><b>Calendar connected ✓</b>: click to disconnect.</td></tr>
 </table>
 </div>
 </div>
 
 <!-- ============ 16 AUTO vs HAND ============ -->
-<h1>16. What runs by itself, what you do</h1>
+<h1>20. What runs by itself, what you do</h1>
 <div class="two">
 <div>
 <h2 style="margin-top:0">Runs by itself</h2>
 <ul>
   <li>Inbox check at 7:51, 12:51 and 15:51, Monday to Saturday: lines up bookings, changes, cancellations and Tide invoices, flags new amendments, and writes reply drafts in Gmail for you to check (it never sends).</li>
-  <li><b>Report auto-send</b> every 15 minutes: check-outs, mid-terms and schedules saved into WPS Ready to send are emailed from reports@, or held with an email to info@ saying why (section 9). The job is set to Sent at the next Check everything now.</li>
-  <li><b>Check-in signing page</b>: signing links to each tenant, the agent's copy, one reminder 2 days before the window closes, and the signed copy to everyone once all have signed (section 10).</li>
+  <li><b>Report auto-send</b> every 15 minutes: check-outs, mid-terms and schedules saved into WPS Ready to send are emailed from reports@, or held with an email to info@ saying why (section 11). The job is set to Sent at the next Check everything now.</li>
+  <li><b>Check-in signing page</b>: signing links to each tenant, the agent's copy, one reminder 2 days before the window closes, and the signed copy to everyone once all have signed (section 12).</li>
   <li>Saving the Job Log to Google (PC, within seconds, once signed in).</li>
   <li>Job numbers.</li>
   <li>Report due times and overdue warnings.</li>
@@ -640,6 +836,9 @@
     <br>D the 7-day reminder to tenants with 2 days left (9am daily; signing page jobs get their own reminder instead).
     <br>A, B and C go to the job's Copy to, or the agent's saved email if none is ticked. D goes to the tenant emails. B skips anyone who signed in Acrobat. For signing page jobs, the signed copy email is B.</li>
   <li>The reports completed counter, milestones and the Performance panel.</li>
+  <li><b>News headlines</b> fetched every hour and shown in the news line; a backup address is tried when a news site fails.</li>
+  <li><b>Mid-term slot page</b>: shows tenants only free times, holds picked times, and emails info@ when a tenant picks.</li>
+  <li><b>Plan my day</b> order, miles and Google road times.</li>
 </ul>
 </div>
 <div>
@@ -648,7 +847,7 @@
   <li>Check everything now, then check the To review tray: add, change, mark invoiced or dismiss.</li>
   <li>Check and send the reply drafts the inbox check left in Gmail.</li>
   <li>Add WhatsApp bookings by hand.</li>
-  <li>Agree times and add them.</li>
+  <li>Agree times and add them. For mid-terms: send the slot link, then approve or decline the tenant's pick, and send the confirmation email Gmail opens.</li>
   <li>Mark visits done, or Rearrange the ones that didn't happen, and check and send the Rearrange email.</li>
   <li>Set the stage after each visit, and Completed when a report is written.</li>
   <li>Check client, type, photo link, tenant rows and Copy to before a report goes into WPS Ready to send.</li>
@@ -666,7 +865,7 @@
 </div>
 
 <!-- ============ 17 TROUBLESHOOTING ============ -->
-<h1>17. If something looks wrong</h1>
+<h1>21. If something goes wrong</h1>
 <table>
   <tr><th style="width:38%">What you see</th><th>What to do</th></tr>
   <tr><td>A change Claude made isn't showing on the PC.</td><td>Press Ctrl+Shift+R. If it's still the old version, wait up to 10 minutes and try again.</td></tr>
@@ -684,23 +883,34 @@
   <tr><td>"Google refused Gmail access (403)"</td><td>Tell Claude. It's a Google set-up issue, not your data.</td></tr>
   <tr><td>Lots of reports overdue.</td><td>Set sent reports to Sent or beyond. Use Mark visited for visits still at Booked.</td></tr>
   <tr><td>Picked the wrong stage or clicked Paid by mistake.</td><td>Click Undo on the bar (8 seconds). Too late? Pick the old stage in the box.</td></tr>
-  <tr><td>"Report held, not sent" email.</td><td>Read the reason, fix it, move the PDF from Held back into WPS Ready to send (section 9).</td></tr>
+  <tr><td>"Report held, not sent" email.</td><td>Read the reason, fix it, move the PDF from Held back into WPS Ready to send (section 11).</td></tr>
   <tr><td>A report was emailed but the job isn't at Sent.</td><td>Click Check everything now. If a Report sent card shows a reason, set the stage by hand and Dismiss the card.</td></tr>
   <tr><td>A tenant says their signing link doesn't work.</td><td>The link stops once they've signed, or when a RESEND starts a new round. Check the Signings tab and send the newest email again if needed.</td></tr>
   <tr><td>Closing a job asks "You've changed … but not saved it".</td><td>OK throws the changes away. Cancel keeps you in the form so you can Save.</td></tr>
   <tr><td>Claude can't click or read the Dashboard in Chrome ("Cannot access a chrome-extension:// URL…").</td><td>The LastPass extension blocks Claude. Switch LastPass off at chrome://extensions while Claude works, then back on.</td></tr>
   <tr><td>Photo Tool: "Can't see your Job Log jobs"</td><td>Open it from the sidebar in the same Chrome as the Job Log. You can still type job numbers by hand, then paste the link into the job form.</td></tr>
-  <tr><td>Photo Tool split a visit wrongly.</td><td>Merge with job above / Start a new job from here (section 12), or change the gap in Settings.</td></tr>
+  <tr><td>Photo Tool split a visit wrongly.</td><td>Merge with job above / Start a new job from here (section 14), or change the gap in Settings.</td></tr>
   <tr><td>Photo Tool zip downloaded with a random name.</td><td>Fixed 18 Oct (pull request #29). Press Ctrl+Shift+R to load the fixed page. Rename any older zip by hand to its WPS name.</td></tr>
   <tr><td>Photos had "no date taken inside".</td><td>They're HEIC or edited copies. Check the split. Set the iPhone to Most Compatible.</td></tr>
   <tr><td>Dictation microphone does nothing.</td><td>Allow the microphone when asked. Check signal. Try switching off audio backup in Settings.</td></tr>
   <tr><td>Deleted a job by mistake.</td><td>There's no undo. Re-add it, or ask Claude to help restore it from a backup.</td></tr>
+  <tr><td>Mid-terms panel: "Click Save &amp; get latest in the sidebar to see slot links and tenants' picks."</td><td>Click Save &amp; get latest (it signs you in to Google), then the Mid-terms tile again.</td></tr>
+  <tr><td>"Couldn't make the link" / "Couldn't approve" / "Couldn't decline"</td><td>Nothing on the job changed. Click Save &amp; get latest and try again. If it keeps happening, tell Claude.</td></tr>
+  <tr><td>A tenant picked a time you can't do.</td><td>Click Decline. They get the email to pick again from the same link.</td></tr>
+  <tr><td>Plan my day says "about" or "Estimates only".</td><td>You're not signed in to Google. Click Save &amp; get latest; the road times fill in by themselves.</td></tr>
+  <tr><td>"Couldn't get Google road times …" in Plan my day</td><td>The estimates still show. Try again later. If it keeps happening, tell Claude.</td></tr>
+  <tr><td>"The map couldn't load."</td><td>No internet, or the map site is down. The list still works.</td></tr>
+  <tr><td>A job is missing from Do next.</td><td>It may be parked: look at the Parked line at the bottom of Do next and click Un-park.</td></tr>
+  <tr><td>"News: … not loading since …" under the news line.</td><td>Nothing to do. The script keeps trying the backup address. If it stays for days, tell Claude.</td></tr>
+  <tr><td>The news line shows only messages.</td><td>No new headlines yet, or the news couldn't be fetched. It tries again every 30 minutes.</td></tr>
 </table>
 
 <!-- ============ 18 KNOWN GAPS ============ -->
-<h1>18. Known gaps</h1>
-<p>Things that aren't finished or haven't been tried in real use yet, as of 18 October 2026:</p>
+<h1>22. Known gaps</h1>
+<p>Things that aren't finished or haven't been tried in real use yet, as of 19 October 2026:</p>
 <ul>
+  <li><b>The tenant slot link</b> hasn't been tried end to end with a real tenant and the real calendar yet.</li>
+  <li><b>Plan my day</b> on the iPhone: not reported back yet.</li>
   <li><b>On the phone you have to tap Save &amp; get latest</b> each time. It doesn't sync by itself.</li>
   <li><b>Signed is set by hand.</b> The Dashboard can't see Acrobat or the signing page yet.</li>
   <li><b>The first real auto-sent report and the first real check-in on the signing page</b> haven't been checked end to end yet.</li>
@@ -719,6 +929,7 @@
   <li>The iPhone can clear Dictation's saved notes if it isn't opened for about 7 days. Copy notes to Claude the same day.</li>
 </ul>
 <div class="tip"><b>If this manual and the tools ever disagree, the tools are right.</b> Ask Claude to update the manual.</div>
+
 
 </body>
 </html>

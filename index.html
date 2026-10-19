@@ -2519,7 +2519,7 @@ function renderInner(app){
     <div class="wrap${state.view === "today" ? " wrap-dash" : ""}">
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" ? "" : helpBox(`The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue.`) + renderStatusStrip()}
+      ${state.view === "today" ? "" : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
@@ -3054,7 +3054,7 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`<b>Do next</b> lists what needs doing now, most urgent first, with the one button for each. The <b>tiles</b> count everything; <b>click a tile</b> to see its full list in the panel at the bottom. <b>Click a job</b> to open it. <b>Pick a stage</b> from the coloured box on a job to move it to that stage. The <b>+</b> on a day adds a job on that day. Hover over anything on a PC for a short explanation.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`Start each day with <b>Check everything now</b> (top right). Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to see its full list in the panel at the bottom. <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
     <div class="d-row">
       ${dnHtml}
       <div class="t-card d-card">
@@ -3163,7 +3163,7 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
     </button>
-    <a class="btn-link" href="manual.pdf?v=20261018" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+    <a class="btn-link" href="manual.pdf?v=20261019" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
@@ -3312,7 +3312,7 @@ function mapJobs(){
   return active.filter(j => j.date && j.date >= today && j.date <= end).sort(byTime);
 }
 function renderWeekMapBox(){
-  return `<div class="wm-bar"><select class="filter-select wm-range" onchange="setMapRange(this.value)" aria-label="Jobs on the map">${MAP_RANGES.map(([v,l]) => `<option value="${v}"${v===mapRange()?" selected":""}>${l}</option>`).join("")}</select>
+  return helpBox(`Each pin is a job, coloured by type (key on the right). Pick <b>Next 7 days</b>, <b>Next 30 days</b> or <b>Times to agree</b> from the box. <b>Click a pin</b> to see the job and open it. Use it to offer a tenant a day when you are already nearby. Only postcodes leave the dashboard. Click <b>Days</b> to go back to the list.`) + `<div class="wm-bar"><select class="filter-select wm-range" onchange="setMapRange(this.value)" aria-label="Jobs on the map">${MAP_RANGES.map(([v,l]) => `<option value="${v}"${v===mapRange()?" selected":""}>${l}</option>`).join("")}</select>
     <span class="wm-legend">${Object.keys(MAP_TYPE_COL).map(k => `<span><i style="background:${MAP_TYPE_COL[k]}"></i>${k}</span>`).join("")}</span></div>
     <div id="wkMap" class="wk-map"><div class="wm-msg">Loading the map…</div></div><div id="wkMapNote" class="d-note"></div>`;
 }
@@ -3556,6 +3556,7 @@ function renderPlanCard(){
   if (!opts.some(o => o.includes('value="'+iso+'"'))) opts.unshift(`<option value="${iso}" selected>${esc(shortDay(d))}</option>`);
   return `<div class="t-card d-card plan-card">
     <h3>Plan my day <span class="count"><select class="filter-select plan-day" onchange="openPlan(this.value)" aria-label="Day">${opts.join("")}</select><button class="t-link" onclick="closePlan()">Close</button></span></h3>
+    ${helpBox(`The jobs for the day in the order to drive them, with miles, drive time and when to leave. Jobs with a time stay in time order; jobs with no time go where they add the least driving. <b>Pick another day</b> from the box at the top. <b>Change</b> sets where you start and finish (blank = Grays). Signed in to Google (Save &amp; get latest), the times are Google road times with traffic; otherwise they say "about". <b>Open in Google Maps</b> for turn-by-turn. A red line means you may be late.`)}
     <div class="plan-home">Start and finish: <b>${esc(home.label)}</b>
       ${state.planEditHome ? `<input id="planHomePc" class="plan-pc" placeholder="Postcode, e.g. RM17 5XX" value="${esc(home.pc||"")}"><button class="d-mv" onclick="setPlanHome()">Save</button><button class="t-link" onclick="state.planEditHome=false;render()">Cancel</button><span class="c-dim">Blank = Grays. Kept on this device only.</span>`
         : `<button class="t-link" onclick="state.planEditHome=true;render()">Change</button>`}</div>
@@ -3892,7 +3893,7 @@ function renderMidPanel(mids){
   const picked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
   const rest = mids.filter(j => !picked.includes(j));
   const row = j => cRow(j, { extra: slotRowExtra(j) });
-  return renderSlotSettings() + head
+  return helpBox(`Mid-terms with no date yet. 1. Press <b>Send slot link</b>: Gmail opens with the tenant's own link, CC'd to the office. Check it and send. 2. The tenant picks a free time and says if they'll be there or you can use the keys. 3. Their pick shows here and in Do next. Press <b>Approve</b> (sets the date, time and calendar, and opens the confirmation email) or <b>Decline</b> (they pick again from the same link). Nothing is booked until you approve. <b>Change</b> sets which days and hours tenants can pick.`) + renderSlotSettings() + head
     + (picked.length ? `<div class="d-sect">Tenant picked a time, approve or decline (${picked.length})</div>` + picked.map(row).join("") : "")
     + (rest.length ? `<div class="d-sect"${picked.length ? ' style="margin-top:14px"' : ""}>Need a date (${rest.length})</div>` + rest.map(row).join("") : "")
     + (!mids.length ? `<div class="t-empty">No mid-terms waiting for a date.</div>` : "")

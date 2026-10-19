@@ -3,7 +3,7 @@ from playwright.sync_api import sync_playwright
 ROOT=os.environ.get("ROOT","/home/claude/wps-job-log")
 PORT=int(os.environ.get("PORT","8765"))
 DATA=json.load(open("/home/claude/manual/fix/data.json"))
-PCS={"E39ZF":(51.5300,-0.0250),"E19ZH":(51.515,-0.06),"E39ZJ":(51.531,-0.024),"E39ZA":(51.528,-0.03),"E39ZD":(51.526,-0.02)}
+PCS={"E39ZF":(51.5300,-0.0250),"E19ZH":(51.515,-0.06),"E39ZJ":(51.531,-0.024),"E39ZA":(51.528,-0.03),"E39ZD":(51.526,-0.02),"E99ZK":(51.545,-0.045),"E39ZS":(51.529,-0.028),"E29ZT":(51.53,-0.06)}
 def serve():
     s=socket.socket()
     if s.connect_ex(("127.0.0.1",PORT))!=0:
