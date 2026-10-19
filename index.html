@@ -163,6 +163,13 @@
   .sl-dl{ white-space:nowrap; }
   .sl-st{ font-size:12px; white-space:nowrap; }
   .sl-picked{ color:var(--coral-dark); font-weight:600; white-space:normal; }
+  .hc-row{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:2px 10px; padding:8px 0; border-top:1px solid var(--line-soft); font-size:13px; }
+  .hc-row:first-child{ border-top:none; }
+  .hc-pill{ grid-row:span 2; align-self:start; font-size:11px; font-weight:700; border-radius:99px; padding:2px 8px; white-space:nowrap; }
+  .hc-ok{ background:var(--green-bg); color:var(--green); } .hc-fixed{ background:var(--sky-bg, #E7EEF8); color:var(--brand-text, var(--brand)); }
+  .hc-warn{ background:var(--amber-bg); color:var(--amber); } .hc-problem{ background:var(--red-bg); color:var(--red); }
+  .hc-todo{ grid-column:2; color:var(--ink-soft); }
+  .hc-side{ font:inherit; font-size:12px; padding:0 0 6px; background:none; border:none; cursor:pointer; text-align:left; color:inherit; }
   .d-mv.sl-ok{ background:var(--coral); color:#fff; }
   .d-mv{ white-space:nowrap; border:1px solid var(--coral); background:var(--card); color:var(--coral-dark); border-radius:6px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; }
   .d-mv:hover{ background:var(--coral-bg); }
@@ -2627,6 +2634,7 @@ function loadAmendments(quiet){
         prow.slice(1).forEach(r => { if (r[pE]==="D" && r[pS]==="Sent") autoRem[normJobNo(r[pJ])+"|"+String(r[pW]||"").replace(/^'/,"")] = (typeof r[pT]==="number") ? new Date(Math.round((r[pT]-25569)*86400000)) : new Date(); });
       } catch(e){ console.log("[WPS] process emails read failed", e); }
       await loadSlots();   // mid-term slot picks (19 Oct), same Sheet and sign-in
+      await loadHealth();  // system health (19 Oct), same Sheet and sign-in
       state.amend = { loaded:true, at:new Date(), autoRem, jobs: Object.values(byJob).sort((a,b)=>String(a.first).localeCompare(String(b.first))) };
       autoDeem();
     } catch(e){
@@ -2976,6 +2984,9 @@ function renderToday(){
   const dnRr = j => `<button class="d-mv" onclick="dnRearrange('${j.id}')"${tip("Visit didn't happen. Opens Rearrange in the Reports due list below.")}>Rearrange</button>`;
   const dueSoon = due.filter(x => !x.d.late && x.d.due - now < 24*3600000);
   const remindDue = windows.filter(x => x.st==="open" && needsManualReminder(x.j, now));
+  const hs = healthSummary();
+  if (hs && hs.problems) dnAdd(5, "late", hs.missing ? "System check not started yet" : "System check: "+hs.problems+" problem"+(hs.problems===1?"":"s"), null, `<button class="d-mv" onclick="openHealth()">See</button>`);
+  else if (hs && hs.warns) dnAdd(88, "", "System check: "+hs.warns+" thing"+(hs.warns===1?"":"s")+" to look at", null, `<button class="d-mv" onclick="openHealth()">See</button>`);
   if (amN) dnAdd(10, "late", amN+" job"+(amN===1?"":"s")+" with tenant comments", null, `<button class="d-mv" onclick="setDashPanel('amend')">Review</button>`);
   due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j));   // 18 Oct: no Rearrange once visited (Processing)
   midPicked.forEach(j => { const r = slotFor(j); dnAdd(25, "warn", "Tenant picked "+r.slotText, j, `<button class="d-mv sl-ok" onclick="slotApprove('${j.id}')">Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')">Decline</button>`); });
@@ -3037,6 +3048,7 @@ function renderToday(){
     case "photos": title = "Photos not done"; body = rows(photosMissing, j => cRow(j), "Every visited job has its photo link.") + note("Visited in the last 30 days, report not sent, no photo link saved. Run the Photo Tool for these."); break;
     case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
     case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: (j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
+    case "health": title = "System health"; body = renderHealthPanel(); break;
     case "turn": title = "Performance";
       body = renderPerformance(live, now) + note("On time = report sent within the target from the visit: check-outs 48h, everything else 72h. Completed = check-ins once signed or deemed agreed, everything else once sent. Last month is compared up to the same day. On time only counts jobs visited from 11 Oct, when the Job Log went live, so the September changeover backlog stays out. Completed counts every job."); break;
   }
@@ -3154,6 +3166,7 @@ function renderThemeRow(){
 function renderUtilityRow(){
   return `<div class="side-tool-list" style="display:flex;flex-direction:column;gap:2px;">
     ${renderCloudPill()}
+    ${renderHealthSide()}
     <button class="btn-link" onclick="cloudSyncNow()"${hint("Saves to Google, loads other devices' changes")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></svg>
       Save &amp; get latest
@@ -3714,6 +3727,55 @@ async function drawPlan(){
 // and Lex approves (date, time and calendar set on the job, confirmation email opened in Gmail) or declines (the
 // tenant picks again from the same link). Settings (days, hours, how far ahead) are saved in the Job Log Sheet's Meta
 // tab so the script and every device use the same ones.
+// ---- System health (Lex, 19 Oct): the "maintenance man". The WPS Amendments script (file "Health") checks
+// everything every hour and writes the "Health" tab; the dashboard reads it with the amendments (same sign-in) and
+// shows problems in Do next, in the sidebar and in the System health panel. Read only: fixes happen in the script.
+const HEALTH_STALE_H = 3;   // no check for this long = the health check itself has stopped
+async function loadHealth(){
+  try {
+    const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/"+encodeURIComponent("'Health'!A:E")+"?valueRenderOption=UNFORMATTED_VALUE");
+    const rows = r.values || [], h = rows[0] || [];
+    const c = n => h.indexOf(n), iT = c("Checked"), iN = c("Check"), iS = c("Status"), iW = c("What"), iD = c("What to do");
+    if (iN < 0 || iS < 0) throw new Error("no header");
+    const when = v => typeof v === "number" ? new Date(Math.round((v - 25569) * 86400000)) : new Date(v);
+    const list = rows.slice(1).filter(x => x[iN]).map(x => ({ name: String(x[iN]).slice(0, 80), status: ["OK","Fixed","Warn","Problem"].includes(x[iS]) ? x[iS] : "Warn",
+      what: String(x[iW] || "").slice(0, 400), todo: String(x[iD] || "").slice(0, 300) })).slice(0, 40);
+    const at = rows[1] ? when(rows[1][iT]) : null;
+    state.health = { loaded:true, at: at && !isNaN(at) ? at : null, list, readAt: new Date() };
+  } catch(e){
+    // the tab only appears after hcStart has run once
+    state.health = /400|Unable to parse range/.test(String(e.message)) ? { loaded:true, missing:true, list:[], readAt:new Date() } : { error:"Couldn't read the Health tab" };
+  }
+}
+function healthSummary(){
+  const h = state.health; if (!h || !h.loaded) return null;
+  if (h.missing) return { problems: 1, warns: 0, stale: false, missing: true };
+  const stale = !h.at || (Date.now() - h.at.getTime() > HEALTH_STALE_H * 3600000);
+  return { problems: h.list.filter(x => x.status === "Problem").length + (stale ? 1 : 0), warns: h.list.filter(x => x.status === "Warn").length, stale };
+}
+function healthAt(){ const h = state.health; return h && h.at ? h.at.toLocaleString("en-GB",{weekday:"short", hour:"2-digit", minute:"2-digit"}) : ""; }
+function renderHealthSide(){
+  const s = healthSummary(); if (!s) return "";
+  const bad = s.problems, warn = s.warns;
+  const label = bad ? "System health: "+bad+" problem"+(bad===1?"":"s") : warn ? "System health: "+warn+" to look at" : "System health ✓";
+  return `<button class="hc-side" style="color:${bad ? "var(--coral)" : warn ? "var(--amber)" : "var(--sky)"}" onclick="openHealth()"${tip("Checked every hour by the WPS script: timers, reports waiting or held, failed emails, signed copies, mid-term picks, news, Job Log saves, email allowance, storage, web pages. Click for the list.")}>${esc(label)}</button>`;
+}
+function openHealth(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "health"; state.menuOpen = false; navSetView("today"); render(); }
+function renderHealthPanel(){
+  const h = state.health;
+  if (!h) return `<div class="t-empty">Not loaded yet. Click <b>Check everything now</b> (top right).</div>`;
+  if (h.error) return `<div class="t-empty">${esc(h.error)}. <button class="t-link" onclick="refreshHealth()">Try again</button></div>`;
+  if (h.missing) return `<div class="t-empty" style="color:var(--ink)">The health check hasn't been started yet. In the WPS Amendments script editor, pick <b>hcStart</b> in the function box and click Run.</div>`;
+  const s = healthSummary();
+  const order = { Problem:0, Warn:1, Fixed:2, OK:3 };
+  const rows = h.list.slice().sort((a,b) => order[a.status] - order[b.status]);
+  const pill = st => `<span class="hc-pill hc-${st.toLowerCase()}">${st === "Warn" ? "Look at" : st}</span>`;
+  return (s.stale ? `<div class="hc-row"><span class="hc-pill hc-problem">Problem</span><b>The health check itself</b><span class="hc-todo">Last ran ${esc(healthAt() || "never")}. Its hourly timer may have stopped: in the script editor, pick hcStart and click Run.</span></div>` : "")
+    + rows.map(x => `<div class="hc-row">${pill(x.status)}<span><b>${esc(x.name)}</b> · ${esc(x.what)}</span>${x.todo && x.status !== "OK" ? `<span class="hc-todo">${esc(x.todo)}</span>` : `<span class="hc-todo"></span>`}</div>`).join("")
+    + `<div class="d-note">Checked every hour by the WPS Amendments script, which fixes the safe things itself (Fixed) and emails info@ when a new problem appears. Last check ${esc(healthAt() || "–")}. <button class="t-link" onclick="refreshHealth()">Read again now</button></div>`;
+}
+function refreshHealth(){ ensureSheetsToken(async function(){ await loadHealth(); render(); }); }
+
 const LS_SLOT_SET = "wps_slot_settings_v1";
 const SLOT_DEFAULT = { days:[1,2,3,4,5], start:"10:00", end:"15:00", slotMin:30, earliest:2, latest:14, bufferMin:30 };   // Lex, 19 Oct
 const SLOT_ACCESS_KEYS = "Please use the keys";
