@@ -772,6 +772,7 @@
   .rpv-body iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
   .rpv-load{ position:absolute; top:40%; left:0; right:0; text-align:center; color:#fff; font-size:15px; pointer-events:none; }
   .rp-lk-job{ margin-left:auto; color:var(--ink-soft); }
+  .rp-more{ text-align:center; margin:14px 0 4px; } .rp-prog{ font-size:13px; margin:0 0 10px; }
   .rp-key{ display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:14px; font-size:12px; color:var(--ink-soft); }
   .rp-key span{ display:inline-flex; align-items:center; gap:6px; }
   @media (max-width:860px){
@@ -3311,6 +3312,42 @@ const RP_DATES = [
   { code:"m3",     label:"Past 3 months", days:92 },
   { code:"y1",     label:"Past year",     days:366 },
 ];
+// Past reports (Lex, 20 Oct night: "all my reports in the report section. All of them."). The WPS script (file Archive)
+// copies every report PDF from Dropbox into Drive > WPS Reports archive (private) and lists them; Wellington Parker
+// reports aren't Job Log jobs, so they come here as read-only tiles (op archRead, device key), kept in this browser.
+// They never touch the Job Log, money or counters. Older WPS jobs get their report link on the job itself (Thumbs).
+const RP_EXTRA_TYPES = [{ code:"CI", label:"Check-In" }, { code:"", label:"Report", badge:"PDF" }];
+function rpTypeMeta(c){ return TYPES.find(t => t.code === c) || RP_EXTRA_TYPES.find(t => t.code === (c || "")) || { code:String(c), label:String(c) }; }
+const RP_SOURCES = [{ code:"wps", label:"WPS jobs" }, { code:"wp", label:"Wellington Parker" }];
+const RP_PAGE = 120;
+function rpAll(){ return (state.jobs || []).concat(state.archive || []); }
+function rpSrc(j){ return j.isArchive ? "wp" : "wps"; }
+function rpArchiveJob(r){
+  const ID = /^[A-Za-z0-9_-]{10,100}$/;
+  return { id:"ar_" + String(r[0]).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 90), isArchive:true, jobNo:String(r[1] || ""), type:String(r[2] || ""),
+    date:/^\d{4}-\d\d-\d\d$/.test(r[3]) ? r[3] : "", postcode:String(r[4] || ""), client:String(r[5] || ""), status:"archived",
+    reportFileId:ID.test(r[6]) ? r[6] : "", reportKind:"sent", thumbId:ID.test(r[7] || "") ? r[7] : "" };
+}
+let rpArchBusy = false;
+async function rpLoadArchive(force){
+  if (rpArchBusy || !keyMode()) return;
+  const fresh = state.archiveAt && Date.now() - state.archiveAt < 30*60000;
+  if (fresh && !force) return;
+  rpArchBusy = true;
+  try {
+    if (!state.archive || !state.archive.length){
+      const c = await rpThumbIdb(["__archive"]);
+      if (c.__archive){ try { const o = JSON.parse(c.__archive); state.archive = (o.rows || []).map(rpArchiveJob); state.archiveInfo = o.info || null; if (state.view === "reports") rpRedraw(); } catch(e){} }
+    }
+    const d = await dashCall("archRead", {});
+    if (d && d.ok){
+      state.archive = (d.rows || []).map(rpArchiveJob); state.archiveAt = Date.now();
+      state.archiveInfo = { total:d.total || 0, waiting:d.waiting || 0, note:d.note || "" };
+      rpThumbPut({ __archive: JSON.stringify({ rows:d.rows || [], info:state.archiveInfo }) });
+      if (state.view === "reports") rpRedraw();
+    }
+  } catch(e){} finally { rpArchBusy = false; }
+}
 function rpTodayISO(){ const d = new Date(); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
 function rpStatus(j){
   const st = j.status || "booked";
@@ -3328,7 +3365,7 @@ function rpDateMatch(j, code){
   const r = RP_DATES.find(x => x.code === code), n = rpDaysSince(j.date);
   return !!r && n !== null && n >= 0 && n <= r.days;
 }
-function rpF(){ if (!state.rpF) state.rpF = { type:[], client:[], status:[], date:[] }; return state.rpF; }
+function rpF(){ if (!state.rpF) state.rpF = { type:[], client:[], status:[], date:[] }; const f = state.rpF; if (!f.src) f.src = []; if (!f.year) f.year = []; return f; }
 function rpSearchHit(j, q){
   if (!q) return true;
   return [j.jobNo, j.address, j.town, j.postcode, j.client, j.tenants, j.notes].some(v => String(v||"").toLowerCase().indexOf(q) >= 0);
@@ -3340,6 +3377,8 @@ function rpMatch(j, skip){
   if (skip !== "client" && f.client.length && !f.client.includes(j.client || "")) return false;
   if (skip !== "status" && f.status.length && !f.status.includes(rpStatus(j))) return false;
   if (skip !== "date"   && f.date.length   && !f.date.some(c => rpDateMatch(j, c))) return false;
+  if (skip !== "src"    && f.src.length    && !f.src.includes(rpSrc(j))) return false;
+  if (skip !== "year"   && f.year.length   && !f.year.includes((j.date || "").slice(0, 4) || "none")) return false;
   return true;
 }
 function rpSorted(list){
@@ -3355,13 +3394,15 @@ function rpSorted(list){
   });
 }
 function rpToggle(group, code, on){
+  state.rpLimit = RP_PAGE;
   const f = rpF(), arr = f[group]; const i = arr.indexOf(code);
   if (on && i < 0) arr.push(code); if (!on && i >= 0) arr.splice(i, 1);
   rpRedraw();
 }
-function rpClear(){ state.rpF = { type:[], client:[], status:[], date:[] }; state.rpSearch = ""; const el = document.getElementById("rpSearch"); if (el) el.value = ""; rpRedraw(); }
-function rpOnSearch(el){ state.rpSearch = el.value; rpRedraw(); }
-function rpSetSort(v){ state.rpSort = v; rpRedraw(); }
+function rpClear(){ state.rpLimit = RP_PAGE; state.rpF = { type:[], client:[], status:[], date:[], src:[], year:[] }; state.rpSearch = ""; const el = document.getElementById("rpSearch"); if (el) el.value = ""; rpRedraw(); }
+function rpOnSearch(el){ state.rpSearch = el.value; state.rpLimit = RP_PAGE; rpRedraw(); }
+function rpSetSort(v){ state.rpSort = v; state.rpLimit = RP_PAGE; rpRedraw(); }
+function rpMore(){ state.rpLimit = (state.rpLimit || RP_PAGE) + RP_PAGE * 2; rpRedraw(); }
 function rpRedraw(){
   const g = document.getElementById("rpGroups"), r = document.getElementById("rpResults");
   if (!g || !r){ render(); return; }
@@ -3374,15 +3415,15 @@ function rpRedraw(){
 // reports sent before the script) = the job opens, as before. The "Job" button on a tile always opens the job.
 // The viewer is its own layer on the page, outside render(), so the dashboard's auto-refresh never reloads the PDF.
 function rpOpen(id){
-  const j = (state.jobs || []).find(x => x.id === id), u = j ? rpReportUrl(j) : "";
-  if (!u){ openEdit(id); return; }
+  const j = rpAll().find(x => x.id === id), u = j ? rpReportUrl(j) : "";
+  if (!u){ if (j && !j.isArchive) openEdit(id); return; }
   if (window.innerWidth < 700){ window.open(u, "_blank", "noopener"); return; }
-  const ids = rpSorted((state.jobs || []).filter(x => rpMatch(x) && rpReportUrl(x))).map(x => x.id);
+  const ids = rpSorted(rpAll().filter(x => rpMatch(x) && rpReportUrl(x))).map(x => x.id);
   rpView = { ids: ids.length ? ids : [id], i: Math.max(0, ids.indexOf(id)), back: document.activeElement };
   rpViewDraw();
 }
 let rpView = null;
-function rpViewJob(){ return rpView ? (state.jobs || []).find(x => x.id === rpView.ids[rpView.i]) : null; }
+function rpViewJob(){ return rpView ? rpAll().find(x => x.id === rpView.ids[rpView.i]) : null; }
 function rpViewDraw(){
   const j = rpViewJob(); if (!j){ rpViewClose(); return; }
   let el = document.getElementById("rpViewer");
@@ -3402,8 +3443,8 @@ function rpViewDraw(){
     document.body.classList.add("rpv-open");
     document.getElementById("rpvFrame").addEventListener("load", () => { const l = document.getElementById("rpvLoad"); if (l) l.style.display = "none"; });
   }
-  const tm = typeMeta(j.type), url = rpReportUrl(j), n = rpView.ids.length;
-  document.getElementById("rpvNo").textContent = (j.jobNo || "") + " · " + tm.label + (j.reportKind === "signed" ? " · signed copy" : "");
+  const tm = rpTypeMeta(j.type), url = rpReportUrl(j), n = rpView.ids.length;
+  document.getElementById("rpvNo").textContent = (j.jobNo || "") + " · " + tm.label + (j.reportKind === "signed" ? " · signed copy" : "") + (j.isArchive ? " · Wellington Parker" : "");
   document.getElementById("rpvAddr").textContent = fullAddress(j) || "";
   document.getElementById("rpvCount").textContent = n > 1 ? (rpView.i + 1) + " of " + n : "";
   document.getElementById("rpvPrev").disabled = rpView.i <= 0;
@@ -3412,7 +3453,7 @@ function rpViewDraw(){
   document.getElementById("rpvActs").innerHTML =
     `<a class="rpv-lk" href="${esc(url)}" target="_blank" rel="noopener" title="Open this PDF in its own tab">New tab</a>` +
     (pUrl ? `<a class="rpv-lk" href="${esc(pUrl)}" target="_blank" rel="noopener" title="Download the photo set (zip)">Photos</a>` : "") +
-    `<button class="rpv-lk" onclick="rpViewToJob()" title="Close the viewer and open the job">Job</button>`;
+    (j.isArchive ? "" : `<button class="rpv-lk" onclick="rpViewToJob()" title="Close the viewer and open the job">Job</button>`);
   const f = document.getElementById("rpvFrame"), src = "https://drive.google.com/file/d/" + j.reportFileId + "/preview";
   if (f.getAttribute("src") !== src){ document.getElementById("rpvLoad").style.display = ""; f.setAttribute("src", src); }
   const x = el.querySelector(".rpv-x"); if (x && !el.contains(document.activeElement)) x.focus();
@@ -3435,7 +3476,7 @@ function rpViewClose(){
   if (tile){ tile.focus({ preventScroll: true }); setTimeout(() => tile.classList.remove("rpv-cur"), 1600); }
   else if (back && back.focus) try { back.focus({ preventScroll: true }); } catch(e){}
 }
-function rpViewToJob(){ const j = rpViewJob(); rpViewClose(); if (j) openEdit(j.id); }
+function rpViewToJob(){ const j = rpViewJob(); rpViewClose(); if (j && !j.isArchive) openEdit(j.id); }
 function rpKey(ev, id){ if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); rpOpen(id); } }
 function rpGroupHtml(title, group, opts){
   const f = rpF();
@@ -3446,14 +3487,17 @@ function rpGroupHtml(title, group, opts){
   return `<div class="rp-grp"><h4>${esc(title)}</h4>${rows || `<div class="rp-n" style="font-size:13px;">None yet</div>`}</div>`;
 }
 function renderRpGroups(){
-  const jobs = state.jobs || [];
+  const jobs = rpAll();
   const count = (group, test) => jobs.filter(j => rpMatch(j, group) && test(j)).length;
-  const types = TYPES.map(t => ({ code:t.code, label:t.label, n:count("type", j => (j.type||"") === t.code) })).filter(o => o.n || rpF().type.includes(o.code));
+  const types = TYPES.concat(RP_EXTRA_TYPES).map(t => ({ code:t.code, label:t.label, n:count("type", j => (j.type||"") === t.code) })).filter(o => o.n || rpF().type.includes(o.code));
+  const srcs = (state.archive && state.archive.length) ? RP_SOURCES.map(o => ({ code:o.code, label:o.label, n:count("src", j => rpSrc(j) === o.code) })) : [];
+  const yrs = Array.from(new Set(jobs.map(j => (j.date || "").slice(0, 4) || "none"))).sort().reverse();
+  const years = yrs.length > 1 ? yrs.map(y => ({ code:y, label:y === "none" ? "No date" : y, n:count("year", j => ((j.date || "").slice(0, 4) || "none") === y) })) : [];
   const names = Array.from(new Set(jobs.map(j => j.client || "").filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const clients = names.map(c => ({ code:c, label:c, n:count("client", j => (j.client||"") === c) }));
   const sts = RP_STATUSES.map(s => ({ code:s.code, label:s.label, dot:s.dot, n:count("status", j => rpStatus(j) === s.code) }));
   const dates = RP_DATES.map(d => ({ code:d.code, label:d.label, n:count("date", j => rpDateMatch(j, d.code)) }));
-  return rpGroupHtml("Report type", "type", types) + rpGroupHtml("Client", "client", clients) + rpGroupHtml("Status", "status", sts) + rpGroupHtml("Job date", "date", dates);
+  return (srcs.length ? rpGroupHtml("Reports", "src", srcs) : "") + rpGroupHtml("Report type", "type", types) + rpGroupHtml("Client", "client", clients) + rpGroupHtml("Status", "status", sts) + rpGroupHtml("Job date", "date", dates) + (years.length ? rpGroupHtml("Year", "year", years) : "");
 }
 // Front photos (Lex, 20 Oct evening): the WPS script (file Thumbs) saves one per job in Drive > WPS Thumbnails (private):
 // the Photo Tool's clean front photo for new jobs, the cover photo from the PDF once the report is sent. The tile asks the
@@ -3494,7 +3538,7 @@ function rpThumbShow(id){
 }
 async function rpLoadThumbs(){
   if (rpThumbBusy || state.view !== "reports" || !keyMode()) return;
-  const want = rpSorted((state.jobs || []).filter(j => rpMatch(j))).map(j => j.thumbId)
+  const want = rpSorted(rpAll().filter(j => rpMatch(j))).slice(0, state.rpLimit || RP_PAGE).map(j => j.thumbId)
     .filter(id => id && /^[A-Za-z0-9_-]{10,100}$/.test(id) && !RP_THUMBS[id] && !RP_THUMB_MISS[id]).slice(0, 72);
   if (!want.length) return;
   rpThumbBusy = true;
@@ -3517,10 +3561,10 @@ async function rpLoadThumbs(){
 }
 function rpReportUrl(j){ return /^[A-Za-z0-9_-]{10,100}$/.test(String(j.reportFileId||"")) ? "https://drive.google.com/file/d/" + j.reportFileId + "/view" : ""; }
 function rpTile(j){
-  const s = rpStatusMeta(rpStatus(j)), tm = typeMeta(j.type);
+  const s = rpStatusMeta(rpStatus(j)), tm = rpTypeMeta(j.type);
   const tid = /^[A-Za-z0-9_-]{10,100}$/.test(String(j.thumbId||"")) ? j.thumbId : "";
   const thumb = tid ? (RP_THUMBS[tid] || "") : (/^https:\/\//.test(String(j.thumb||"")) ? j.thumb : "");
-  const addr = fullAddress(j) || "No address";
+  const addr = fullAddress(j) || (j.isArchive ? "Address in the report" : "No address");
   const when = j.date ? tableDate(j.date) + (j.time ? ", " + esc(j.time) : "") : "No date yet";
   let extra = "";
   if (s.code === "signing"){
@@ -3528,6 +3572,8 @@ function rpTile(j){
     if (c){ const left = Math.ceil((c - Date.now())/864e5); extra = left > 0 ? `${left} day${left === 1 ? "" : "s"} left` : "window closed"; }
   } else if (s.code === "due"){
     const n = rpDaysSince(j.date); if (n !== null && n > 0) extra = `${n} day${n === 1 ? "" : "s"} since visit`;
+  } else if (s.code === "done" && j.isArchive){
+    extra = "Wellington Parker";
   } else if (s.code === "done"){
     extra = j.status === "signed" ? "signed" : j.status === "deemed" ? "deemed agreed" : j.status === "archived" ? "archived" : "sent";
   }
@@ -3535,16 +3581,16 @@ function rpTile(j){
   const rUrl = rpReportUrl(j), pUrl = /^https?:\/\//.test(String(j.photoLink||"")) ? j.photoLink : "";
   const before = s.code === "upcoming" || s.code === "today" || s.code === "due";
   const lk = (u, icon, t, title) => `<a class="rp-lk" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(title)}">${icon}${t}</a>`;
-  const jobBtn = `<button type="button" class="rp-lk rp-lk-job" onclick="event.stopPropagation();openEdit('${j.id}')" title="Open the job">${RP_ICON_EDIT}Job</button>`;
+  const jobBtn = j.isArchive ? "" : `<button type="button" class="rp-lk rp-lk-job" onclick="event.stopPropagation();openEdit('${j.id}')" title="Open the job">${RP_ICON_EDIT}Job</button>`;
   const acts = [
     rUrl ? lk(rUrl, RP_ICON_DOC, j.reportKind === "signed" ? "Signed report" : "Report", j.reportKind === "signed" ? "The signed copy (opens in Google Drive as info@)" : "The report as sent (opens in Google Drive as info@)") : (before ? `<span class="rp-lk rp-lk-off">No report yet</span>` : ""),
     pUrl ? lk(pUrl, RP_ICON_PHOTO, "Photos", "Download the photo set (zip)") : (before ? `<span class="rp-lk rp-lk-off">No photos yet</span>` : "")
   ].filter(Boolean).join("") + jobBtn;
   const photos = acts ? `<div class="rp-acts">${acts}</div>` : "";
-  return `<div class="rp-tile" role="button" tabindex="0" data-jid="${j.id}" onclick="rpOpen('${j.id}')" onkeydown="rpKey(event,'${j.id}')" title="${rUrl ? "Open the report PDF" : "Open " + esc(j.jobNo || "job")}">
-    <div class="rp-ph${thumb ? "" : " rp-nophoto"}"${tid && !thumb ? ` data-thumb="${tid}"` : ""}>${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('rp-nophoto');this.outerHTML=RP_LOGO">` : RP_LOGO}<span class="type-badge" title="${esc(tm.label)}">${esc(tm.code)}</span></div>
+  return `<div class="rp-tile" role="button" tabindex="0" data-jid="${j.id}" onclick="rpOpen('${j.id}')" onkeydown="rpKey(event,'${j.id}')" title="${rUrl ? "Open the report PDF" : j.isArchive ? "Report not copied yet" : "Open " + esc(j.jobNo || "job")}">
+    <div class="rp-ph${thumb ? "" : " rp-nophoto"}"${tid && !thumb ? ` data-thumb="${tid}"` : ""}>${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('rp-nophoto');this.outerHTML=RP_LOGO">` : RP_LOGO}<span class="type-badge" title="${esc(tm.label)}">${esc(tm.badge || tm.code)}</span></div>
     <div class="rp-body">
-      <div class="rp-no">${esc(j.jobNo || "No job number")}</div>
+      <div class="rp-no">${esc(j.jobNo || (j.isArchive ? "Old report" : "No job number"))}</div>
       <div class="rp-addr">${esc(addr)}</div>
       <div class="rp-row">${RP_ICON_CAL}<span>${when}</span></div>
       <div class="rp-row">${RP_ICON_DOC}<span>${esc(tm.label)}</span></div>
@@ -3555,8 +3601,9 @@ function rpTile(j){
   </div>`;
 }
 function renderRpResults(){
-  const all = state.jobs || [], list = rpSorted(all.filter(j => rpMatch(j)));
-  const f = rpF(), active = f.type.length + f.client.length + f.status.length + f.date.length + (String(state.rpSearch||"").trim() ? 1 : 0);
+  const all = rpAll(), list = rpSorted(all.filter(j => rpMatch(j)));
+  const lim = state.rpLimit || RP_PAGE, shown = list.slice(0, lim);
+  const f = rpF(), active = f.type.length + f.client.length + f.status.length + f.date.length + f.src.length + f.year.length + (String(state.rpSearch||"").trim() ? 1 : 0);
   const sort = state.rpSort || "status";
   const head = `<div class="rp-head"><span>${list.length} of ${all.length} report${all.length === 1 ? "" : "s"}${active ? ` · <button class="btn btn-text btn-sm" onclick="rpClear()">Clear filters</button>` : ""}</span>
     <select class="filter-select" onchange="rpSetSort(this.value)" aria-label="Sort tiles"${tip("Order of the tiles")}>
@@ -3564,9 +3611,12 @@ function renderRpResults(){
       <option value="new"${sort === "new" ? " selected" : ""}>Sort: newest first</option>
       <option value="old"${sort === "old" ? " selected" : ""}>Sort: oldest first</option>
     </select></div>`;
-  const body = list.length ? `<div class="rp-grid">${list.map(rpTile).join("")}</div>` : `<div class="empty">${all.length ? "No reports match these filters." : "No jobs on this device yet."}</div>`;
+  const more = list.length > shown.length ? `<div class="rp-more"><button class="btn btn-ghost btn-sm" onclick="rpMore()">Show more (${list.length - shown.length} more)</button></div>` : "";
+  const ai = state.archiveInfo, prog = ai && ai.waiting ? `<div class="rp-prog c-dim">Copying the older reports from Dropbox: ${ai.total - ai.waiting} of ${ai.total} done. New ones appear here as they arrive.</div>` : "";
+  const body = list.length ? `${prog}<div class="rp-grid">${shown.map(rpTile).join("")}</div>${more}` : `${prog}<div class="empty">${all.length ? "No reports match these filters." : "No jobs on this device yet."}</div>`;
   const key = `<div class="rp-key">${RP_STATUSES.map(s => `<span><span class="rp-dot" style="${s.dot}"></span>${s.label}</span>`).join("")}</div>`;
-  if (list.some(j => j.thumbId)) setTimeout(rpLoadThumbs, 0);
+  if (shown.some(j => j.thumbId)) setTimeout(rpLoadThumbs, 0);
+  if (keyMode() && !rpArchBusy && !(state.archiveAt && Date.now() - state.archiveAt < 30*60000) && !state.archiveTried){ state.archiveTried = true; setTimeout(() => { state.archiveTried = false; rpLoadArchive(); }, 0); }
   return head + body + key;
 }
 function renderReports(){
@@ -3771,7 +3821,7 @@ function renderInner(app){
     <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" ? " wrap-wide" : ""}">
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status: Upcoming, Today, Report due, Out for signing (with days left in the comment window) and Completed. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status: Upcoming, Today, Report due, Out for signing (with days left in the comment window) and Completed. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
@@ -4663,7 +4713,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#71)";
+const BUILD = "20 Oct 2026 (#72)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
