@@ -2004,20 +2004,20 @@ function ciEmailUrl(j, su, body){
 function ciAskEmailUrl(j){
   const addr = fullAddress(j) || "[full address]", day = rrLongDay(j.date) || "[date]";
   return ciEmailUrl(j, "Check-in - "+addr+" - "+day,
-    "Dear "+rrTenantNames(j)+",\n\nI'm the inventory clerk for your check-in at\n\n"+addr+"\n\non "+day+", arranged by "+ciAgentWho(j)+(ciAgentEmail(j) ? " (copied in)" : "")+".\n\n"
-    + "What time would you like to arrive at the property that day? I'll meet you there, go through the check-in with you and hand over the keys.\n\n"
-    + "You can also reply on WhatsApp: https://wa.me/447541345053\n\nKind regards,");
+    "Dear "+rrTenantNames(j)+",\n\nWe are carrying out your inventory and check-in at\n\n"+addr+"\n\non "+day+", arranged by "+ciAgentWho(j)+(ciAgentEmail(j) ? " (copied in)" : "")+".\n\n"
+    + "What time would you like to arrive at the property that day? Our clerk will meet you there, go through the check-in with you and hand over the keys. Just reply to this email with a time.\n\n"
+    + "Kind regards,");
 }
 function ciConfirmEmailUrl(j){
   const addr = fullAddress(j) || "[full address]";
   return ciEmailUrl(j, "Check-in - "+addr+" - confirmed",
-    "Dear "+rrTenantNames(j)+",\n\nThank you. Your check-in at\n\n"+addr+"\n\nis confirmed for "+rrLongDay(j.date)+" at "+(j.tenantArrival||j.time)+". I'll meet you at the property then.\n\n"
-    + "If anything changes, reply to this email or call or WhatsApp 07541 345053.\n\nKind regards,");
+    "Dear "+rrTenantNames(j)+",\n\nThank you. Your check-in at\n\n"+addr+"\n\nis confirmed for "+rrLongDay(j.date)+" at "+(j.tenantArrival||j.time)+". Our clerk will meet you at the property then.\n\n"
+    + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,");
 }
 function ciProposeEmailUrl(j){
   const addr = fullAddress(j) || "[full address]", day = rrLongDay(j.date);
   return ciEmailUrl(j, "Check-in - "+addr+" - "+day+" at "+j.tenantArrival+"?",
-    "Dear "+rrTenantNames(j)+",\n\nThank you for letting me know. "+j.tenantAsked+" doesn't quite work for me on "+day+". Could we make it "+j.tenantArrival+" instead?\n\n"
+    "Dear "+rrTenantNames(j)+",\n\nThank you for letting us know. "+j.tenantAsked+" doesn't quite work for us on "+day+". Could we make it "+j.tenantArrival+" instead?\n\n"
     + "Please reply to confirm, or suggest another time.\n\nKind regards,");
 }
 // "Send emails for me" (20 Oct, Lex): per device. Off = emails open in Gmail for Lex to send. On = the WPS script
@@ -2183,13 +2183,13 @@ function rearrangeEmailUrl(j, kind, missedIso){
     su = tm.label+" - "+addr+" - new appointment";
     body = "Dear "+rrTenantNames(j)+",\n\nThank you. Your "+word+" at\n\n"+addr+"\n\nhas been rearranged to "+when+".\n\n"
       + (mid ? "The inspection usually takes less than 15 minutes. If you won't be present, please reply to confirm you're happy for us to carry out the inspection using the access keys.\n\n" : "")
-      + "If anything changes, reply to this email or call or WhatsApp 07541 345053.\n\nKind regards,";
+      + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,";
   } else {
     su = tm.label+" - "+addr+" - new date needed";
     body = "Dear "+rrTenantNames(j)+",\n\nWe were unable to carry out the "+word+" at\n\n"+addr+"\n\n"+(missedIso ? "on "+rrLongDay(missedIso)+", so we" : "so we")+" need to arrange a new date.\n\n"
       + "Please reply with a few days and times that suit you over the next two weeks.\n\n"
       + (mid ? "The inspection usually takes less than 15 minutes. If you would rather not be present, let us know and we can arrange access in advance.\n\n" : "")
-      + "If you have any questions, reply to this email or call or WhatsApp 07541 345053.\n\nKind regards,";
+      + "If you have any questions, reply to this email or call 07541 345053.\n\nKind regards,";
   }
   return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
     + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
@@ -4769,7 +4769,7 @@ function slotInviteEmail(j, link){
     + "Please choose a time that suits you here:\n"+link+"\n\n"
     + "The page only shows times that are still free. You can also tell us whether you will be there or would like us to use the access keys. Nothing is booked until we confirm by email.\n\n"
     + "If none of the times suit you, just reply to this email.\n\n"
-    + "If you have any questions, reply to this email, call 07541 345053, or message us on WhatsApp: https://wa.me/447541345053\n\nKind regards,");
+    + "If you have any questions, reply to this email or call 07541 345053.\n\nKind regards,");
 }
 function slotConfirmEmail(j, req){
   const addr = fullAddress(j) || "[full address]", keys = req.access === SLOT_ACCESS_KEYS;
@@ -4777,7 +4777,7 @@ function slotConfirmEmail(j, req){
     slotGreeting(j)+"\n\nThank you. Your mid-term inspection at\n\n"+addr+"\n\nis confirmed for "+req.slotText+".\n\n"
     + (keys ? "As requested, we will use the access keys, so the inspection will go ahead even if nobody is home.\n\n"
             : req.access ? "You told us: "+req.access.toLowerCase()+". If you can no longer be there, please reply to let us know whether we may use the access keys.\n\n" : "")
-    + "If anything changes, reply to this email or call or WhatsApp 07541 345053.\n\nKind regards,");
+    + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,");
 }
 function slotDeclineEmail(j, req, link){
   const addr = fullAddress(j) || "[full address]";
@@ -4806,7 +4806,7 @@ async function slotCopy(id){
   const j = state.jobs.find(x => x.id === id); if (!j) return;
   try {
     const d = await slotCall({ action:"slotLink", job: j.jobNo });
-    try { await navigator.clipboard.writeText(d.link); alert("Link copied. Paste it into a WhatsApp or email to the tenant."); }
+    try { await navigator.clipboard.writeText(d.link); alert("Link copied. Paste it into an email to the tenant."); }
     catch(e){ prompt("Copy this link:", d.link); }
   } catch(e){ alert("Couldn't get the link: "+e.message); }
 }
@@ -4850,7 +4850,7 @@ function slotRowExtra(j){
   if (req && req.status === "Picked") return `<span class="sl-st sl-picked"${tip((req.name||"")+(req.phone ? " · "+req.phone : "")+(req.note ? " · Note: "+req.note : ""))}>Picked ${esc(req.slotText)} · ${esc(req.access === SLOT_ACCESS_KEYS ? "use keys" : req.access === "I will be there" ? "will be there" : req.access.toLowerCase())}</span>
     <span class="d-acts"><button class="d-mv sl-ok" onclick="slotApprove('${j.id}')"${tip("Sets the date and time, adds it to the calendar and opens the confirmation email in Gmail")}>Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')"${tip("Frees the time; the tenant picks again from the same link")}>Decline</button></span>`;
   if (req) return `<span class="sl-st c-dim">${/^Declined/.test(req.detail) ? "Declined, waiting for a new pick" : "Link sent"+(j.slotLinkAt ? " "+new Date(j.slotLinkAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "")+", no pick yet"}</span>
-    <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Opens the email with the same link again, e.g. as a chaser")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, e.g. for WhatsApp")}>Copy link</button></span>`;
+    <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Opens the email with the same link again, e.g. as a chaser")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, to paste into an email or text")}>Copy link</button></span>`;
   return `<span class="sl-st c-dim">No link sent</span><span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail (CC "+RR_MIDTERM_CC+") for you to check and send")}>Send slot link</button></span>`;
 }
 // Next mid-term due (Lex, 20 Oct, D6): last check-in or mid-term at a property + 6 months, when nothing newer is
