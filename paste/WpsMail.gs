@@ -32,7 +32,7 @@ function wmText_(s) {
     return '<a href="' + u + '" style="color:' + WM.CORAL + ';text-decoration:underline">' + (u.length > 60 ? u.slice(0, 57) + '...' : u) + '</a>';
   }).replace(/(^|[\s(])([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, function (m, pre, e) {
     return pre + '<a href="mailto:' + e + '" style="color:' + WM.CORAL + ';text-decoration:underline">' + e + '</a>';
-  }).replace(/\n/g, '<br>');
+  }).replace(/\b(0\d{4} \d{6})\b/g, '<span style="white-space:nowrap">$1</span>').replace(/\n/g, '<br>');
 }
 
 // Lex 20 Oct: the details people must not miss (address, dates) sit in the box with coral values, and the
@@ -44,12 +44,23 @@ function wmHtml_(m) {
   const F = WM.F;
   const p = function (t) { return '<p style="margin:0 0 14px;' + F + 'font-size:15px;line-height:1.55;color:' + WM.TEXT + '">' + wmText_(t) + '</p>'; };
   const small = function (t) { return '<p style="margin:0 0 12px;' + F + 'font-size:13px;line-height:1.5;color:' + WM.SOFT + '">' + wmText_(t) + '</p>'; };
+  // Details box (Lex 20 Oct): label above value so the value gets the full width; an address keeps
+  // "town, postcode" together, so if it must wrap it breaks cleanly before the town, never mid-way.
+  const val = function (label, v) {
+    const t = String(v == null ? '' : v);
+    if (/^property/i.test(label) && t.split(',').length >= 3) {
+      const parts = t.split(/,\s*/), tail = parts.splice(-2).join(', ');
+      return wmText_(parts.join(', ')) + ', <span style="white-space:nowrap">' + wmText_(tail) + '</span>';
+    }
+    return wmText_(t);
+  };
   const rows = function (rs) {
-    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + WM.NAVY2 + '" style="background:' + WM.NAVY2 + ';border-left:4px solid ' + WM.CORAL + ';margin:2px 0 18px"><tr><td style="padding:12px 16px">'
-      + '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' + rs.map(function (r) {
-        return '<tr><td valign="top" style="padding:5px 14px 5px 0;' + F + 'font-size:11px;letter-spacing:1px;text-transform:uppercase;color:' + WM.SOFT + ';white-space:nowrap">' + wmEsc_(r[0]) + '</td>'
-          + '<td valign="top" style="padding:4px 0;' + F + 'font-size:15px;line-height:1.4;font-weight:bold;color:' + (/^(property|date|time|suggested time|comments close)/i.test(r[0]) ? WM.HL : WM.TEXT) + '">' + wmText_(r[1]) + '</td></tr>';
-      }).join('') + '</table></td></tr></table>';
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + WM.NAVY2 + '" style="background:' + WM.NAVY2 + ';border-left:4px solid ' + WM.CORAL + ';margin:2px 0 18px"><tr><td style="padding:12px 16px 4px">'
+      + rs.map(function (r) {
+        const hl = /^(property|date|time|suggested time|comments close)/i.test(r[0]);
+        return '<p style="margin:0 0 2px;' + F + 'font-size:11px;letter-spacing:1px;text-transform:uppercase;color:' + WM.SOFT + '">' + wmEsc_(r[0]) + '</p>'
+          + '<p style="margin:0 0 10px;' + F + 'font-size:16px;line-height:1.4;font-weight:bold;color:' + (hl ? WM.HL : WM.TEXT) + '">' + val(r[0], r[1]) + '</p>';
+      }).join('') + '</td></tr></table>';
   };
   const button = function (b) {
     const bg = b.primary === false ? WM.NAVY : WM.CORAL, border = b.primary === false ? WM.SOFT : WM.CORAL;
