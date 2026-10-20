@@ -2040,7 +2040,13 @@ async function ciAutoSend(j, kind, fallbackUrl){
   let err = "";
   try {
     clearTimeout(cloudSaveTimer);
-    await dashSave();                                   // the script builds the email from the saved job
+    // the script builds the email from the saved job. If another save is already running
+    // (e.g. from the send just before), wait for it to finish, then save again.
+    for (let tries = 0; tries < 3; tries++){
+      for (let w = 0; w < 40 && state.dashSaving; w++) await new Promise(r=>setTimeout(r, 250));
+      await dashSave();
+      if (state.cloudStatus === "saved" && !state.dashSaving) break;
+    }
     if (state.cloudStatus !== "saved") throw new Error("the job couldn't be saved to the Job Log first");
     const d = await dashCall("ciSend", { job: j.jobNo, kind });
     if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
