@@ -35,6 +35,7 @@
   window.WPSLink = {
     key: key, call: call, sheetJobs: sheetJobs, merge: merge,
     savePhotoLink: function (job, id, link) { return key() ? call("jobPatch", { job: job, id: id, photoLink: link }) : Promise.resolve(null); },
-    saveDictation: function (job, type, text) { return key() ? call("dictSave", { job: job, type: type, text: text }) : Promise.resolve(null); }
+    saveDictation: function (job, type, text) { return key() ? call("dictSave", { job: job, type: type, text: text }) : Promise.resolve(null); },
+    saveFrontPhoto: function (job, id, jpegB64) { return key() ? call("thumbSave", { job: job, id: id, jpeg: jpegB64 }) : Promise.resolve(null); }   // 20 Oct evening: Reports page tiles
   };
 })();
