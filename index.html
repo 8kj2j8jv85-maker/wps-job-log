@@ -1641,6 +1641,7 @@ function captureFormValues(){
   setIf('extraAreas','f_extraAreas');
   if (f.tenantRows) f.tenantRows = f.tenantRows.map((t,i) => ({ name: grab('t_name_'+i) ?? t.name, phone: grab('t_phone_'+i) ?? t.phone, email: grab('t_email_'+i) ?? t.email }));
   setIf('notes','f_notes');
+  { const nv = document.getElementById('f_noVisitReminder'); if (nv) f.noVisitReminder = nv.checked; }
   setIf('keysFrom','f_keysFrom'); setIf('keysFromNote','f_keysFromNote'); setIf('keysBack','f_keysBack'); setIf('keysBackNote','f_keysBackNote');
   setIf('photoLink','f_photoLink');
   setIf('invoice','f_invoice');
@@ -1725,6 +1726,7 @@ function submitForm(){
     notes: g("f_notes").value,
     keysFrom: g("f_keysFrom").value, keysFromNote: g("f_keysFromNote").value.trim(),
     keysBack: g("f_keysBack").value, keysBackNote: g("f_keysBackNote").value.trim(),
+    noVisitReminder: !!(g("f_noVisitReminder") && g("f_noVisitReminder").checked),
     invoice: g("f_invoice").value,
     invoiceNo: g("f_invoiceNo").value.trim(),
   };
@@ -4575,6 +4577,10 @@ function renderForm(){
       </label>
       <label class="field">Where / who
         <input type="text" id="f_keysBackNote" value="${esc(f.keysBackNote||"")}" placeholder="Leave blank if the same place" />
+      </label>
+      <label class="field wide" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" id="f_noVisitReminder" ${f.noVisitReminder ? "checked" : ""} style="width:20px;height:20px;flex:none" />
+        <span${hint("The script emails tenants about 17:00 the day before a booked visit that has a time. Tick to skip it for this job.")}>No day-before reminder to tenants</span>
       </label>
       ${renderPhotoLinkField(f)}
     </div>
