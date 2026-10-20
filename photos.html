@@ -353,7 +353,7 @@
 <div id="progress" class="progress hidden"><div class="box"><div id="progTitle" style="font-weight:600">Working&hellip;</div><div id="progText" class="muted small" style="margin-top:4px"></div><div class="bar"><div id="progBar"></div></div></div></div>
 
 <!-- integrity: the browser refuses the file if the CDN copy is ever changed (hash checked 17 Oct 2026 against cdnjs and jsdelivr, identical) -->
-<script src="wpslink.js?v=20261020"></script>
+<script src="wpslink.js?v=20261020b"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 "use strict";
@@ -988,6 +988,7 @@ function render(){
           <div class="preview-name">Zip: <span class="mono">${esc(zipName(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, firstArea(g, amap) || "Kitchen", 1))}</span></div>
           ${m.link ? `<div class="linkrow"><input readonly value="${esc(m.link)}" id="lnk_${g.id}" /><button class="btn btn-ghost btn-sm" data-act="copy" data-g="${g.id}" title="Copies the photo link to paste into the report">Copy link</button></div>` : ""}
           ${m.sheetMsg ? `<div class="small muted">${esc(m.sheetMsg)}</div>` : ""}
+          ${m.thumbMsg ? `<div class="small muted">${esc(m.thumbMsg)}</div>` : ""}
         </div>
         <div class="gactions">
           ${isLaterSibling ? `<span class="small muted">Goes in the zip with the first set</span>` : `<button class="btn btn-coral" data-act="process" data-g="${g.id}" ${ready?"":"disabled"} title="${ready ? "Renames, watermarks and zips this job's photos, then saves the photo link to the job" : "Needs a job number and postcode first"}" data-hint="${ready ? "Saves the zip and the photo link" : "Needs job number + postcode"}">Process &amp; download zip</button>`}
@@ -1308,6 +1309,21 @@ async function processGroup(gid, opts){
   m.link = (S.settings.base || "") + name;
   for (const id of sibs) if (S.meta[id]) S.meta[id].link = m.link;
   saveLinkToJobLog(m);
+  // 20 Oct evening: a small clean front photo for the Reports page tile (WPS script file Thumbs, device key only).
+  // The "External picture" cover if there is one, else the first "Front exterior" / "Exterior" photo.
+  const front = covers[0] || keep.find(p => /^(front exterior|exterior)$/i.test(amap[p.id] || ""));
+  if (front && window.WPSLink && WPSLink.key() && m.jobNo){
+    try {
+      const tbuf = await processPhoto(front, { clean:true, size:640, quality:78 });
+      const u8 = new Uint8Array(tbuf); let bin = "";
+      for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      WPSLink.saveFrontPhoto(m.jobNo, m.jobId, btoa(bin)).then(d => {
+        if (!d) return;
+        m.thumbMsg = d.ok ? (d.kept ? "Front photo: the report cover is already on the Reports page." : "Front photo saved for the Reports page.") : "Front photo not saved: " + (d.error || "no answer");
+        try { render(); } catch(e){}
+      });
+    } catch(e){ m.thumbMsg = "Front photo not saved: " + (e && e.message || e); }
+  }
   if (!opts || !opts.inBatch) hideProgress();
   render();
 }
