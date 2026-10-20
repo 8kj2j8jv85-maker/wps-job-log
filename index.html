@@ -764,6 +764,26 @@
   @media (max-width:360px){ .rp-grid{ grid-template-columns:1fr; } }
   html[data-theme="night"]{ --rp-blue-text:#8FB8F0; --rp-purple-text:#B3ADF5; }
   html[data-theme="night"] .rp-side{ background:var(--card); border:1px solid var(--line); }
+  /* ---------- Mid-term emails box (Lex, 20 Oct) ---------- */
+  .mt-back{ position:fixed; inset:0; background:rgba(10,14,30,.55); z-index:200; display:flex; align-items:flex-start; justify-content:center; padding:4vh 12px; overflow-y:auto; }
+  .mt-box{ background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:12px; width:100%; max-width:680px; padding:16px 18px 18px; box-shadow:0 12px 40px rgba(0,0,0,.35); outline:none; }
+  .mt-h{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; font-size:15px; }
+  .mt-h .undo-x{ background:none; border:none; font-size:18px; cursor:pointer; color:var(--ink-soft); }
+  .mt-f{ display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--ink-soft); margin:6px 0; flex:1 1 140px; min-width:0; }
+  .mt-f select, .mt-f input{ font:inherit; font-size:14px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink); min-width:0; }
+  .mt-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .mt-chk{ display:flex; gap:8px; align-items:flex-start; font-size:13px; margin:6px 0; color:var(--ink); }
+  .mt-chk input{ margin-top:2px; flex:none; }
+  .mt-also{ border-top:1px solid var(--line); margin-top:8px; padding-top:8px; }
+  .mt-sub{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:4px; }
+  .mt-small{ font-size:12px; margin-top:4px; }
+  .mt-msg{ margin:10px 0 4px; font-size:13px; color:var(--ink-soft); }
+  .mt-msg.bad{ color:var(--red); }
+  .mt-who{ margin:10px 0 6px; font-size:13px; display:grid; gap:2px; word-break:break-word; }
+  .mt-frame{ width:100%; height:520px; border:1px solid var(--line); border-radius:8px; background:#141D3D; display:block; }
+  .mt-b{ margin-top:12px; }
+  .mt-b .btn[disabled]{ opacity:.5; cursor:default; }
+  @media (max-width:600px){ .mt-back{ padding:8px; } .mt-box{ padding:12px; } .mt-frame{ height:440px; } .mt-f input, .mt-f select{ font-size:16px; } }
   /* ---------- themes (Lex, 18 Oct): Classic (default), Light, Night. Picked in the left menu, remembered per device. ---------- */
   html[data-theme="light"]{
     --paper:#FFFFFF; --paper-deep:#F3F5F9; --line:#E8EBF0; --line-soft:#F3F5F8; --sky:#D7E1EF; --peri-bg:#EEF1F8; --stone-bg:#F0F2F5;
@@ -3397,6 +3417,158 @@ function renderReports(){
   </div>`;
 }
 
+// ---------------------------------------------------------------- mid-term emails (Lex, 20 Oct)
+// "Email tenants" on a mid-term: pick the email, the day and window (or the confirmed time), Preview shows the
+// exact navy email the WPS script will send (file MidtermSend: built from the job saved in the Job Log, from
+// hello@, Winkworth jobs CC bowpropman@), then Send. The same offer can go to other mid-terms on the round in
+// one go. Needs the device key. Every send shows in the job's "Emails to the tenants" box.
+const MT_KINDS = [
+  ["offer", "First email: offer a day and time window"],
+  ["newday", "Another day available (round moved)"],
+  ["chaser", "Chaser: please reply by 9am"],
+  ["confirm", "Confirm a time"],
+  ["details", "Ask the agent for tenant details"]
+];
+const MT_WORDS = { "mt-offer":"Mid-term: day offered", "mt-newday":"Mid-term: another day offered", "mt-chaser":"Mid-term: chaser", "mt-confirm":"Mid-term: time confirmed", "mt-details":"Mid-term: asked agent for tenant details" };
+Object.assign(CI_LOG_WORDS, MT_WORDS);
+const MT_WINDOW = ["11:00", "14:30"];
+function mtWeekday(iso){ const d = new Date(iso+"T12:00:00"); return d.getDay() !== 0 && d.getDay() !== 6; }
+function mtNextWeekday(){ let i = 1; while (!mtWeekday(isoToday(i))) i++; return isoToday(i); }
+// Other mid-terms the same offer can go to: Booked, no time yet, not this job
+function mtRoundJobs(j){
+  return state.jobs.filter(x => x.id !== j.id && x.type === "MTI" && x.status === "booked" && !x.time && (!x.date || x.date >= isoToday(0)))
+    .sort((a,b) => String(a.jobNo).localeCompare(String(b.jobNo)));
+}
+function openMtBox(id){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  if (!keyMode()){ alert("Sending mid-term emails needs this device's key (More > Device key)."); return; }
+  const last = j.mtLast || {};
+  const day = j.date && j.date > isoToday(0) && mtWeekday(j.date) ? j.date : (last.day && last.day > isoToday(0) ? last.day : mtNextWeekday());
+  const kind = !j.tenantEmails ? "details" : j.time && j.date ? "confirm" : (last.kind === "offer" || last.kind === "newday") ? "chaser" : "offer";
+  state.mtBox = { id, kind, day, from: last.from || MT_WINDOW[0], to: last.to || MT_WINDOW[1], time: j.time || "", access: "", note: "", also: [], setDay: true, preview: null, busy: false, msg: "" };
+  render();
+  const b = document.getElementById("mt_box"); if (b) b.focus();
+}
+function closeMtBox(){ if (state.mtBox && state.mtBox.busy) return; state.mtBox = null; render(); }
+function mtCapture(){
+  const s = state.mtBox; if (!s) return;
+  const v = id => { const el = document.getElementById(id); return el ? el.value : null; };
+  ["kind","day","from","to","time","access","note"].forEach(k => { const x = v("mt_"+k); if (x != null) s[k] = x.trim ? x.trim() : x; });
+  const sd = document.getElementById("mt_setDay"); if (sd) s.setDay = sd.checked;
+  const al = document.querySelectorAll("#mt_box input[data-also]"); if (al.length) s.also = Array.from(al).filter(x => x.checked).map(x => x.dataset.also);
+}
+// Anything that changes the email clears the preview, so what's sent is always what was last previewed
+function mtChanged(){ mtCapture(); if (state.mtBox){ state.mtBox.preview = null; state.mtBox.msg = ""; } render(); }
+function mtParams(j){
+  const s = state.mtBox, p = { job: j.jobNo, kind: s.kind, note: s.note };
+  if (s.kind === "confirm") Object.assign(p, { day: s.day, time: s.time, access: s.access });
+  else if (s.kind === "details") Object.assign(p, s.day ? { day: s.day } : {});
+  else Object.assign(p, { day: s.day, from: s.from, to: s.to });
+  return p;
+}
+// The script builds the email from the saved job, so save first (same as the check-in emails)
+async function mtSaveFirst(){
+  clearTimeout(cloudSaveTimer);
+  for (let tries = 0; tries < 3; tries++){
+    for (let w = 0; w < 40 && state.dashSaving; w++) await new Promise(r => setTimeout(r, 250));
+    await dashSave();
+    if (state.cloudStatus === "saved" && !state.dashSaving) break;
+  }
+  if (state.cloudStatus !== "saved") throw new Error("the job couldn't be saved to the Job Log first");
+}
+async function mtPreview(){
+  mtCapture();
+  const s = state.mtBox, j = s && state.jobs.find(x => x.id === s.id); if (!j) return;
+  s.busy = true; s.msg = "Saving and building the email…"; s.preview = null; render();
+  try {
+    await mtSaveFirst();
+    const d = await dashCall("mtPreview", mtParams(j));
+    if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
+    s.preview = Object.assign({ sig: JSON.stringify(mtParams(j)) }, d); s.msg = "";
+  } catch(e){ s.msg = "Can't send: "+String(e && e.message || e); }
+  s.busy = false; render();
+  const f = document.getElementById("mt_frame"); if (f && f.scrollIntoView) f.scrollIntoView({ block:"nearest" });
+}
+async function mtSend(){
+  mtCapture();
+  const s = state.mtBox, j = s && state.jobs.find(x => x.id === s.id); if (!j || !s.preview) return;
+  if (s.preview.sig !== JSON.stringify(mtParams(j))){ s.preview = null; s.msg = "Something changed since the preview. Press Preview again."; render(); return; }
+  const list = [j].concat(["offer","newday","chaser"].includes(s.kind) ? s.also.map(id => state.jobs.find(x => x.id === id)).filter(Boolean) : []);
+  s.busy = true; s.msg = "Sending…"; render();
+  const done = [], failed = [];
+  try { if (list.length > 1) await mtSaveFirst(); } catch(e){}
+  for (const x of list){
+    try {
+      const p = Object.assign(mtParams(j), { job: x.jobNo });
+      const d = await dashCall("mtSend", p);
+      if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
+      mtAfterSend(x, s, d);
+      done.push(x.jobNo);
+    } catch(e){ failed.push((x.jobNo || "job")+": "+String(e && e.message || e)); }
+  }
+  saveJobs();
+  if (state.gcalConnected) list.filter(x => done.includes(x.jobNo)).forEach(x => syncJobToCalendar(x));
+  s.busy = false;
+  if (!failed.length){ state.mtBox = null; render(); showActionBar("Sent: "+done.join(", ")+(done.length ? " (from hello@, check Sent if you want to see it)" : "")); return; }
+  s.preview = null; s.msg = (done.length ? "Sent: "+done.join(", ")+". " : "")+"Not sent: "+failed.join("; ");
+  render();
+}
+function mtAfterSend(x, s, d){
+  const when = new Date(), kw = (MT_KINDS.find(k => k[0] === s.kind) || [, s.kind])[1];
+  const what = s.kind === "confirm" ? rrShortDay(s.day)+" "+s.time+(s.access === "keys" ? " (keys)" : " (tenant there)")
+    : s.kind === "details" ? (s.day ? "for "+rrShortDay(s.day) : "")
+    : rrShortDay(s.day)+" "+s.from+"-"+s.to;
+  ciAddNote(x, "Mid-term email sent by the dashboard "+ciDay(when)+" "+pad2(when.getHours())+":"+pad2(when.getMinutes())+": "+kw.split(":")[0].toLowerCase()+" "+what+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+".");
+  if (s.kind !== "details") x.mtLast = { kind: s.kind, day: s.day, from: s.from, to: s.to, at: when.toISOString() };
+  if (s.kind === "confirm"){ x.date = s.day; x.time = s.time; if (s.access === "keys" && !x.keysFrom) x.keysFrom = "office"; delete x.rearrangePending; }
+  else if (s.setDay && s.day && ["offer","newday","chaser"].includes(s.kind) && x.date !== s.day){ x.date = s.day; x.time = ""; delete x.rearrangePending; }
+}
+function mtButton(j, label){
+  return `<button class="d-mv" onclick="openMtBox('${j.id}')"${tip("Mid-term emails in the navy look, sent from hello@ (Winkworth jobs CC "+RR_MIDTERM_CC+"). You preview it first.")}>${esc(label || "Email tenants")}</button>`;
+}
+function renderMtBox(){
+  const s = state.mtBox; if (!s) return "";
+  const j = state.jobs.find(x => x.id === s.id); if (!j){ state.mtBox = null; return ""; }
+  const win = ["offer","newday","chaser"].includes(s.kind);
+  const opt = (v, cur, label) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(label)}</option>`;
+  const round = win ? mtRoundJobs(j) : [];
+  const p = s.preview, dis = s.busy ? " disabled" : "";
+  return `<div class="mt-back" onclick="if(event.target===this)closeMtBox()"><div class="mt-box" id="mt_box" tabindex="-1" role="dialog" aria-label="Mid-term email">
+    <div class="mt-h"><div><b>Mid-term email</b><div class="c-dim">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"No address")}</div></div><button class="undo-x" onclick="closeMtBox()" aria-label="Close">✕</button></div>
+    <label class="mt-f">Email<select id="mt_kind" onchange="mtChanged()"${dis}>${MT_KINDS.map(k => opt(k[0], s.kind, k[1])).join("")}</select></label>
+    <div class="mt-row">
+      <label class="mt-f">Day${s.kind === "details" ? " (optional)" : ""}<input type="date" id="mt_day" min="${isoToday(1)}" value="${esc(s.day||"")}" onchange="mtChanged()"${dis}></label>
+      ${win ? `<label class="mt-f">From<input type="time" id="mt_from" value="${esc(s.from)}" onchange="mtChanged()"${dis}></label><label class="mt-f">To<input type="time" id="mt_to" value="${esc(s.to)}" onchange="mtChanged()"${dis}></label>` : ""}
+      ${s.kind === "confirm" ? `<label class="mt-f">Time<input type="time" id="mt_time" value="${esc(s.time)}" onchange="mtChanged()"${dis}></label>
+        <label class="mt-f">Access<select id="mt_access" onchange="mtChanged()"${dis}>${opt("", s.access, "Choose…")}${opt("present", s.access, "Tenant will be there")}${opt("keys", s.access, "Use the keys (tenant agreed in writing)")}</select></label>` : ""}
+    </div>
+    ${s.day && !mtWeekday(s.day) ? `<div class="rr-warn">No weekend mid-terms: pick a weekday.</div>` : ""}
+    <label class="mt-f">Extra line (optional, no links)<input type="text" id="mt_note" maxlength="300" value="${esc(s.note)}" placeholder="e.g. Parking is on the street outside." onchange="mtChanged()"${dis}></label>
+    ${win ? `<label class="rr-chk mt-chk"><input type="checkbox" id="mt_setDay"${s.setDay ? " checked" : ""} onchange="mtCapture()"${dis}> Put this day on the job (date, no time) when sent</label>` : ""}
+    ${s.kind !== "details" && !j.tenantEmails ? `<div class="rr-warn">No tenant email on this job. Add it, or use "Ask the agent for tenant details".</div>` : ""}
+    ${round.length ? `<div class="mt-also"><div class="mt-sub">Send the same email to other mid-terms on the round</div>${round.map(x => `<label class="rr-chk mt-chk"><input type="checkbox" data-also="${x.id}"${s.also.includes(x.id) ? " checked" : ""}${x.tenantEmails ? "" : " disabled"} onchange="mtChanged()"${dis}> <span>${esc(x.jobNo||"")} · ${esc([x.address, x.postcode].filter(Boolean).join(", "))}${x.date ? " · "+esc(rrShortDay(x.date)) : ""}${x.tenantEmails ? "" : ' <span class="c-dim">(no tenant email)</span>'}</span></label>`).join("")}<div class="c-dim mt-small">Each gets its own email with their names and address. The preview below is for ${esc(j.jobNo||"this job")}.</div></div>` : ""}
+    ${s.msg ? `<div class="mt-msg${/^Can't|^Not sent|Not sent:/.test(s.msg) ? " bad" : ""}">${esc(s.msg)}</div>` : ""}
+    ${p ? `<div class="mt-who"><div><span class="c-dim">To</span> ${esc(p.to)}</div>${p.cc ? `<div><span class="c-dim">CC</span> ${esc(p.cc)}</div>` : ""}<div><span class="c-dim">Subject</span> ${esc(p.subject)}</div></div>
+      <iframe id="mt_frame" class="mt-frame" sandbox="" title="Email preview" srcdoc="${esc(p.html || "<pre style='white-space:pre-wrap;font-family:Arial'>"+esc(p.body)+"</pre>")}"></iframe>` : ""}
+    <div class="rr-b mt-b">
+      <button class="btn btn-ghost btn-sm" onclick="mtPreview()"${dis}>${p ? "Preview again" : "Preview"}</button>
+      <button class="btn btn-coral btn-sm" onclick="mtSend()"${p && !s.busy ? "" : " disabled"}${tip("Sends from hello@ now. Preview first.")}>Send${s.also.length && win ? " ("+(1+s.also.length)+" emails)" : ""}</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeMtBox()"${dis}>Cancel</button>
+    </div>
+  </div></div>`;
+}
+function renderMtFormBox(f, isNew){
+  if (isNew || f.type !== "MTI") return "";
+  return `<div class="field wide ph-box"><div class="ph-h">Mid-term emails</div><div class="c-dim" style="font-size:13px;margin-bottom:6px">Uses the saved job: save your changes first.</div>${mtButton(f, "Email tenants")}</div>`;
+}
+function renderMidRound(){
+  const list = state.jobs.filter(j => j.type === "MTI" && j.status === "booked" && j.date && j.date >= isoToday(0) && !j.time && !j.rearrangePending)
+    .sort((a,b) => String(a.date).localeCompare(String(b.date)) || String(a.jobNo).localeCompare(String(b.jobNo)));
+  if (!list.length) return "";
+  return `<div class="d-sect" style="margin-top:14px">On a round, no time agreed yet (${list.length})</div>`
+    + list.map(j => cRow(j, { extra: `<span class="c-dim" style="white-space:nowrap">${j.mtLast ? esc((MT_WORDS["mt-"+j.mtLast.kind]||"").replace("Mid-term: ","")+" "+ciDay(new Date(j.mtLast.at))) : "No email from the dashboard yet"}</span><span class="d-acts">${mtButton(j)}</span>` })).join("");
+}
+
 // ---------------------------------------------------------------- rendering
 // Search box (15 Oct fix, Lex 14 Oct): typing used to redraw the whole page, which threw the cursor out of the box
 // after one letter. Now only the job list underneath is redrawn, and if anything else redraws the page
@@ -3439,7 +3611,8 @@ function renderInner(app){
     </div>
     </main>
     </div>
-    ${state.editing ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="Log a job by hand">+</button>`}
+    ${state.editing || state.mtBox ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="Log a job by hand">+</button>`}
+    ${renderMtBox()}
   `;
 }
 
@@ -4313,7 +4486,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#66)";
+const BUILD = "20 Oct 2026 (#67)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -5177,11 +5350,12 @@ function renderMidPanel(mids){
     : sl.error ? `<div class="t-empty">${esc(sl.error)}. <button class="t-link" onclick="refreshSlots()">Try again</button></div>` : "";
   const picked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
   const rest = mids.filter(j => !picked.includes(j));
-  const row = j => cRow(j, { extra: slotRowExtra(j) });
-  return helpBox(`Mid-terms with no date yet. 1. Press <b>Send slot link</b>: Gmail opens with the tenant's own link, CC'd to the office. Check it and send. 2. The tenant picks a free time and says if they'll be there or you can use the keys. 3. Their pick shows here and in Do next. Press <b>Approve</b> (sets the date, time and calendar, and opens the confirmation email) or <b>Decline</b> (they pick again from the same link). Nothing is booked until you approve. <b>Change</b> sets which days and hours tenants can pick.`) + renderSlotSettings() + head
+  const row = j => cRow(j, { extra: slotRowExtra(j) + `<span class="d-acts">${mtButton(j, "Email")}</span>` });
+  return helpBox(`Mid-terms with no date yet. 1. Press <b>Send slot link</b>: Gmail opens with the tenant's own link, CC'd to the office. Check it and send. 2. The tenant picks a free time and says if they'll be there or you can use the keys. 3. Their pick shows here and in Do next. Press <b>Approve</b> (sets the date, time and calendar, and opens the confirmation email) or <b>Decline</b> (they pick again from the same link). Nothing is booked until you approve. <b>Change</b> sets which days and hours tenants can pick. Or press <b>Email</b>: offer a day and time window, chase, confirm a time or ask the agent for tenant details, in the navy look from hello@ (Winkworth jobs CC Riley). You see the email before it goes, and can send the same offer to the other mid-terms on the round.`) + renderSlotSettings() + head
     + (picked.length ? `<div class="d-sect">Tenant picked a time, approve or decline (${picked.length})</div>` + picked.map(row).join("") : "")
     + (rest.length ? `<div class="d-sect"${picked.length ? ' style="margin-top:14px"' : ""}>Need a date (${rest.length})</div>` + rest.map(row).join("") : "")
     + (!mids.length ? `<div class="t-empty">No mid-terms waiting for a date.</div>` : "")
+    + renderMidRound()
     + renderMidDue()
     + `<div class="d-note">Mid-terms at Booked with no date (or rearranged). Send slot link opens the email in Gmail with the tenant's own link; they see only free times and tell you if they'll be there or want you to use the keys. Nothing is booked until you approve. ${sl.loaded && sl.at ? "Picks checked "+new Date(sl.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})+". " : ""}<button class="t-link" onclick="refreshSlots()">Check for picks now</button></div>`;
 }
@@ -5556,7 +5730,7 @@ function renderForm(){
       </label>
       ${renderPhotoLinkField(f)}
       ${renderPropertyHistory(f)}
-      ${renderCiLogBox(f)}${renderVrBox(f)}
+      ${renderCiLogBox(f)}${renderVrBox(f)}${renderMtFormBox(f, isNew)}
       ${renderHistory(f)}
     </div>
 
@@ -5640,7 +5814,7 @@ window.addEventListener("storage", function(e){
 // open or something is being typed, so nothing in progress is lost.
 let lastRefreshDay = isoToday(0);
 function autoRefresh(){
-  if (document.hidden || state.editing || state.rearrangeId) return;   // not while the Rearrange panel is open
+  if (document.hidden || state.editing || state.rearrangeId || state.mtBox) return;   // not while the Rearrange panel or mid-term email box is open
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
@@ -5660,7 +5834,7 @@ window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (stat
 // ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
 // (merging if another device saved first), load other devices' changes, read the queue, amendments and signings.
 function safeRender(){
-  if (state.editing || state.rearrangeId) return;
+  if (state.editing || state.rearrangeId || state.mtBox) return;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   const y = window.scrollY; render(); window.scrollTo(0, y);
@@ -6059,6 +6233,7 @@ window.addEventListener("popstate", function(){
 // Esc closes the form, like Cancel (fix 7). The Rearrange panel closes first if it's open.
 document.addEventListener("keydown", function(e){
   if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+  if (state.mtBox){ closeMtBox(); return; }
   if (state.rearrangeId && typeof closeRearrange === "function"){ closeRearrange(); return; }
   if (state.editing){ e.preventDefault(); requestCloseForm(); }
 });
