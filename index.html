@@ -450,6 +450,22 @@
   .help-box .hb-hide:hover{ background:rgba(0,0,0,.06); }
   .side-more{ display:contents; }
   .phone-only{ display:none; }
+  .am-job{ display:block; }
+  .am-head{ all:unset; box-sizing:border-box; width:100%; display:flex; gap:10px; align-items:flex-start; justify-content:space-between; cursor:pointer; }
+  .am-head .t-main{ display:block; } .am-head .sub{ display:block; }
+  .am-head:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+  .am-tog{ flex-shrink:0; font-size:12.5px; color:var(--coral-dark, var(--coral)); font-weight:600; white-space:nowrap; padding-top:2px; }
+  .am-pts{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+  .am-pt{ border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--card); min-width:0; }
+  .am-top{ display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; }
+  .am-n{ font-size:12px; color:var(--stone); font-weight:600; }
+  .am-where{ font-weight:600; }
+  .am-type{ font-size:11.5px; border-radius:999px; padding:1px 8px; background:var(--paper); border:1px solid var(--line); }
+  .am-who{ font-size:12.5px; color:var(--stone); margin-top:2px; }
+  .am-com{ margin:6px 0 0; padding-left:10px; border-left:3px solid var(--coral); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .am-ph{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:6px; font-size:13px; }
+  .am-dec{ margin-top:6px; font-size:12.5px; }
+
   .btn.sync-ok{ border-color:var(--green); color:var(--green); background:var(--green-bg); }
   .btn.sync-bad{ border-color:var(--coral); color:var(--coral-dark); background:var(--coral-bg); }
   .sync-msg{ width:100%; font-size:13px; color:var(--coral-dark); }
@@ -2875,14 +2891,14 @@ const ICON_HOME = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 // ---------------------------------------------------------------- Today dashboard
 const LINK_TIPS = {
   "Photo Tool":"Turn a day's photos into named, watermarked zips", "Dictation":"Phone notes by voice, room by room",
-  "Amendments review":"Work through tenant comments point by point", "Amendments form":"The comments form tenants use",
+  "Amendments Sheet":"Every comment sent in through the form (the dashboard's Amendments card shows them point by point)", "Amendments form":"The comments form tenants use",
   "Acrobat (e-sign)":"Send reports out for signature", "Gmail (info@)":"The info@ inbox", "Google Calendar":"The info@ calendar",
   "Dropbox (WPS)":"WPS files", "Website":"wellington-ps.co.uk", "Job Log Sheet (view only, don't edit)":"The Google Sheet copy of the Job Log. For looking only: the Job Log ignores edits made there and overwrites them on the next save"
 };
 const TODAY_LINKS = [
   ["Photo Tool", "photos.html"],
   ["Dictation", "dictate.html"],
-  ["Amendments review", "https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF"],
+  ["Amendments Sheet", "https://docs.google.com/spreadsheets/d/1FjRFw2l9L1T3DVbASn08NfSsvbxlGQAQ4Qu95CRK6gs"],
   ["Amendments form", "https://script.google.com/macros/s/AKfycbxAJ7lbajJ81KFwi4G9tIGTUKXhofsFcJ8QM4K_Vu4gdOx_yaCPYpDIL-y7vQvlbPxR/exec"],
   ["Acrobat (e-sign)", "https://acrobat.adobe.com/"],
   ["Gmail (info@)", "https://mail.google.com/mail/u/?authuser=info@wellingtonparker.com"],
@@ -2941,13 +2957,18 @@ function loadAmendments(quiet){
       const head = rows[0] || [];
       const col = name => head.indexOf(name);
       const iJob = col("Job"), iAddr = col("Address"), iSub = col("Submitted"), iName = col("Name"), iRole = col("Role"), iStatus = col("Status"), iDec = col("Decision");
+      const iPt = col("Point"), iRoom = col("Room"), iItem = col("Item no."), iType = col("Type"), iCom = col("Comment"), iPh = col("Photos"), iWord = col("New wording");
+      const cell = (row, i) => i < 0 ? "" : String(row[i] == null ? "" : row[i]).trim();
       const byJob = {};
       rows.slice(1).forEach(row => {
         const job = (row[iJob]||"").trim(); if (!job) return;
         const status = (row[iStatus]||"").trim();
         if (/done|complete|closed|finished/i.test(status)) return;   // finished points drop off
-        const g = byJob[job] || (byJob[job] = { job, address: row[iAddr]||"", first: row[iSub]||"", names: new Set(), points: 0, decided: 0 });
+        const g = byJob[job] || (byJob[job] = { job, address: row[iAddr]||"", first: row[iSub]||"", names: new Set(), points: 0, decided: 0, items: [] });
         g.points++;
+        g.items.push({ n: cell(row,iPt), room: cell(row,iRoom), item: cell(row,iItem), type: cell(row,iType), comment: cell(row,iCom),
+          photos: cell(row,iPh).split(/\s+/).filter(u => /^https:\/\/(drive|docs)\.google\.com\//.test(u)),
+          who: cell(row,iName) + (cell(row,iRole) ? " ("+cell(row,iRole)+")" : ""), sent: cell(row,iSub), status: status, decision: cell(row,iDec), wording: cell(row,iWord) });
         if ((row[iDec]||"").trim()) g.decided++;
         if (row[iName]) g.names.add(row[iName] + (row[iRole] ? " ("+row[iRole]+")" : ""));
         if (row[iSub] && (!g.first || row[iSub] < g.first)) g.first = row[iSub];
@@ -2973,17 +2994,34 @@ function loadAmendments(quiet){
   });
 }
 function rerenderToday(){ if (state.view === "today") render(); }
+// Amendments points (Lex, 20 Oct): tap a job to read every point sent in through the form, straight from the Amendments tab.
+// The old review page (claude.ai artifact) had its own empty database, so it's no longer linked.
+function toggleAmendJob(job){ state.amendOpen = state.amendOpen || {}; state.amendOpen[job] = !state.amendOpen[job]; render(); }
+function renderAmendJob(g){
+  const open = !!(state.amendOpen && state.amendOpen[g.job]);
+  const head = `<button type="button" class="am-head" aria-expanded="${open}" data-amjob="${esc(g.job)}" onclick="toggleAmendJob(this.dataset.amjob)">
+      <span class="t-main"><strong>${esc(g.job)}</strong> · ${esc(g.address)}<span class="sub">${g.points} point${g.points===1?"":"s"}${g.decided?" · "+g.decided+" decided":""} · first sent ${esc(String(g.first).slice(0,16))}${g.names.size ? " · "+esc([...g.names].join(", ")) : ""}</span></span>
+      <span class="am-tog">${open ? "Hide ▴" : "Read ▾"}</span></button>`;
+  if (!open) return `<div class="t-row am-job">${head}</div>`;
+  const pts = (g.items || []).slice().sort((x,y)=>(parseFloat(x.n)||0)-(parseFloat(y.n)||0)).map(p => `<div class="am-pt">
+      <div class="am-top"><span class="am-n">Point ${esc(p.n||"?")}</span><span class="am-where">${esc([p.room, p.item ? "item "+p.item : ""].filter(Boolean).join(" · ") || "No room given")}</span>${p.type ? `<span class="am-type">${esc(p.type)}</span>` : ""}</div>
+      <div class="am-who">${esc(p.who)}${p.sent ? " · "+esc(String(p.sent).slice(0,16)) : ""}${p.status ? " · "+esc(p.status) : ""}</div>
+      <p class="am-com">${esc(p.comment || "(no comment)")}</p>
+      ${p.photos.length ? `<div class="am-ph">${p.photos.map((u,i)=>`<a href="${esc(u)}" target="_blank" rel="noopener">Photo ${i+1}</a>`).join("")}</div>` : ""}
+      ${p.decision ? `<div class="am-dec">Decision: ${esc(p.decision)}${p.wording ? " · "+esc(p.wording) : ""}</div>` : ""}
+    </div>`).join("");
+  return `<div class="t-row am-job am-open">${head}<div class="am-pts">${pts}<div class="sub" style="margin-top:6px">To answer them: say "review amendments ${esc(g.job)}" to Claude.</div></div></div>`;
+}
 function renderAmendCard(inner){
   const a = state.amend || {};
-  const link = `<div class="t-links" style="margin-top:10px"><a href="https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF" target="_blank" rel="noopener">Open review page</a><a href="https://docs.google.com/spreadsheets/d/${AMEND_SHEET_ID}" target="_blank" rel="noopener">Amendments Sheet</a></div>`;
   let body;
   if (a.busy) body = `<div class="t-empty">Reading the Amendments Sheet…</div>`;
   else if (a.error) body = `<div class="t-empty" style="color:var(--coral-dark)">${esc(a.error)}</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()">Try again</button>`;
   else if (!a.loaded) body = `<div class="t-empty">Click to load tenant comments waiting to be worked.</div><button class="btn btn-sm" style="margin-top:8px" onclick="loadAmendments()"${hint("Reads the Amendments Sheet. Google may ask you to sign in.")}>Load amendments</button>`;
   else if (!a.jobs.length) body = `<div class="t-empty">No open amendments.</div>`;
-  else body = a.jobs.map(g => `<div class="t-row"><div class="t-main"><strong>${esc(g.job)}</strong> · ${esc(g.address)}<div class="sub">${g.points} point${g.points===1?"":"s"}${g.decided?" · "+g.decided+" decided":""} · first sent ${esc(String(g.first).slice(0,16))}${g.names.size ? " · "+esc([...g.names].join(", ")) : ""}</div><div class="sub">Say "review amendments ${esc(g.job)}" to Claude</div></div></div>`).join("");
+  else body = a.jobs.map(g => renderAmendJob(g)).join("");
   const n = a.loaded ? a.jobs.length : null;
-  if (inner) return `${body}${a.loaded ? `<button class="t-link" style="font-size:12.5px;margin-top:6px" onclick="loadAmendments()">Refresh</button>` : ""}<div style="margin-top:8px;display:flex;gap:16px"><a class="t-link" href="https://claude.ai/artifact/YXAg9V6y8FkQJwLzP7a1bF" target="_blank" rel="noopener">Open review page</a><a class="t-link" href="https://docs.google.com/spreadsheets/d/${AMEND_SHEET_ID}" target="_blank" rel="noopener">Amendments Sheet</a></div>`;
+  if (inner) return `${body}${a.loaded ? `<button class="t-link" style="font-size:12.5px;margin-top:6px" onclick="loadAmendments()">Refresh</button>` : ""}<div style="margin-top:8px;display:flex;gap:16px"><a class="t-link" href="https://docs.google.com/spreadsheets/d/${AMEND_SHEET_ID}" target="_blank" rel="noopener">Amendments Sheet</a></div>`;
   return `<div class="t-card">
       <h3>Amendments <span class="count">${n==null ? "" : n+" job"+(n===1?"":"s")+" open"}</span></h3>
       ${body}
@@ -3667,7 +3705,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#55)";
+const BUILD = "20 Oct 2026 (#56)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
