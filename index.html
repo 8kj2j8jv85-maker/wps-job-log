@@ -4324,6 +4324,31 @@ function slotRowExtra(j){
     <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Opens the email with the same link again, e.g. as a chaser")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, e.g. for WhatsApp")}>Copy link</button></span>`;
   return `<span class="sl-st c-dim">No link sent</span><span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail (CC "+RR_MIDTERM_CC+") for you to check and send")}>Send slot link</button></span>`;
 }
+// Next mid-term due (Lex, 20 Oct, D6): last check-in or mid-term at a property + 6 months, when nothing newer is
+// logged there. A list to check against Riley's monthly email; nothing is booked by itself.
+function addMonthsIso(iso, n){ const p = iso.split("-").map(Number), d = new Date(p[0], p[1]-1+n, p[2]); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function midDueSoon(now){
+  const today = isoToday(0), horizon = isoToday(60), oldest = isoToday(-120), seen = {}, out = [];
+  state.jobs.filter(j => j.date && j.status !== "archived" && propKey(j)).sort((a,b) => String(b.date).localeCompare(String(a.date))).forEach(j => {
+    const k = propKey(j); if (seen[k]) return; seen[k] = true;          // newest job at each property only
+    if (!["MTI","ICI"].includes(j.type) || !["sent","deemed","signed","processing","completed"].includes(j.status)) return;
+    const due = addMonthsIso(j.date, 6);
+    if (due <= horizon && due >= oldest) out.push({ j, due, late: due < today });
+  });
+  return out.sort((a,b) => a.due.localeCompare(b.due));
+}
+function newMidFrom(id){
+  const b = state.jobs.find(x => x.id === id); if (!b || !confirmLeaveForm()) return;
+  navRememberPlace(null);
+  const e = emptyJob(); ["client","address","town","postcode","bedrooms","extraAreas","propertyType","tenantList","tenants","tenantEmails","tenantPhones","agentEmail","keysFrom","keysFromNote","keysBack","keysBackNote"].forEach(k => { if (b[k] != null) e[k] = JSON.parse(JSON.stringify(b[k])); });
+  e.type = "MTI"; state.editing = e; state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm();
+}
+function renderMidDue(){
+  const list = midDueSoon(new Date()); if (!list.length) return "";
+  return `<div class="d-sect" style="margin-top:14px">Next mid-term due, last visit + 6 months (${list.length})</div>`
+    + list.map(x => cRow(x.j, { extra: `<span class="c-dim" style="white-space:nowrap${x.late ? ";color:var(--coral)" : ""}">${esc(typeMeta(x.j.type).code)} ${esc(tableDate(x.j.date))} · due ${esc(tableDate(x.due))}</span><span class="d-acts"><button class="d-mv" onclick="newMidFrom('${x.j.id}')"${tip("New mid-term job with this property's address, agent, tenants and keys filled in")}>New MTI</button></span>` })).join("")
+    + `<div class="d-note">Check against Riley's monthly list before booking. Tenants copied from the last visit may have changed.</div>`;
+}
 function renderMidPanel(mids){
   const sl = state.slots || {};
   const head = !roadSignedIn() ? `<div class="t-empty">Click Save & get latest in the sidebar to see slot links and tenants' picks.</div>`
@@ -4335,6 +4360,7 @@ function renderMidPanel(mids){
     + (picked.length ? `<div class="d-sect">Tenant picked a time, approve or decline (${picked.length})</div>` + picked.map(row).join("") : "")
     + (rest.length ? `<div class="d-sect"${picked.length ? ' style="margin-top:14px"' : ""}>Need a date (${rest.length})</div>` + rest.map(row).join("") : "")
     + (!mids.length ? `<div class="t-empty">No mid-terms waiting for a date.</div>` : "")
+    + renderMidDue()
     + `<div class="d-note">Mid-terms at Booked with no date (or rearranged). Send slot link opens the email in Gmail with the tenant's own link; they see only free times and tell you if they'll be there or want you to use the keys. Nothing is booked until you approve. ${sl.loaded && sl.at ? "Picks checked "+new Date(sl.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})+". " : ""}<button class="t-link" onclick="refreshSlots()">Check for picks now</button></div>`;
 }
 function refreshSlots(){ ensureSheetsToken(async function(){ await loadSlots(); render(); }); }
