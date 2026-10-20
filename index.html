@@ -2095,15 +2095,18 @@ function ciAskedAt(j){
   const hit = ciLogRows(j.jobNo).filter(r => r.kind === "ask" && r.status === "Sent" && (!j.date || r.key === "ask|"+j.date)).sort((a,b) => String(b.at).localeCompare(String(a.at)))[0];
   return hit ? hit.at : "";
 }
+// Lex (20 Oct): a refused send is only a problem if that job never got that email. A second click on an email
+// that already went (refused as a repeat) is shown grey as "not sent again", never as a problem.
+function ciLogDup(r){ return r.status !== "Sent" && ciLogRows(r.job).some(x => x.status === "Sent" && x.kind === r.kind); }
 const CI_LOG_WORDS = { ask:"Asked for their time", confirm:"Time confirmed", propose:"New time suggested" };
 function ciLogLine(r, withJob){
   const d = new Date(r.at), when = isNaN(d) ? "" : ciDay(d)+" "+pad2(d.getHours())+":"+pad2(d.getMinutes());
   const job = withJob ? state.jobs.find(j => normJobNo(j.jobNo||"") === normJobNo(r.job)) : null;
-  const ok = r.status === "Sent";
-  return `<div class="ph-row"><span class="ph-d">${esc(when)}</span>`
+  const ok = r.status === "Sent", dup = ciLogDup(r);
+  return `<div class="ph-row"${dup ? ' style="opacity:.6"' : ""}><span class="ph-d">${esc(when)}</span>`
     + (withJob ? (job ? `<button type="button" class="t-link" onclick="openEdit('${job.id}')">${esc(r.job)}</button>` : `<span class="mono">${esc(r.job)}</span>`) : "")
-    + `<span${ok ? "" : ' style="color:var(--red)"'}>${esc(CI_LOG_WORDS[r.kind] || r.kind)}${ok ? "" : " - not sent"}</span>`
-    + `<span class="c-dim">${esc(ok ? (r.to + (r.cc ? " (cc "+r.cc+")" : "")) : r.detail)}</span>`
+    + `<span${ok || dup ? "" : ' style="color:var(--red)"'}>${esc(CI_LOG_WORDS[r.kind] || r.kind)}${ok ? "" : dup ? " - repeat click, not sent again" : " - NOT SENT"}</span>`
+    + `<span class="c-dim">${esc(ok ? (r.to + (r.cc ? " (cc "+r.cc+")" : "")) : dup ? "It had already gone, so the tenants didn't get it twice." : r.detail)}</span>`
     + (withJob && job ? `<span class="c-dim">${esc(shortAddr(job))}</span>` : "") + `</div>`;
 }
 function shortAddr(j){ return [j.address, j.postcode].filter(Boolean).join(", "); }
@@ -3779,7 +3782,8 @@ function renderToday(){
   const mids = midtermsToBook(active);
   const midPicked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
   const ciRecent = ((state.ciLog && state.ciLog.rows) || []).filter(r => Date.parse(r.at) > now.getTime() - 14*86400000).sort((a,b) => String(b.at).localeCompare(String(a.at)));
-  const ciRefused = ciRecent.filter(r => r.status !== "Sent").length;
+  const ciSent = ciRecent.filter(r => r.status === "Sent").length;
+  const ciRefused = ciRecent.filter(r => r.status !== "Sent" && !ciLogDup(r)).length;   // real problems only
 
   // Tiles: [key, label, number shown, sub line, tone]
   const tc = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green)" : s.pct>=50 ? "var(--amber)" : "var(--red)";
@@ -3793,7 +3797,7 @@ function renderToday(){
     ["sig", "Out for signature", awaitingSig.length, "", ""],
     ["win", "Comment windows", openWin, remindersDue ? remindersDue+" reminder"+(remindersDue===1?"":"s")+" due" : "", remindersDue ? "warn" : ""],
     ["amend", "Amendments", amN==null ? "–" : amN, amN==null ? "click to load" : "", amN ? "late" : ""],
-    ["temail", "Tenant emails", state.ciLog ? ciRecent.length : "–", state.ciLog ? (ciRefused ? ciRefused+" not sent" : "last 14 days") : "not loaded", ciRefused ? "warn" : ""],
+    ["temail", "Tenant emails", state.ciLog ? ciSent : "–", state.ciLog ? (ciRefused ? ciRefused+" didn't go" : "sent, last 14 days") : "not loaded", ciRefused ? "late" : ""],
     ["inv", "To invoice", toInvoice.length, "", toInvoice.length ? "coral" : ""],
     ["paid", "Awaiting payment", unpaid.length, "", ""],
     ["turn", "On time (7 days)", wkStats ? wkStats.pct+"%" : "–", wkStats ? "avg "+wkStats.avg+"h" : "none visited since 11 Oct", ""],
@@ -3895,7 +3899,7 @@ function renderToday(){
     case "amend": title = "Amendments"; body = renderAmendCard(true); break;
     case "temail": title = "Emails to tenants (last 14 days)";
       body = (state.ciLog ? rows(ciRecent, r => ciLogLine(r, true), "No check-in emails sent to tenants in the last 14 days.") : `<div class="t-empty">Not loaded yet. Press Check everything now.</div>`)
-        + note("From the WPS script's Check-in emails log, so it's the real record of what went out. \"Not sent\" lines say why. Each job's form lists its own emails too."); break;
+        + note("From the WPS script's Check-in emails log, so it's the real record of what went out. Red NOT SENT lines never went and say why; grey lines are repeat clicks the script stopped. Each job's form lists its own emails too."); break;
     case "times": { title = "Times to agree";
       const ttRow = j => needsTenantTime(j)
         ? cRow(j, {noTime:true, extra: `<span class="c-dim ci-wait">${esc(ciRowText(j))}</span><span class="d-acts">${ciArrivalBtn(j, "tt")}${ciAskBtn(j)}</span>`}) + arrivalBox(j, "tt")
