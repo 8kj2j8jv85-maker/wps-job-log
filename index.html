@@ -154,6 +154,25 @@
   #undo-bar button{ border:0; border-radius:6px; background:var(--coral); color:#fff; font:inherit; font-weight:600; padding:6px 12px; cursor:pointer; }
   #undo-bar button.undo-x{ background:transparent; padding:6px 4px; font-weight:400; opacity:.8; }
   @media (max-width:600px){ #undo-bar{ width:calc(100vw - 32px); box-sizing:border-box; justify-content:space-between; bottom:12px; } #undo-bar span{ flex:1; } }
+  .ph-box{ border-top:1px solid var(--line); padding-top:10px; }
+  .ph-h{ font-weight:600; font-size:13px; margin-bottom:4px; }
+  .ph-row{ display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; font-size:13px; padding:3px 0; }
+  .ph-d{ min-width:92px; font-variant-numeric:tabular-nums; } .ph-t{ min-width:30px; font-weight:600; }
+  .mm-card{ margin-top:14px; padding:12px 14px; border:1px solid var(--line, #e3e6ee); border-radius:10px; font-size:13px; }
+  .mm-key{ font-weight:400; margin-left:10px; color:var(--ink-soft); text-transform:none; letter-spacing:0; }
+  .mm-dot{ display:inline-block; width:9px; height:9px; border-radius:2px; margin:0 4px 0 8px; vertical-align:-1px; }
+  .mm-row{ display:grid; grid-template-columns:38px 1fr 74px; gap:8px; align-items:center; padding:5px 0; }
+  .mm-bars{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .mm-bar{ display:block; height:8px; border-radius:3px; }
+  .mm-i{ background:var(--brand, #1F2D5A); } .mm-p{ background:var(--green, #2E6B45); }
+  .mm-v{ text-align:right; font-variant-numeric:tabular-nums; font-size:12.5px; line-height:1.25; }
+  .pr-top{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-bottom:10px; font-size:13px; }
+  .pr-top select{ margin-left:6px; padding:5px 8px; }
+  .pr-wrap{ overflow-x:auto; }
+  .pr-tab{ border-collapse:collapse; font-size:13px; }
+  .pr-tab th, .pr-tab td{ padding:4px 5px; text-align:left; white-space:nowrap; }
+  .pr-tab thead th{ font-weight:600; color:var(--ink-soft); font-size:12px; }
+  .pr-in{ width:64px; padding:6px 7px; font-variant-numeric:tabular-nums; }
   .d-info{ display:flex; flex-direction:column; gap:2px; margin:-2px 0 6px; padding-left:74px; font-size:12.5px; color:var(--ink); line-height:1.4; }
   .d-tel{ color:var(--coral-dark); font-weight:600; text-decoration:none; white-space:nowrap; }
   @media (max-width:600px){ .d-info{ padding-left:0; font-size:13px; } }
@@ -896,7 +915,8 @@ function normalizeClients(arr){
   if (!Array.isArray(arr)) return null;
   const out = arr.map(x => typeof x === "string"
     ? { name:x, contactName:"", contactPhone:"", contactEmail:"" }
-    : { name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" }
+    : Object.assign({ name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" },
+        x.prices && typeof x.prices === "object" ? { prices: x.prices } : {})
   ).filter(c=>c.name);
   return out.length ? out : null;
 }
@@ -1294,11 +1314,33 @@ function dueInfo(j){
   const fmt = m => { const a=Math.abs(m); return a>=1440 ? Math.round(a/1440)+"d" : a>=60 ? Math.round(a/60)+"h" : a+"m"; };
   // Still at Booked after the visit time: not counted as overdue until the visit is confirmed (12 Oct)
   if (j.status === "booked") return { cls:"due-soon", late:false, confirm:true, text:"Visit done? Move to Processing", due:d };
-  if (mins < 0) return { cls:"due-late", late:true, text:"Report overdue "+fmt(mins), due:d };
-  if (mins < 360) return { cls:"due-soon", late:false, text:"Report due in "+fmt(mins), due:d };
-  return { cls:"due-ok", late:false, text:"Report due "+d.toLocaleString("en-GB",{weekday:"short",hour:"2-digit",minute:"2-digit"}), due:d };
+  // Ageing (Lex, 20 Oct, D4): days since the visit, so old ones stand out
+  const v = visitTime(j), ago = v ? Math.floor((Date.now() - v.getTime())/86400000) : 0;
+  const agoTxt = ago >= 2 ? " · visited "+ago+" days ago" : "";
+  if (mins < 0) return { cls:"due-late", late:true, text:"Report overdue "+fmt(mins)+agoTxt, due:d, ago };
+  if (mins < 360) return { cls:"due-soon", late:false, text:"Report due in "+fmt(mins)+agoTxt, due:d, ago };
+  return { cls:"due-ok", late:false, text:"Report due "+d.toLocaleString("en-GB",{weekday:"short",hour:"2-digit",minute:"2-digit"})+agoTxt, due:d, ago };
+}
+// Change history (Lex, 20 Oct, D8): a short dated line per change, newest first, kept on the job (last 40),
+// so there's a record of what changed and when if a report is ever disputed.
+function logChange(j, text){
+  if (!j || !text) return;
+  j.history = Array.isArray(j.history) ? j.history : [];
+  j.history.unshift({ at: new Date().toISOString(), dev: navigator.platform||"", what: String(text).slice(0, 300) });
+  if (j.history.length > 40) j.history.length = 40;
+}
+const HIST_FIELDS = [["date","Date"],["time","Time"],["address","Address"],["postcode","Postcode"],["client","Agent"],["type","Type"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no."],["photoLink","Photo link"],["keysFrom","Keys from"],["keysBack","Keys back to"],["notes","Notes"]];
+function jobDiff(a, b){
+  const st = a.status && b.status && a.status !== b.status ? ["Status: "+statusMeta(a.status).label+" → "+statusMeta(b.status).label] : [];
+  return st.concat(HIST_FIELDS.filter(([k]) => String(a[k]||"") !== String(b[k]||"")).map(([k,l]) => k === "notes" ? "Notes changed" : l+": "+(String(a[k]||"")||"–")+" → "+(String(b[k]||"")||"–"))).join("; ");
+}
+function renderHistory(f){
+  const h = Array.isArray(f.history) ? f.history : []; if (!h.length) return "";
+  return `<details class="field wide ph-box"><summary class="ph-h" style="cursor:pointer">Change history (${h.length})</summary>
+    ${h.map(x => `<div class="ph-row"><span class="ph-d">${esc(new Date(x.at).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</span><span>${esc(x.what)}</span></div>`).join("")}</details>`;
 }
 function setJobStatus(j, code){
+  if (j.status && j.status !== code) logChange(j, "Status: "+statusMeta(j.status).label+" → "+statusMeta(code).label);
   j.status = code;
   if (code==="processing" && !j.processingAt) j.processingAt = new Date().toISOString();
   if (code==="booked") delete j.processingAt;
@@ -1533,7 +1575,9 @@ function baseFilteredJobs(){
       const q = state.search.toLowerCase();
       return (j.address||"").toLowerCase().includes(q) || (j.town||"").toLowerCase().includes(q) ||
              (j.postcode||"").toLowerCase().includes(q) || (j.client||"").toLowerCase().includes(q) ||
-             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.tenantEmails||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q);
+             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.tenantEmails||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q) ||
+             // 20 Oct (D8): notes, keys notes and copy-to emails searched too
+             (j.notes||"").toLowerCase().includes(q) || (j.keysFromNote||"").toLowerCase().includes(q) || (j.keysBackNote||"").toLowerCase().includes(q) || (j.agentEmail||"").toLowerCase().includes(q);
     });
 }
 function filteredJobs(){
@@ -1641,6 +1685,8 @@ function captureFormValues(){
   setIf('extraAreas','f_extraAreas');
   if (f.tenantRows) f.tenantRows = f.tenantRows.map((t,i) => ({ name: grab('t_name_'+i) ?? t.name, phone: grab('t_phone_'+i) ?? t.phone, email: grab('t_email_'+i) ?? t.email }));
   setIf('notes','f_notes');
+  { const nv = document.getElementById('f_noVisitReminder'); if (nv) f.noVisitReminder = nv.checked; }
+  setIf('keysFrom','f_keysFrom'); setIf('keysFromNote','f_keysFromNote'); setIf('keysBack','f_keysBack'); setIf('keysBackNote','f_keysBackNote');
   setIf('photoLink','f_photoLink');
   setIf('invoice','f_invoice');
   setIf('invoiceNo','f_invoiceNo');
@@ -1694,6 +1740,11 @@ function saveAgentContact(){
   render();
 }
 
+// Keys back defaults to where they came from (Lex can change it)
+function keysFromChange(el){
+  const b = document.getElementById("f_keysBack"); if (!b || b.value) return;
+  if (el.value === "tenant") b.value = "none"; else if (KEYS_BACK.some(k => k[0] === el.value)) b.value = el.value;
+}
 function submitForm(){
   const g = id => document.getElementById(id);
   const date = g("f_date").value;
@@ -1717,6 +1768,9 @@ function submitForm(){
     tenantList: [], tenants: "", tenantEmails: "", tenantPhones: "",
     agentEmail: cleanEmails((state.editing.copyTo||[]).join(", ")),
     notes: g("f_notes").value,
+    keysFrom: g("f_keysFrom").value, keysFromNote: g("f_keysFromNote").value.trim(),
+    keysBack: g("f_keysBack").value, keysBackNote: g("f_keysBackNote").value.trim(),
+    noVisitReminder: !!(g("f_noVisitReminder") && g("f_noVisitReminder").checked),
     invoice: g("f_invoice").value,
     invoiceNo: g("f_invoiceNo").value.trim(),
   };
@@ -1736,6 +1790,7 @@ function submitForm(){
   const prev = idx>=0 ? state.jobs[idx] : {};
   if (job.invoice && job.invoice!==prev.invoice){ if (job.invoice==="invoiced" && !prev.invoicedAt) job.invoicedAt = new Date().toISOString(); if (job.invoice==="paid") job.paidAt = new Date().toISOString(); }
   const merged = Object.assign({}, prev, job);   // keeps photo link, calendar id, dates etc.
+  if (idx >= 0){ const dtxt = jobDiff(prev, merged); if (dtxt) logChange(merged, dtxt); } else logChange(merged, "Job created");
   if (idx>=0) state.jobs[idx] = merged; else state.jobs.push(merged);
   const saved = merged;
   setJobStatus(saved, saved.status);
@@ -1754,12 +1809,14 @@ function submitForm(){
 function deleteJob(id){
   const job = state.jobs.find(j=>j.id===id);
   if (!job) return false;
-  if (!confirm("Delete "+(job.jobNo||"this job")+(job.address ? " ("+job.address+")" : "")+"?\n\nIt's removed from the Job Log, the Google Sheet and the calendar. This can't be undone. Archive keeps it instead.")) return false;
+  if (!confirm("Delete "+(job.jobNo||"this job")+(job.address ? " ("+job.address+")" : "")+"?\n\nIt's removed from the Job Log, the Google Sheet and the calendar. Undo shows for a few seconds after. Archive keeps it instead.")) return false;
+  const copy = snapJob(job);
   deleteJobCalendarEvent(job);
   mergeJobNoHigh();   // remember its number so it's never reused
   state.jobs = state.jobs.filter(j=>j.id!==id);
   saveJobs();
   render();
+  setTimeout(() => showUndo((job.jobNo||"Job")+" deleted", { __deleted: copy }), 0);   // D8, 20 Oct: undo for delete
   return true;
 }
 
@@ -1792,6 +1849,11 @@ function showUndo(msg, before){
 function hideUndo(){ const bar = document.getElementById("undo-bar"); if (bar) bar.classList.remove("show"); document.body.classList.remove("undo-on"); undoSnap = null; }
 function doUndo(){
   if (!undoSnap) return hideUndo();
+  if (undoSnap.__deleted){   // put a deleted job back; its calendar event was removed, so it gets a new one
+    const back = undoSnap.__deleted; delete back.gcalEventId;
+    if (!state.jobs.some(x => x.id === back.id)){ logChange(back, "Restored after delete"); state.jobs.push(back); saveJobs(); try { syncJobToCalendar(back); } catch(e){} render(); }
+    return hideUndo();
+  }
   const j = state.jobs.find(x => x.id === undoSnap.id);
   if (j){ Object.keys(j).forEach(k => delete j[k]); Object.assign(j, undoSnap); saveJobs(); render(); }
   hideUndo();
@@ -1977,6 +2039,16 @@ function setStatusFilter(code){
 }
 
 // ---------------------------------------------------------------- export / import
+// CSV export (Lex, 20 Oct, D8): every job as a spreadsheet (opens in Excel or Google Sheets)
+function exportCsv(){
+  const cols = [["jobNo","Job no"],["type","Type"],["status","Status"],["date","Date"],["time","Time"],["address","Address"],["town","Town"],["postcode","Postcode"],["client","Agent"],["bedrooms","Bedrooms"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no"],["invoiceAmount","Invoice amount"],["sentAt","Sent"],["invoicedAt","Invoiced"],["paidAt","Paid"],["dayMiles","Day miles"],["photoLink","Photo link"],["notes","Notes"]];
+  const q = v => { const t = String(v==null ? "" : v); return /[",\n\r]/.test(t) || /^[=+\-@]/.test(t) ? '"'+t.replace(/^([=+\-@])/,"'$1").replace(/"/g,'""')+'"' : t; };
+  const rows = [cols.map(c => c[1]).join(",")].concat(state.jobs.slice().sort((a,b) => String(a.date||"").localeCompare(String(b.date||""))).map(j => cols.map(c => q(j[c[0]])).join(",")));
+  const blob = new Blob(["\ufeff"+rows.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = "WPS-Job-Log-" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 function exportData(){
   const payload = { exportedAt: new Date().toISOString(), jobs: state.jobs, clients: state.clients };
   const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
@@ -2077,6 +2149,7 @@ function gcalEventBody(j){
   if (j.tenants) descParts.push("Tenant/contact: "+j.tenants);
   if (j.tenantEmails) descParts.push("Tenant emails: "+j.tenantEmails);
   if (j.agentEmail) descParts.push("Copy to: "+j.agentEmail);
+  if (keysLine(j)) descParts.push("Keys: "+keysLine(j));
   if (j.notes) descParts.push("Notes: "+j.notes);
   return { summary: gcalEventSummary(j), location: fullAddress(j), description: descParts.join("\n"), start, end };
 }
@@ -2526,7 +2599,8 @@ function renderInvoiceCard(it){
     ? `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing changes.")}>Clear</button>`
     : `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
   return `<div class="qcard">
-    <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}<span>${esc(it.client)||"Client not clear"}</span></div>
+    <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}${(() => { const jj = state.jobs.find(x => x.jobNo && x.jobNo === it.jobNo), e = jj ? expectedFee(jj) : null, a = moneyAmount(it.amount);
+      return e == null ? "" : `<span${a != null && Math.abs(a-e) > 0.005 ? ' style="color:var(--coral);font-weight:600"' : ""}>Price list ${gbp(e)}${a != null && Math.abs(a-e) > 0.005 ? " (doesn't match)" : ""}</span>`; })()}<span>${esc(it.client)||"Client not clear"}</span></div>
     ${jobLine}
     ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
     ${warn}
@@ -3017,6 +3091,31 @@ function renderPerfTop(){
     <div class="pt-track" style="animation-duration:${Math.max(24, parts.length*9)}s"><span class="pt-run">${one}</span><span class="pt-run" aria-hidden="true">${one}</span></div>
   </div>${warn}`;
 }
+// Money by month (Lex, 20 Oct, D4): invoiced (by invoice date) and paid (by paid date), last 6 months.
+// Amount = the Tide amount, else the price list; jobs with neither are counted, not added.
+function moneyMonths(jobs, now, n){
+  const out = [];
+  for (let i = n-1; i >= 0; i--){ const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    out.push({ key: d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"), label: d.toLocaleDateString("en-GB",{month:"short"}), inv:0, paid:0, invN:0, paidN:0, unknown:0 }); }
+  const at = k => out.find(m => m.key === k);
+  jobs.forEach(j => {
+    const a = moneyAmount(j.invoiceAmount) ?? expectedFee(j);
+    const iv = j.invoicedAt && at(String(j.invoicedAt).slice(0,7)), pd = j.paidAt && at(String(j.paidAt).slice(0,7));
+    if (iv){ iv.invN++; if (a != null) iv.inv += a; else iv.unknown++; }
+    if (pd){ pd.paidN++; if (a != null) pd.paid += a; }
+  });
+  return out;
+}
+function renderMoneyChart(jobs, now){
+  const ms = moneyMonths(jobs, now, 6), max = Math.max(1, ...ms.map(m => Math.max(m.inv, m.paid)));
+  if (!ms.some(m => m.invN || m.paidN)) return `<div class="mm-card"><div class="p-lbl">Money by month</div><div class="c-dim">No invoices recorded yet.</div></div>`;
+  const bar = (v, cls) => `<span class="mm-bar ${cls}" style="width:${Math.max(v ? 2 : 0, Math.round(v/max*100))}%"></span>`;
+  const unk = ms.reduce((t,m) => t + m.unknown, 0);
+  return `<div class="mm-card"><div class="p-lbl">Money by month <span class="mm-key"><span class="mm-dot mm-i"></span>Invoiced <span class="mm-dot mm-p"></span>Paid</span></div>
+    ${ms.map(m => `<div class="mm-row"><span class="mm-m">${esc(m.label)}</span><span class="mm-bars">${bar(m.inv,"mm-i")}${bar(m.paid,"mm-p")}</span>
+      <span class="mm-v">${gbp(m.inv)}<br><span class="c-dim">${gbp(m.paid)}</span></span></div>`).join("")}
+    ${unk ? `<div class="c-dim" style="margin-top:6px">${unk} invoice${unk===1?"":"s"} with no amount and no price list price, not added.</div>` : ""}</div>`;
+}
 function renderPerformance(jobs, now){
   // last month up to the same day and time, so early in the month it's a fair comparison (perfInputs)
   const { tm, lm, dm, dl, st } = perfInputs(jobs, now), b = perfBests(jobs);
@@ -3031,7 +3130,7 @@ function renderPerformance(jobs, now){
     + box("Personal bests", b.wk ? b.wk.n : "–", "var(--brand-text, var(--brand))",
         (b.wk ? `Busiest week: ${b.wk.n} report${b.wk.n===1?"":"s"} (w/c ${esc(b.wk.start.toLocaleDateString("en-GB",{day:"numeric",month:"short"}))})<br>` : "No completed reports yet<br>")
         + (b.fast ? `Fastest turnaround: ${fmtHours(b.fast.h)} (${esc(b.fast.j.jobNo || "")} ${esc(typeMeta(b.fast.j.type).code)})` : "Fastest turnaround: –"))
-    + `</div>`;
+    + `</div>` + renderMoneyChart(jobs, now) + renderMileage(now);
 }
 function windowRow(x, now){
   const j = x.j, open = x.st==="open", days = Math.ceil((x.closes - now)/86400000);
@@ -3080,8 +3179,32 @@ const PHONE_RE = /(?:\+44\s?|\b0)\d(?:[\s-]?\d){8,10}\b/g;
 function linkPhones(t){
   return esc(t).replace(PHONE_RE, m => `<a href="tel:${m.replace(/[\s-]/g,"")}" class="d-tel">${m}</a>`);
 }
+// Keys (Lex, 20 Oct, D1): where the keys come from and where they go back, per job. Collected keys that
+// haven't been marked returned after the visit show in Do next.
+const KEYS_FROM = [["","—"],["tenant","Tenant lets me in"],["office","Agent office"],["concierge","Concierge"],["lockbox","Key safe / lockbox"],["landlord","Landlord"],["other","Other (see note)"]];
+const KEYS_BACK = [["","—"],["none","Nothing to return"],["office","Agent office"],["concierge","Concierge"],["lockbox","Key safe / lockbox"],["property","Leave in the property"],["landlord","Landlord"],["tenant","Hand to tenant"],["other","Other (see note)"]];
+function keysLabel(list, v){ const r = list.find(x => x[0] === v); return r && v ? r[1] : ""; }
+function keysLine(j){
+  const from = keysLabel(KEYS_FROM, j.keysFrom), back = keysLabel(KEYS_BACK, j.keysBack);
+  if (!from && !back) return "";
+  const a = from ? (j.keysFrom === "tenant" ? from : "collect from "+from.toLowerCase()) + (j.keysFromNote ? " ("+j.keysFromNote+")" : "") : "";
+  const b = back && j.keysBack !== "none" ? "back to "+back.toLowerCase() + (j.keysBackNote ? " ("+j.keysBackNote+")" : "") : "";
+  return [a, b].filter(Boolean).join(" · ") + (j.keysReturnedAt ? " · returned "+shortDay(new Date(j.keysReturnedAt)) : "");
+}
+function keysOut(j, now){
+  if (!j.keysFrom || j.keysFrom === "tenant" || !j.keysBack || ["none","property","tenant"].includes(j.keysBack) || j.keysReturnedAt) return false;
+  if (j.status === "archived") return false;
+  const v = visitTime(j); return !!v && v <= (now || new Date());
+}
+function keysReturned(id){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  const before = snapJob(j); j.keysReturnedAt = new Date().toISOString();
+  saveJobs(); render(); showUndo(`${j.jobNo || "Job"} keys marked returned`, before);
+}
 function todayInfo(j){
   const bits = [];
+  const kl = keysLine(j);
+  if (kl) bits.push(`<span><span class="c-dim">Keys:</span> ${esc(kl)}</span>`);
   if (j.tenants) bits.push(`<span><span class="c-dim">Tenant:</span> ${linkPhones(j.tenants)}</span>`);
   if (j.notes) bits.push(`<span><span class="c-dim">Notes:</span> ${linkPhones(String(j.notes).replace(/\s+/g," ").slice(0,160))}${String(j.notes).length>160 ? "…" : ""}</span>`);
   return bits.length ? `<div class="d-info">${bits.join("")}</div>` : "";
@@ -3097,13 +3220,52 @@ function dnTray(){
 // Money by client (Lex, 18 Oct; idea from Jobber's past-due invoices and client balances): who owes what and
 // for how long. Amounts only where the Tide email gave one (kept on the job from 18 Oct); older jobs show a count.
 function moneyAmount(t){ const m = String(t||"").replace(/,/g,"").match(/(\d+(?:\.\d{1,2})?)/); return m ? parseFloat(m[1]) : null; }
+// Price list (Lex, 20 Oct, D3): per client, a fee for each job type by bedrooms, plus an amount per extra area.
+// Kept on the client (Clients tab of the Job Log Sheet). Used for expected fees, the To invoice total and to flag a
+// Tide invoice that doesn't match.
+const PRICE_TYPES = ["ICI","CO","MTI","SOC","CLN"];
+const PRICE_BEDS = ["1","2","3","4","5","6"];
+function expectedFee(j){
+  const c = clientByName(j.client||""); const p = c && c.prices && c.prices[j.type]; if (!p) return null;
+  const bed = String(j.bedrooms||"").trim() || "1";
+  const base = moneyAmount(p[bed]); if (base == null) return null;
+  const ex = moneyAmount(p.extra), n = parseInt(j.extraAreas,10);
+  return base + (ex && n > 0 ? ex*n : 0);
+}
+function feeMismatch(j){
+  const a = moneyAmount(j.invoiceAmount), e = expectedFee(j);
+  return a != null && e != null && Math.abs(a - e) > 0.005 ? { invoiced:a, expected:e } : null;
+}
+function gbp(n){ return "£"+(Math.round(n*100)/100).toFixed(n % 1 ? 2 : 0); }
+function openPrices(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "prices"; state.menuOpen = false; navSetView("today"); render(); }
+function setPrice(client, type, key, val){
+  const c = clientByName(client); if (!c) return;
+  c.prices = c.prices || {}; c.prices[type] = c.prices[type] || {};
+  const v = String(val||"").replace(/[£,\s]/g,"");
+  if (v === "") delete c.prices[type][key]; else if (!isNaN(parseFloat(v))) c.prices[type][key] = String(parseFloat(v)); else { render(); return; }
+  if (!Object.keys(c.prices[type]).length) delete c.prices[type];
+  saveClients(); render();
+}
+function renderPricePanel(){
+  const names = state.clients.map(c => c.name).filter(n => n && n !== "Lex test");
+  if (!names.length) return `<div class="t-empty">Add an agent on a job first.</div>`;
+  const sel = state.priceClient && names.includes(state.priceClient) ? state.priceClient : (names.find(n => /winkworth/i.test(n)) || names[0]);
+  const c = clientByName(sel), pr = (c && c.prices) || {};
+  const cell = (t,k) => `<td><input class="pr-in" inputmode="decimal" aria-label="${esc(t)} ${k==="extra"?"each extra area":k+" bed"}" value="${esc((pr[t]||{})[k]||"")}" onchange="setPrice(${esc(JSON.stringify(sel))},'${t}','${k}',this.value)" placeholder="—" /></td>`;
+  return `<div class="pr-top"><label>Agent <select onchange="state.priceClient=this.value;render()">${names.map(n=>`<option${n===sel?" selected":""}>${esc(n)}</option>`).join("")}</select></label>
+      <span class="c-dim">Fees in £ by bedrooms. Leave a box blank if you don't charge it that way. Saved straight away, and to Google on the next save.</span></div>
+    <div class="pr-wrap"><table class="pr-tab"><thead><tr><th>Type</th>${PRICE_BEDS.map(b=>`<th>${b} bed</th>`).join("")}<th>Each extra area</th></tr></thead>
+      <tbody>${PRICE_TYPES.map(t=>`<tr><th>${esc(typeMeta(t).label||t)}</th>${PRICE_BEDS.map(b=>cell(t,b)).join("")}${cell(t,"extra")}</tr>`).join("")}</tbody></table></div>
+    <div class="c-dim" style="margin-top:8px">A job with no bedrooms set uses the 1 bed price. Expected fee shows on the job form and in To invoice; a Tide invoice that doesn't match shows in Do next.</div>`;
+}
 function moneyByClient(list, dateOf){
   const now = Date.now(), g = {};
   list.forEach(j => {
     const k = j.client || "No client";
     const x = g[k] || (g[k] = { client:k, n:0, total:0, unknown:0, oldest:0 });
     x.n++;
-    const a = moneyAmount(j.invoiceAmount); if (a == null) x.unknown++; else x.total += a;
+    let a = moneyAmount(j.invoiceAmount); if (a == null){ a = expectedFee(j); if (a != null) x.fromList = (x.fromList||0) + 1; }
+    if (a == null) x.unknown++; else x.total += a;
     const d = dateOf(j); if (d){ const days = Math.floor((now - new Date(d).getTime())/86400000); if (days > x.oldest) x.oldest = days; }
   });
   return Object.values(g).sort((a,b) => b.oldest - a.oldest || b.n - a.n);
@@ -3114,7 +3276,7 @@ function moneySummary(list, dateOf, noun, sinceWord){
   return `<div class="ow-sum">${rows.map(r => `<div class="ow-row${r.oldest > 30 ? " ow-old" : ""}">
       <span class="ow-c">${esc(r.client)}</span>
       <span>${r.n} ${noun}${r.n===1?"":"s"}</span>
-      <span>${r.total ? "£"+r.total.toFixed(2)+(r.unknown ? " + "+r.unknown+" not known" : "") : (noun==="invoice" ? "amount not known" : "")}</span>
+      <span>${r.total ? "£"+r.total.toFixed(2)+(r.fromList ? (r.fromList===r.n ? " (price list)" : " ("+r.fromList+" from price list)") : "")+(r.unknown ? " + "+r.unknown+" not known" : "") : (noun==="invoice" ? "amount not known" : (r.unknown ? "no price list" : ""))}</span>
       <span class="ow-d">${r.oldest ? "oldest "+sinceWord+" "+r.oldest+" day"+(r.oldest===1?"":"s")+" ago" : ""}</span>
     </div>`).join("")}</div>`;
 }
@@ -3212,6 +3374,13 @@ function renderToday(){
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
   dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
   photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
+  // D8 (20 Oct): two jobs with the same number (two devices numbering before a sync) are flagged, not fixed silently
+  { const seenNo = {}; live.forEach(j => { if (!j.jobNo) return; (seenNo[j.jobNo] = seenNo[j.jobNo] || []).push(j); });
+    Object.values(seenNo).filter(a => a.length > 1).forEach(a => dnAdd(20, "coral", "Two jobs share the number "+a[0].jobNo+": open one and give it a new number", a[1], `<button class="d-mv" onclick="openEdit('${a[1].id}')">Open</button>`)); }
+  live.filter(j => j.invoice === "invoiced" && feeMismatch(j)).forEach(j => { const m = feeMismatch(j);
+    dnAdd(85, "coral", "Invoice "+gbp(m.invoiced)+", price list "+gbp(m.expected), j, `<button class="d-mv" onclick="openEdit('${j.id}')"${tip("Open the job. Check the invoice in Tide or the price list.")}>Check</button>`); });
+  active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
+    `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
@@ -3266,6 +3435,7 @@ function renderToday(){
     case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
     case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: (j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
     case "health": title = "System health"; body = renderHealthPanel(); break;
+    case "prices": title = "Price list"; body = renderPricePanel(); break;
     case "turn": title = "Performance";
       body = renderPerformance(live, now) + note("On time = report sent within the target from the visit: check-outs 48h, everything else 72h. Completed = check-ins once signed or deemed agreed, everything else once sent. Last month is compared up to the same day. On time only counts jobs visited from 11 Oct, when the Job Log went live, so the September changeover backlog stays out. Completed counts every job."); break;
   }
@@ -3393,16 +3563,24 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
     </button>
-    <a class="btn-link" href="manual.pdf?v=20261019b" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+    <a class="btn-link" href="manual.pdf?v=20261020" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
+    <button class="btn-link" onclick="openPrices()"${hint("Your fees per agent, job type and bedrooms")}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+      Price list
+    </button>
     ${state.gcalConnected || keyMode() ? "" : CAL_BTN()}
     <details class="side-moretools"${state.moreTools ? " open" : ""} ontoggle="state.moreTools=this.open">
       <summary class="btn-link"${tip("Backups and the calendar connection. Rarely needed: the Google Sheet is the main copy.")}>More ▸</summary>
     <button class="btn-link" onclick="exportData()"${hint("Saves a copy of every job to this computer")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Export backup
+    </button>
+    <button class="btn-link" onclick="exportCsv()"${hint("Every job as a spreadsheet file (Excel or Google Sheets)")}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      Export spreadsheet (CSV)
     </button>
     <label class="btn-link" style="cursor:pointer;"${hint("Replaces this browser's jobs with a backup file. Careful.")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -3867,6 +4045,36 @@ async function fetchRoad(pts, deps){
   keys.forEach(k => out.push(roadCache[k] || null));
   return out;
 }
+// Mileage log (Lex, 20 Oct, D7): the Google road miles for a day already worked (today or earlier) are kept on
+// that day's first job (dayMiles), so the yearly business mileage adds up without typing anything.
+function recordMiles(iso, mi){
+  const day = state.jobs.filter(j => j.date === iso && j.status !== "archived").sort((a,b) => String(a.id).localeCompare(String(b.id)));
+  if (!day.length) return false;
+  const v = Math.round(mi*10)/10, cur = day.find(j => j.dayMiles != null);
+  if (cur && Math.abs(cur.dayMiles - v) < 0.05) return false;
+  day.forEach(j => { delete j.dayMiles; }); day[0].dayMiles = v; day[0].dayMilesAt = new Date().toISOString();
+  saveJobs(); return true;
+}
+function mileageByDay(){
+  const g = {}; state.jobs.forEach(j => { if (j.dayMiles != null && j.date) g[j.date] = Math.max(g[j.date]||0, Number(j.dayMiles)||0); });
+  return g;
+}
+function taxYearStart(now){ const y = now.getMonth() > 3 || (now.getMonth() === 3 && now.getDate() >= 6) ? now.getFullYear() : now.getFullYear()-1; return y+"-04-06"; }
+function renderMileage(now){
+  const g = mileageByDay(), ty = taxYearStart(now), mk = isoToday(0).slice(0,7);
+  const days = Object.keys(g).filter(d => d >= ty), mi = days.reduce((t,d) => t + g[d], 0);
+  const mm = Object.keys(g).filter(d => d.slice(0,7) === mk).reduce((t,d) => t + g[d], 0);
+  return `<div class="mm-card"><div class="p-lbl">Business mileage</div>
+    <div>This month <b>${mm.toFixed(0)} mi</b> · tax year from 6 Apr <b>${mi.toFixed(0)} mi</b> over ${days.length} day${days.length===1?"":"s"}</div>
+    <div class="c-dim" style="margin-top:4px">From Plan my day's Google road miles (home and back), saved when you open a day you've worked. Days you didn't open Plan my day aren't counted.</div>
+    ${days.length ? `<button class="t-link" style="margin-top:6px" onclick="copyMileage()">Copy mileage list</button>` : ""}</div>`;
+}
+function copyMileage(){
+  const g = mileageByDay(), ty = taxYearStart(new Date());
+  const lines = Object.keys(g).filter(d => d >= ty).sort().map(d => d+"\t"+g[d].toFixed(1)+" mi\t"+state.jobs.filter(j => j.date === d).map(j => j.jobNo||"").join(" "));
+  const txt = "Date\tMiles\tJobs\n"+lines.join("\n");
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => showActionBar("Mileage list copied. Paste it into a spreadsheet or email."), () => { window.prompt("Copy the mileage list:", txt); });
+}
 function planListHtml(iso, home, order, legs, deps, real, missing, reordered, gm, note){
   let rows = "", totMi = 0, totMin = 0, late = 0;
   legs.forEach((g, i) => {
@@ -3881,9 +4089,10 @@ function planListHtml(iso, home, order, legs, deps, real, missing, reordered, gm
     if (s){ const j = s.j;
       rows += `<div class="pl-stop"><span class="pl-n" style="background:${MAP_TYPE_COL[j.type]||"#555"}">${i+1}</span>
           <span class="pl-t">${esc(j.time || "No time")}</span>
-          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>`; }
+          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>${keysLine(j) ? `<div class="pl-leg">🔑 ${esc(keysLine(j))}</div>` : ""}`; }
   });
-  return `<div class="pl-home">🏠 ${esc(home.label)}</div>${rows}${order.length ? `<div class="pl-home">🏠 ${esc(home.label)}</div>` : ""}
+  const milesSaved = real && order.length && iso <= isoToday(0) ? (recordMiles(iso, totMi), true) : false;
+  return `<div class="pl-home">🏠 ${esc(home.label)}</div>${rows}${order.length ? `<div class="pl-home">🏠 ${esc(home.label)}</div>` : ""}${milesSaved ? `<div class="pl-note">Saved to the mileage log (Performance panel).</div>` : ""}
     <div class="pl-tot">${real ? "" : "About "}<b>${totMi.toFixed(0)} miles</b> and <b>${fmtMins(totMin)}</b> driving${real ? " (Google road times, with expected traffic where it applies)" : ""}${order.length ? ` · mileage for the day: ${real ? "" : "about "}${totMi.toFixed(1)} mi` : ""}</div>
     ${late ? `<div class="pl-note pl-late">${late === 1 ? "One stop" : late+" stops"} may be late with the visit times allowed.</div>` : ""}
     ${note ? `<div class="pl-note">${note}</div>` : ""}
@@ -4195,6 +4404,31 @@ function slotRowExtra(j){
     <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Opens the email with the same link again, e.g. as a chaser")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, e.g. for WhatsApp")}>Copy link</button></span>`;
   return `<span class="sl-st c-dim">No link sent</span><span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail (CC "+RR_MIDTERM_CC+") for you to check and send")}>Send slot link</button></span>`;
 }
+// Next mid-term due (Lex, 20 Oct, D6): last check-in or mid-term at a property + 6 months, when nothing newer is
+// logged there. A list to check against Riley's monthly email; nothing is booked by itself.
+function addMonthsIso(iso, n){ const p = iso.split("-").map(Number), d = new Date(p[0], p[1]-1+n, p[2]); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function midDueSoon(now){
+  const today = isoToday(0), horizon = isoToday(60), oldest = isoToday(-120), seen = {}, out = [];
+  state.jobs.filter(j => j.date && j.status !== "archived" && propKey(j)).sort((a,b) => String(b.date).localeCompare(String(a.date))).forEach(j => {
+    const k = propKey(j); if (seen[k]) return; seen[k] = true;          // newest job at each property only
+    if (!["MTI","ICI"].includes(j.type) || !["sent","deemed","signed","processing","completed"].includes(j.status)) return;
+    const due = addMonthsIso(j.date, 6);
+    if (due <= horizon && due >= oldest) out.push({ j, due, late: due < today });
+  });
+  return out.sort((a,b) => a.due.localeCompare(b.due));
+}
+function newMidFrom(id){
+  const b = state.jobs.find(x => x.id === id); if (!b || !confirmLeaveForm()) return;
+  navRememberPlace(null);
+  const e = emptyJob(); ["client","address","town","postcode","bedrooms","extraAreas","propertyType","tenantList","tenants","tenantEmails","tenantPhones","agentEmail","keysFrom","keysFromNote","keysBack","keysBackNote"].forEach(k => { if (b[k] != null) e[k] = JSON.parse(JSON.stringify(b[k])); });
+  e.type = "MTI"; state.editing = e; state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm();
+}
+function renderMidDue(){
+  const list = midDueSoon(new Date()); if (!list.length) return "";
+  return `<div class="d-sect" style="margin-top:14px">Next mid-term due, last visit + 6 months (${list.length})</div>`
+    + list.map(x => cRow(x.j, { extra: `<span class="c-dim" style="white-space:nowrap${x.late ? ";color:var(--coral)" : ""}">${esc(typeMeta(x.j.type).code)} ${esc(tableDate(x.j.date))} · due ${esc(tableDate(x.due))}</span><span class="d-acts"><button class="d-mv" onclick="newMidFrom('${x.j.id}')"${tip("New mid-term job with this property's address, agent, tenants and keys filled in")}>New MTI</button></span>` })).join("")
+    + `<div class="d-note">Check against Riley's monthly list before booking. Tenants copied from the last visit may have changed.</div>`;
+}
 function renderMidPanel(mids){
   const sl = state.slots || {};
   const head = !roadSignedIn() ? `<div class="t-empty">Click Save & get latest in the sidebar to see slot links and tenants' picks.</div>`
@@ -4206,6 +4440,7 @@ function renderMidPanel(mids){
     + (picked.length ? `<div class="d-sect">Tenant picked a time, approve or decline (${picked.length})</div>` + picked.map(row).join("") : "")
     + (rest.length ? `<div class="d-sect"${picked.length ? ' style="margin-top:14px"' : ""}>Need a date (${rest.length})</div>` + rest.map(row).join("") : "")
     + (!mids.length ? `<div class="t-empty">No mid-terms waiting for a date.</div>` : "")
+    + renderMidDue()
     + `<div class="d-note">Mid-terms at Booked with no date (or rearranged). Send slot link opens the email in Gmail with the tenant's own link; they see only free times and tell you if they'll be there or want you to use the keys. Nothing is booked until you approve. ${sl.loaded && sl.at ? "Picks checked "+new Date(sl.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})+". " : ""}<button class="t-link" onclick="refreshSlots()">Check for picks now</button></div>`;
 }
 function refreshSlots(){ ensureSheetsToken(async function(){ await loadSlots(); render(); }); }
@@ -4419,6 +4654,25 @@ function copyPhotoLink(btn){
   else prompt("Copy the link:", v.trim());
 }
 
+// Property history (Lex, 20 Oct, D5): every other job at the same address (same postcode, same flat/street start),
+// newest first, with photo links, so a mid-term or check-out can open the check-in in one click.
+function propKey(j){
+  const pc = String(j.postcode||"").toUpperCase().replace(/\s+/g,"");
+  const a = String(j.address||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\b(flat|apartment|apt|unit)\b/g," ").split(/\s+/).filter(Boolean).slice(0,3).join(" ");
+  return pc && a ? pc+"|"+a : "";
+}
+function propertyJobs(f){
+  const k = propKey(f); if (!k) return [];
+  return state.jobs.filter(j => j.id !== f.id && propKey(j) === k).sort((a,b) => String(b.date||"").localeCompare(String(a.date||"")));
+}
+function renderPropertyHistory(f){
+  const list = propertyJobs(f); if (!list.length) return "";
+  return `<div class="field wide ph-box"><div class="ph-h">This property before (${list.length})</div>
+    ${list.map(j => `<div class="ph-row"><span class="ph-d">${esc(tableDate(j.date))}</span><span class="ph-t">${esc(typeMeta(j.type).code)}</span>
+      <button type="button" class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"No job no.")}</button>
+      <span class="c-dim">${esc(statusMeta(j.status).label)}</span>
+      ${j.photoLink && /^https?:\/\//i.test(j.photoLink) ? `<a class="t-link" href="${esc(j.photoLink)}" target="_blank" rel="noopener">Photos</a>` : ""}</div>`).join("")}</div>`;
+}
 function renderForm(){
   const f = state.editing;
   ensureFormLists(f);
@@ -4459,6 +4713,7 @@ function renderForm(){
       </label>
       <label class="field">Invoice number
         <input type="text" id="f_invoiceNo" value="${esc(f.invoiceNo||"")}" placeholder="From Tide (optional)" />
+        ${(() => { const e = expectedFee(f), m = feeMismatch(f); return e != null ? `<span class="field-hint"${m ? ' style="color:var(--coral)"' : ""}>Price list: ${gbp(e)}${f.invoiceAmount ? " · invoiced "+esc(f.invoiceAmount) : ""}${m ? " (doesn't match)" : ""}</span>` : (f.client ? `<span class="field-hint">No price on the price list for this.</span>` : ""); })()}
       </label>
 
       <label class="field">Agent / client
@@ -4531,7 +4786,26 @@ function renderForm(){
       <label class="field wide">Notes
         <textarea id="f_notes" placeholder="Access details, anything else worth flagging">${esc(f.notes)}</textarea>
       </label>
+      <label class="field">Keys from
+        <select id="f_keysFrom" onchange="keysFromChange(this)">${KEYS_FROM.map(k=>`<option value="${k[0]}" ${(f.keysFrom||"")===k[0]?"selected":""}>${esc(k[1])}</option>`).join("")}</select>
+      </label>
+      <label class="field">Where / who
+        <input type="text" id="f_keysFromNote" value="${esc(f.keysFromNote||"")}" placeholder="e.g. Winkworth, 429 Roman Road" />
+      </label>
+      <label class="field">Keys back to
+        <select id="f_keysBack">${KEYS_BACK.map(k=>`<option value="${k[0]}" ${(f.keysBack||"")===k[0]?"selected":""}>${esc(k[1])}</option>`).join("")}</select>
+        ${f.keysReturnedAt ? `<span class="field-hint">Returned ${esc(shortDay(new Date(f.keysReturnedAt)))}.</span>` : ""}
+      </label>
+      <label class="field">Where / who
+        <input type="text" id="f_keysBackNote" value="${esc(f.keysBackNote||"")}" placeholder="Leave blank if the same place" />
+      </label>
+      <label class="field wide" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" id="f_noVisitReminder" ${f.noVisitReminder ? "checked" : ""} style="width:20px;height:20px;flex:none" />
+        <span${hint("The script emails tenants about 17:00 the day before a booked visit that has a time. Tick to skip it for this job.")}>No day-before reminder to tenants</span>
+      </label>
       ${renderPhotoLinkField(f)}
+      ${renderPropertyHistory(f)}
+      ${renderHistory(f)}
     </div>
 
     <div class="form-actions">
@@ -4887,7 +5161,7 @@ let navReturn = { y: null, id: null };   // where the page was when the form ope
 
 const NAV_FIELDS = { jobNo:"f_jobNo", type:"f_type", status:"f_status", date:"f_date", time:"f_time", propertyType:"f_propertyType",
   address:"f_address", town:"f_town", postcode:"f_postcode", bedrooms:"f_bedrooms", extraAreas:"f_extraAreas",
-  notes:"f_notes", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
+  notes:"f_notes", keysFrom:"f_keysFrom", keysFromNote:"f_keysFromNote", keysBack:"f_keysBack", keysBackNote:"f_keysBackNote", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
 function formSnapshot(){
   const f = state.editing; if (!f) return null;
   const val = id => { const el = document.getElementById(id); return el ? el.value : undefined; };

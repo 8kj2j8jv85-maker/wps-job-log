@@ -86,10 +86,11 @@
       <div>20. What runs by itself, what you do</div>
       <div>21. If something goes wrong</div>
       <div>22. Known gaps</div>
+      <div>23. New on 20 October</div>
     </div>
   </div>
   <div class="small">
-    Version of 19 October 2026 (replaces the 18 October version). It matches the live tools after the 19 October changes: Do next and Park, the Board view, the Map, Plan my day with Google road times, mid-terms and the tenant slot link, and the news line. Screenshots use made-up jobs, addresses and names (Example Lettings, Sample Estates, example.com emails), so no real tenant details appear. The screenshot clock is set to Tuesday 13 October, so dates in the pictures won't match today. The lettering is slightly different from your screen; the buttons and layout are the same. The news headlines in the pictures are made-up examples.
+    Version of 20 October 2026 (replaces the 19 October version). Section 23 lists the 20 October additions (keys, day-before reminders, price list, money by month, property history, next mid-term due, mileage, CSV export, undo delete, change history). Otherwise it matches the tools after the 19 October changes: Do next and Park, the Board view, the Map, Plan my day with Google road times, mid-terms and the tenant slot link, and the news line. Screenshots use made-up jobs, addresses and names (Example Lettings, Sample Estates, example.com emails), so no real tenant details appear. The screenshot clock is set to Tuesday 13 October, so dates in the pictures won't match today. The lettering is slightly different from your screen; the buttons and layout are the same. The news headlines in the pictures are made-up examples.
   </div>
 </section>
 
@@ -893,7 +894,7 @@
   <tr><td>Photo Tool zip downloaded with a random name.</td><td>Fixed 18 Oct (pull request #29). Press Ctrl+Shift+R to load the fixed page. Rename any older zip by hand to its WPS name.</td></tr>
   <tr><td>Photos had "no date taken inside".</td><td>They're HEIC or edited copies. Check the split. Set the iPhone to Most Compatible.</td></tr>
   <tr><td>Dictation microphone does nothing.</td><td>Allow the microphone when asked. Check signal. Try switching off audio backup in Settings.</td></tr>
-  <tr><td>Deleted a job by mistake.</td><td>There's no undo. Re-add it, or ask Claude to help restore it from a backup.</td></tr>
+  <tr><td>Deleted a job by mistake.</td><td>Press Undo on the bar that shows straight after (a few seconds). Missed it? Re-add it, or ask Claude to help restore it from a backup.</td></tr>
   <tr><td>Mid-terms panel: "Click Save &amp; get latest in the sidebar to see slot links and tenants' picks."</td><td>Click Save &amp; get latest (it signs you in to Google), then the Mid-terms tile again.</td></tr>
   <tr><td>"Couldn't make the link" / "Couldn't approve" / "Couldn't decline"</td><td>Nothing on the job changed. Click Save &amp; get latest and try again. If it keeps happening, tell Claude.</td></tr>
   <tr><td>A tenant picked a time you can't do.</td><td>Click Decline. They get the email to pick again from the same link.</td></tr>
@@ -907,12 +908,12 @@
 
 <!-- ============ 18 KNOWN GAPS ============ -->
 <h1>22. Known gaps</h1>
-<p>Things that aren't finished or haven't been tried in real use yet, as of 19 October 2026:</p>
+<p>Things that aren't finished or haven't been tried in real use yet, as of 20 October 2026:</p>
 <ul>
   <li><b>The tenant slot link</b> hasn't been tried end to end with a real tenant and the real calendar yet.</li>
   <li><b>Plan my day</b> on the iPhone: not reported back yet.</li>
-  <li><b>On the phone you have to tap Save &amp; get latest</b> each time. It doesn't sync by itself.</li>
-  <li><b>Signed is set by hand.</b> The Dashboard can't see Acrobat or the signing page yet.</li>
+  <li><b>Syncing by itself needs the device key.</b> With a key set (More &gt; Device key) the Dashboard saves and loads every few minutes; on a device without one, tap Save &amp; get latest.</li>
+  <li><b>Signed is automatic only for the WPS signing page</b> (when every signer has signed, with the device key). Old Acrobat sends are still set by hand.</li>
   <li><b>The first real auto-sent report and the first real check-in on the signing page</b> haven't been checked end to end yet.</li>
   <li><b>The auto-send doesn't check the photo link opens</b>; it uses the link on the job or page 1 of the report.</li>
   <li><b>WhatsApp bookings</b> can't be seen by the inbox check.</li>
@@ -925,10 +926,30 @@
   <li><b>The Photo Tool and Dictation don't read the Google Sheet.</b> The Photo Tool sees jobs only in the same Chrome as the Job Log, and its list only offers jobs dated 21 days before to 2 days after the photos. Dictation reads the Job Log on the same phone only. Rooms from the last visit only know visits dictated on that phone.</li>
   <li><b>Photo links</b> still use wellingtonparker.com (they work). The new photos.wellington-ps.co.uk address isn't set up.</li>
   <li><b>Extract job details</b> only reads a clean address line. When the address is buried in a sentence, type it in.</li>
-  <li>Two devices could give the same job number to two new jobs if both add one before syncing. Sync before adding jobs on a second device.</li>
+  <li>Two devices could still give the same job number to two new jobs if both add one before syncing. Do next now flags it ("Two jobs share the number"): open one and give it a new number.</li>
+  <li><b>Day-before reminders</b> start only once the VisitRemind script file is pasted and switched on (vrStart). Not yet tried with a real tenant.</li>
+  <li><b>Mileage</b> is only counted for days you opened Plan my day with Google road times.</li>
   <li>The iPhone can clear Dictation's saved notes if it isn't opened for about 7 days. Copy notes to Claude the same day.</li>
 </ul>
 <div class="tip"><b>If this manual and the tools ever disagree, the tools are right.</b> Ask Claude to update the manual.</div>
+
+<h1>23. New on 20 October</h1>
+<table>
+  <tr><th>What</th><th>Where</th><th>How it works</th></tr>
+  <tr><td><b>Winkworth check-outs</b></td><td>Times to agree</td><td>A Winkworth check-out with a date no longer needs a time agreed. It shows on its day as <b>Any time</b>. With no date it still shows as No date yet.</td></tr>
+  <tr><td><b>Keys</b></td><td>Job form, Today, Plan my day, calendar</td><td>Set <b>Keys from</b> and <b>Keys back to</b> with a short note (e.g. Winkworth, 429 Roman Road). Today, Plan my day and the calendar event show "collect from ... back to ...". After the visit, keys not marked back show in Do next: press <b>Keys returned</b>.</td></tr>
+  <tr><td><b>Day-before reminder</b></td><td>Script, job form</td><td>About 17:00 the script emails the tenants of tomorrow's booked jobs that have a time, from hello@. Mid-terms copy Riley. Logged in the Visit reminders tab. Tick <b>No day-before reminder</b> on a job to skip it.</td></tr>
+  <tr><td><b>Price list</b></td><td>Sidebar &gt; Price list</td><td>Fees per agent, job type and bedrooms, plus each extra area. The job form shows the expected fee. To invoice and Awaiting payment add up using the price list where Tide gave no amount. A Tide invoice that doesn't match shows in Do next.</td></tr>
+  <tr><td><b>Money by month</b></td><td>Performance tile</td><td>Invoiced and paid for the last 6 months.</td></tr>
+  <tr><td><b>Report ageing</b></td><td>Reports due</td><td>Lines add "visited N days ago" once a visit is 2 or more days old.</td></tr>
+  <tr><td><b>This property before</b></td><td>Job form</td><td>Every other job at the same property, with Open and Photos.</td></tr>
+  <tr><td><b>Next mid-term due</b></td><td>Mid-terms tile</td><td>Properties whose last check-in or mid-term was about 6 months ago. <b>New MTI</b> starts a job with the address, agent, tenants and keys filled in. Check against Riley's list first.</td></tr>
+  <tr><td><b>Business mileage</b></td><td>Performance tile</td><td>Plan my day's Google road miles for days you've worked are kept. Shows this month and the tax year from 6 April. <b>Copy mileage list</b> gives a list to paste for the accountant.</td></tr>
+  <tr><td><b>Search</b></td><td>Job Log</td><td>Now also searches notes, keys notes and copy-to emails.</td></tr>
+  <tr><td><b>Export spreadsheet</b></td><td>Sidebar &gt; More</td><td>Every job as a CSV file for Excel or Google Sheets.</td></tr>
+  <tr><td><b>Undo delete</b></td><td>After Delete job</td><td>An Undo bar shows for a few seconds. The job comes back with a new calendar event.</td></tr>
+  <tr><td><b>Change history</b></td><td>Job form</td><td>A dated line for each change to a job (last 40), for the record if a report is disputed.</td></tr>
+</table>
 
 
 </body>
