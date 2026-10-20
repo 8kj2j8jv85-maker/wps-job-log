@@ -3659,9 +3659,35 @@ function renderUtilityRow(){
     </label>
     ${keyMode() ? "" : (state.gcalConnected ? CAL_BTN() : "")}
     ${renderKeyRow()}
+    ${state.newBuild ? "" : renderBuildRow()}
     </details>
+    ${state.newBuild ? renderBuildRow() : ""}
     ${dashKey() && state.dashRefused ? `<button class="btn-link" style="color:var(--coral)" onclick="state.moreTools=true;state.keyEdit=true;render()">Device key refused: paste it again ⚠</button>` : ""}
   </div>`;
+}
+// Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
+// The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
+const BUILD = "20 Oct 2026 (#55)";
+let buildCheckAt = 0;
+async function liveBuild(){
+  const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const m = (await r.text()).match(/const BUILD = "([^"]+)"/);
+  return m ? m[1] : "";
+}
+function loadLatestBuild(){ location.href = location.pathname + "?v=" + Date.now() + location.hash; }
+async function checkBuild(manual){
+  if (!manual && Date.now() - buildCheckAt < 10*60*1000) return;
+  buildCheckAt = Date.now();
+  let live = "";
+  try { live = await liveBuild(); }
+  catch(e){ if (manual) showActionBar("Couldn't check for a new version (" + e.message + "). Try again in a minute."); return; }
+  if (live && live !== BUILD){ state.newBuild = live; const a = document.activeElement; if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) render(); showActionBar("New version of the dashboard is live (" + live + "). Your jobs are kept.", "Load it now", loadLatestBuild); }
+  else { state.newBuild = ""; if (manual) showActionBar("You're on the latest version (" + BUILD + ")."); }
+}
+function renderBuildRow(){
+  if (state.newBuild) return `<button class="btn-link" style="color:var(--coral)" onclick="loadLatestBuild()"${hint("A newer version is live. Your jobs and device key are kept.")}>New version ready: load it ⟳</button>`;
+  return `<button class="btn-link" onclick="checkBuild(true)"${hint("Which version this device is running. Click to check for a newer one.")}>Version ${esc(BUILD)}: check for update</button>`;
 }
 // Sidebar "More" (Lex, 18 Oct): the calendar button sits in view until it's connected, then moves under More
 function CAL_BTN(){
@@ -4979,8 +5005,8 @@ function autoRefresh(){
   window.scrollTo(0, y);
 }
 setInterval(autoRefresh, 3*60*1000);
-document.addEventListener("visibilitychange", function(){ if (!document.hidden) autoRefresh(); });
-window.addEventListener("pageshow", function(e){ if (e.persisted) autoRefresh(); });   // iPhone: back to the open tab
+document.addEventListener("visibilitychange", function(){ if (!document.hidden){ autoRefresh(); checkBuild(false); } });
+window.addEventListener("pageshow", function(e){ if (e.persisted){ autoRefresh(); checkBuild(false); } });   // iPhone: back to the open tab
 window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (state.dashCycleAt || 0) > 60000) autoRefresh(); });
 
 // ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
@@ -5382,6 +5408,7 @@ snapAll();
 if (keyMode()) state.gcalConnected = true;   // device key: calendar and Sheet saves work without Google sign-in
 state.urlAction = parseUrlAction();
 render();
+setTimeout(function(){ checkBuild(false); }, 5000);   // update check on open (20 Oct)
 initGCal();
 if (keyMode() && !state.urlAction) setTimeout(dashCycle, 400);   // on open: save, get the latest, read the queue
 </script>
