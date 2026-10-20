@@ -1333,7 +1333,7 @@ function logChange(j, text){
   j.history.unshift({ at: new Date().toISOString(), dev: navigator.platform||"", what: String(text).slice(0, 300) });
   if (j.history.length > 40) j.history.length = 40;
 }
-const HIST_FIELDS = [["date","Date"],["time","Time"],["address","Address"],["postcode","Postcode"],["client","Agent"],["type","Type"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no."],["photoLink","Photo link"],["keysFrom","Keys from"],["keysBack","Keys back to"],["notes","Notes"]];
+const HIST_FIELDS = [["date","Date"],["time","Time"],["address","Address"],["postcode","Postcode"],["client","Agent"],["type","Type"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no."],["photoLink","Photo link"],["keysFrom","Keys from"],["keysBack","Keys back to"],["parkingExtra","Parking extra"],["notes","Notes"]];
 function jobDiff(a, b){
   const st = a.status && b.status && a.status !== b.status ? ["Status: "+statusMeta(a.status).label+" → "+statusMeta(b.status).label] : [];
   return st.concat(HIST_FIELDS.filter(([k]) => String(a[k]||"") !== String(b[k]||"")).map(([k,l]) => k === "notes" ? "Notes changed" : l+": "+(String(a[k]||"")||"–")+" → "+(String(b[k]||"")||"–"))).join("; ");
@@ -1690,6 +1690,8 @@ function captureFormValues(){
   if (f.tenantRows) f.tenantRows = f.tenantRows.map((t,i) => ({ name: grab('t_name_'+i) ?? t.name, phone: grab('t_phone_'+i) ?? t.phone, email: grab('t_email_'+i) ?? t.email }));
   setIf('notes','f_notes');
   { const nv = document.getElementById('f_noVisitReminder'); if (nv) f.noVisitReminder = nv.checked; }
+  { const cg = document.getElementById('f_congestion'); if (cg) f.congestion = cg.checked; }
+  setIf('parkingExtra','f_parkingExtra');
   setIf('keysFrom','f_keysFrom'); setIf('keysFromNote','f_keysFromNote'); setIf('keysBack','f_keysBack'); setIf('keysBackNote','f_keysBackNote');
   setIf('photoLink','f_photoLink');
   setIf('invoice','f_invoice');
@@ -1775,6 +1777,8 @@ function submitForm(){
     keysFrom: g("f_keysFrom").value, keysFromNote: g("f_keysFromNote").value.trim(),
     keysBack: g("f_keysBack").value, keysBackNote: g("f_keysBackNote").value.trim(),
     noVisitReminder: !!(g("f_noVisitReminder") && g("f_noVisitReminder").checked),
+    congestion: !!(g("f_congestion") && g("f_congestion").checked),
+    parkingExtra: (g("f_parkingExtra") ? g("f_parkingExtra").value : "").replace(/[£\s]/g,""),
     invoice: g("f_invoice").value,
     invoiceNo: g("f_invoiceNo").value.trim(),
   };
@@ -2045,7 +2049,7 @@ function setStatusFilter(code){
 // ---------------------------------------------------------------- export / import
 // CSV export (Lex, 20 Oct, D8): every job as a spreadsheet (opens in Excel or Google Sheets)
 function exportCsv(){
-  const cols = [["jobNo","Job no"],["type","Type"],["status","Status"],["date","Date"],["time","Time"],["address","Address"],["town","Town"],["postcode","Postcode"],["client","Agent"],["bedrooms","Bedrooms"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no"],["invoiceAmount","Invoice amount"],["sentAt","Sent"],["invoicedAt","Invoiced"],["paidAt","Paid"],["dayMiles","Day miles"],["photoLink","Photo link"],["notes","Notes"]];
+  const cols = [["jobNo","Job no"],["type","Type"],["status","Status"],["date","Date"],["time","Time"],["address","Address"],["town","Town"],["postcode","Postcode"],["client","Agent"],["bedrooms","Bedrooms"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no"],["invoiceAmount","Invoice amount"],["sentAt","Sent"],["invoicedAt","Invoiced"],["paidAt","Paid"],["dayMiles","Day miles"],["congestion","Congestion zone"],["parkingExtra","Parking extra"],["photoLink","Photo link"],["notes","Notes"]];
   const q = v => { const t = String(v==null ? "" : v); return /[",\n\r]/.test(t) || /^[=+\-@]/.test(t) ? '"'+t.replace(/^([=+\-@])/,"'$1").replace(/"/g,'""')+'"' : t; };
   const rows = [cols.map(c => c[1]).join(",")].concat(state.jobs.slice().sort((a,b) => String(a.date||"").localeCompare(String(b.date||""))).map(j => cols.map(c => q(j[c[0]])).join(",")));
   const blob = new Blob(["\ufeff"+rows.join("\r\n")], {type:"text/csv;charset=utf-8"});
@@ -3209,6 +3213,7 @@ function todayInfo(j){
   const bits = [];
   const kl = keysLine(j);
   if (kl) bits.push(`<span><span class="c-dim">Keys:</span> ${esc(kl)}</span>`);
+  if (j.congestion || ccGuess(j.postcode) === "in") bits.push(`<span><span class="c-dim">Congestion zone:</span> pay the charge${j.congestion ? "" : " (postcode is in the zone, job not ticked)"}</span>`);
   if (j.tenants) bits.push(`<span><span class="c-dim">Tenant:</span> ${linkPhones(j.tenants)}</span>`);
   if (j.notes) bits.push(`<span><span class="c-dim">Notes:</span> ${linkPhones(String(j.notes).replace(/\s+/g," ").slice(0,160))}${String(j.notes).length>160 ? "…" : ""}</span>`);
   return bits.length ? `<div class="d-info">${bits.join("")}</div>` : "";
@@ -3243,7 +3248,16 @@ function expectedFee(j){
   const house = j.propertyType === "House" && moneyAmount(p["h"+bed]) != null;
   const base = moneyAmount(house ? p["h"+bed] : p[bed]); if (base == null) return null;
   const ex = moneyAmount(p.extra), n = parseInt(j.extraAreas,10);
-  return base + (ex && n > 0 ? ex*n : 0);
+  return base + (ex && n > 0 ? ex*n : 0) + travelExtras(j, c);
+}
+// Congestion and parking (Lex, 20 Oct): parking is normally inside the price; in central London the congestion
+// charge and the parking are passed on. The congestion amount is set per agent on the Price list.
+const CC_IN = /^(EC[1-4]|WC[12]|W1|SW1)[A-Z]?\b/i, CC_NEAR = /^(SE1|SE11|SE17|N1|N7|NW1|NW8|E1|E2|W2|W8|W9|W10|W11|W14|SW3|SW5|SW7|SW8|SW10)[A-Z]?\b/i;
+function ccGuess(pc){ const p = String(pc||"").trim().toUpperCase(); return CC_IN.test(p) ? "in" : CC_NEAR.test(p) ? "near" : ""; }
+function travelExtras(j, c){
+  c = c || clientByName(j.client||"");
+  const cc = j.congestion && c && c.prices ? moneyAmount(c.prices.congestion) : null;
+  return (cc || 0) + (moneyAmount(j.parkingExtra) || 0);
 }
 function feeMismatch(j){
   const a = moneyAmount(j.invoiceAmount), e = expectedFee(j);
@@ -3259,6 +3273,12 @@ function setPrice(client, type, key, val){
   if (!Object.keys(c.prices[type]).length) delete c.prices[type];
   saveClients(); render();
 }
+function setPriceTop(client, key, val){
+  const c = clientByName(client); if (!c) return;
+  c.prices = c.prices || {}; const v = String(val||"").replace(/[£,\s]/g,"");
+  if (v === "") delete c.prices[key]; else if (!isNaN(parseFloat(v))) c.prices[key] = String(parseFloat(v));
+  saveClients(); render();
+}
 function renderPricePanel(){
   const names = state.clients.map(c => c.name).filter(n => n && n !== "Lex test");
   if (!names.length) return `<div class="t-empty">Add an agent on a job first.</div>`;
@@ -3271,6 +3291,8 @@ function renderPricePanel(){
       <span class="c-dim">Fees in £ by bedrooms. Leave a box blank if you don't charge it that way. Saved straight away, and to Google on the next save.</span></div>
     <div class="pr-wrap"><table class="pr-tab"><thead><tr><th>Type</th>${PRICE_BEDS.map(b=>`<th>${b} bed</th>`).join("")}<th>Each extra area</th></tr></thead>
       <tbody>${PRICE_TYPES.map(t=>`<tr><th>${esc(typeMeta(t).label||t)}</th>${PRICE_BEDS.map(b=>cell(t,H+b)).join("")}${cell(t,"extra")}</tr>`).join("")}</tbody></table></div>
+    <div class="pr-top" style="margin-top:10px"><label>Congestion charge passed on £ <input class="pr-in" inputmode="decimal" aria-label="congestion charge" value="${esc(pr.congestion||"")}" onchange="setPriceTop(${esc(JSON.stringify(sel))},'congestion',this.value)" placeholder="—" /></label>
+      <span class="c-dim">Added when a job is ticked In the congestion zone. Check TfL's current daily charge.</span></div>
     <div class="c-dim" style="margin-top:8px">${H ? "House prices are used when the job's Property type is House. A blank house box falls back to the flat price. Each extra area is the same for flats and houses." : "Flat prices are used for flats and for jobs with no property type."} A job with no bedrooms set uses the 1 bed price. Expected fee shows on the job form and in To invoice; a Tide invoice that doesn't match shows in Do next.</div>`;
 }
 function moneyByClient(list, dateOf){
@@ -4729,7 +4751,7 @@ function renderForm(){
       </label>
       <label class="field">Invoice number
         <input type="text" id="f_invoiceNo" value="${esc(f.invoiceNo||"")}" placeholder="From Tide (optional)" />
-        ${(() => { const e = expectedFee(f), m = feeMismatch(f); return e != null ? `<span class="field-hint"${m ? ' style="color:var(--coral)"' : ""}>Price list: ${gbp(e)}${f.invoiceAmount ? " · invoiced "+esc(f.invoiceAmount) : ""}${m ? " (doesn't match)" : ""}</span>` : (f.client ? `<span class="field-hint">No price on the price list for this.</span>` : ""); })()}
+        ${(() => { const e = expectedFee(f), m = feeMismatch(f); return e != null ? `<span class="field-hint"${m ? ' style="color:var(--coral)"' : ""}>Price list: ${gbp(e)}${travelExtras(f) ? " (incl. "+gbp(travelExtras(f))+" congestion/parking)" : ""}${f.invoiceAmount ? " · invoiced "+esc(f.invoiceAmount) : ""}${m ? " (doesn't match)" : ""}</span>` : (f.client ? `<span class="field-hint">No price on the price list for this.</span>` : ""); })()}
       </label>
 
       <label class="field">Agent / client
@@ -4818,6 +4840,14 @@ function renderForm(){
       <label class="field wide" style="flex-direction:row;align-items:center;gap:8px">
         <input type="checkbox" id="f_noVisitReminder" ${f.noVisitReminder ? "checked" : ""} style="width:20px;height:20px;flex:none" />
         <span${hint("The script emails tenants about 17:00 the day before a booked visit that has a time. Tick to skip it for this job.")}>No day-before reminder to tenants</span>
+      </label>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" id="f_congestion" ${f.congestion ? "checked" : ""} style="width:20px;height:20px;flex:none" />
+        <span${hint("Adds the agent's congestion charge (Price list) to the expected fee")}>In the congestion zone</span>
+        ${(() => { const g = ccGuess(f.postcode); return g === "in" && !f.congestion ? `<span class="field-hint" style="color:var(--coral)">${esc(f.postcode)} is in the zone: tick it?</span>` : g === "near" ? `<span class="field-hint">${esc(f.postcode)} may be in or near the zone: check.</span>` : ""; })()}
+      </label>
+      <label class="field">Parking charged extra £
+        <input type="text" id="f_parkingExtra" inputmode="decimal" value="${esc(f.parkingExtra||"")}" placeholder="Blank = included in the price" />
       </label>
       ${renderPhotoLinkField(f)}
       ${renderPropertyHistory(f)}
