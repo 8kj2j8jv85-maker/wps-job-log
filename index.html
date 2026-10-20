@@ -154,6 +154,10 @@
   #undo-bar button{ border:0; border-radius:6px; background:var(--coral); color:#fff; font:inherit; font-weight:600; padding:6px 12px; cursor:pointer; }
   #undo-bar button.undo-x{ background:transparent; padding:6px 4px; font-weight:400; opacity:.8; }
   @media (max-width:600px){ #undo-bar{ width:calc(100vw - 32px); box-sizing:border-box; justify-content:space-between; bottom:12px; } #undo-bar span{ flex:1; } }
+  .ph-box{ border-top:1px solid var(--line); padding-top:10px; }
+  .ph-h{ font-weight:600; font-size:13px; margin-bottom:4px; }
+  .ph-row{ display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; font-size:13px; padding:3px 0; }
+  .ph-d{ min-width:92px; font-variant-numeric:tabular-nums; } .ph-t{ min-width:30px; font-weight:600; }
   .mm-card{ margin-top:14px; padding:12px 14px; border:1px solid var(--line, #e3e6ee); border-radius:10px; font-size:13px; }
   .mm-key{ font-weight:400; margin-left:10px; color:var(--ink-soft); text-transform:none; letter-spacing:0; }
   .mm-dot{ display:inline-block; width:9px; height:9px; border-radius:2px; margin:0 4px 0 8px; vertical-align:-1px; }
@@ -4544,6 +4548,25 @@ function copyPhotoLink(btn){
   else prompt("Copy the link:", v.trim());
 }
 
+// Property history (Lex, 20 Oct, D5): every other job at the same address (same postcode, same flat/street start),
+// newest first, with photo links, so a mid-term or check-out can open the check-in in one click.
+function propKey(j){
+  const pc = String(j.postcode||"").toUpperCase().replace(/\s+/g,"");
+  const a = String(j.address||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\b(flat|apartment|apt|unit)\b/g," ").split(/\s+/).filter(Boolean).slice(0,3).join(" ");
+  return pc && a ? pc+"|"+a : "";
+}
+function propertyJobs(f){
+  const k = propKey(f); if (!k) return [];
+  return state.jobs.filter(j => j.id !== f.id && propKey(j) === k).sort((a,b) => String(b.date||"").localeCompare(String(a.date||"")));
+}
+function renderPropertyHistory(f){
+  const list = propertyJobs(f); if (!list.length) return "";
+  return `<div class="field wide ph-box"><div class="ph-h">This property before (${list.length})</div>
+    ${list.map(j => `<div class="ph-row"><span class="ph-d">${esc(tableDate(j.date))}</span><span class="ph-t">${esc(typeMeta(j.type).code)}</span>
+      <button type="button" class="t-link" onclick="openEdit('${j.id}')">${esc(j.jobNo||"No job no.")}</button>
+      <span class="c-dim">${esc(statusMeta(j.status).label)}</span>
+      ${j.photoLink && /^https?:\/\//i.test(j.photoLink) ? `<a class="t-link" href="${esc(j.photoLink)}" target="_blank" rel="noopener">Photos</a>` : ""}</div>`).join("")}</div>`;
+}
 function renderForm(){
   const f = state.editing;
   ensureFormLists(f);
@@ -4675,6 +4698,7 @@ function renderForm(){
         <span${hint("The script emails tenants about 17:00 the day before a booked visit that has a time. Tick to skip it for this job.")}>No day-before reminder to tenants</span>
       </label>
       ${renderPhotoLinkField(f)}
+      ${renderPropertyHistory(f)}
     </div>
 
     <div class="form-actions">
