@@ -345,6 +345,7 @@
   .qk-update{ background:var(--sky); color:var(--brand-text); }
   .qk-cancel{ background:var(--stone-bg); color:var(--stone); }
   .qk-invoice{ background:#E6F2EA; color:var(--green); }
+  .qk-watch{ background:#FFF1D6; color:#8A5A00; }
   .qaddr{ margin-top:6px; font-size:14.5px; }
   .qmeta{ margin-top:3px; font-size:13.5px; color:var(--ink-soft); }
   .qline{ margin-top:5px; font-size:13px; }
@@ -724,6 +725,7 @@
   html[data-theme="night"] .tablewrap tr:hover td{ background:#20283C; }
   html[data-theme="night"] .btn-danger:hover{ background:#3E2020; }
   html[data-theme="night"] .qk-invoice{ background:var(--green-bg); }
+  html[data-theme="night"] .qk-watch{ background:rgba(255,196,80,.16); color:#FFD27A; }
   html[data-theme="night"] select option{ color:var(--ink); background:var(--card); }
   html[data-theme="night"] .milestone{ background:linear-gradient(135deg,#2A2220,#1A2133); }
   html[data-theme="night"] .ms-wp{ background:linear-gradient(135deg,#33301C,#1A2133); }
@@ -2433,7 +2435,31 @@ function checkForBookings(quiet){
 }
 const QUEUE_MAX_AGE_DAYS = 14;   // 13 Oct hardening: queue items older than this are not shown
 function queueItemAgeOk(i){ const g = Date.parse(i.generatedAt || ""); return isNaN(g) || (Date.now() - g) < QUEUE_MAX_AGE_DAYS*864e5; }
-function pendingQueue(){ return state.queue.filter(i=>!state.queueDone[i.id] && queueItemAgeOk(i)); }
+function pendingQueue(){ return state.queue.filter(i=>!state.queueDone[i.id] && queueItemAgeOk(i) && !watchCovered(i)); }
+// ---- "watch" queue items (20 Oct, Lex): the BookingWatch script (WPS Amendments Apps Script) looks at new mail
+// every 5 minutes and queues { id:"bw-<msgId>", kind:"watch", msgId, threadId, sourceFrom, sourceSubject, sourceDate, summary }
+// for anything from an agent or with booking words in it. It's only a heads-up: the card shows the email and
+// Open email / Dismiss. Once Claude's inbox check has read the same email and queued a booking card for it,
+// the heads-up card hides by itself.
+function watchCovered(it){
+  if (!it || it.kind !== "watch") return false;
+  const keys = [it.msgId, it.threadId].map(x => String(x||"")).filter(x => /^[A-Za-z0-9]{6,}$/.test(x));
+  if (!keys.length) return false;
+  return state.queue.some(o => o !== it && o.kind !== "watch" && keys.some(k => String(o.id||"").indexOf(k) === 0 || String(o.sourceUrl||"").indexOf(k) > -1));
+}
+function renderWatchCard(it){
+  const d = it.sourceDate && !isNaN(new Date(it.sourceDate)) ? new Date(it.sourceDate).toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "";
+  const link = emailLink(Object.assign({}, it, { id: String(it.msgId||"") }));   // fallback link uses the Gmail message id, not "bw"
+  return `<div class="qcard">
+    <div class="qtop"><span class="qkind qk-watch">New booking email</span>${it.client ? `<span>${esc(it.client)}</span>` : ""}${d ? `<span>${esc(d)}</span>` : ""}</div>
+    <div class="qaddr">${esc(it.sourceSubject)||"(no subject)"}</div>
+    <div class="qmeta">From ${esc(it.sourceFrom)||"unknown sender"}</div>
+    ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
+    <div class="qline">Heads-up only. Claude's hourly inbox check turns it into a booking card, and this card then goes by itself.</div>
+    <div class="qsrc">Booking watch${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">Open email</a>` : ""}</div>
+    <div class="qactions"><button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing in the log changes.")}>Dismiss</button></div>
+  </div>`;
+}
 function markQueueDone(id, how){
   state.queueDone[id] = { how, at: new Date().toISOString() };
   try{ localStorage.setItem(LS_QUEUE_DONE, JSON.stringify(state.queueDone)); }catch(e){}
@@ -2560,7 +2586,7 @@ function applyItemContacts(m, it){
   return notes;
 }
 function qAdd(id){
-  const it = queueItem(id); if (!it || it.kind==="invoice" || it.kind==="sent") return;
+  const it = queueItem(id); if (!it || it.kind==="invoice" || it.kind==="sent" || it.kind==="watch") return;
   const dup = findDuplicate(it);
   if (dup && !confirm("Looks like this is already logged as "+dup.jobNo+" ("+formatDate(dup.date)+"). Add it anyway?")) return;
   const job = jobFromItem(it);
@@ -2571,7 +2597,7 @@ function qAdd(id){
   syncJobToCalendar(job);
 }
 function qEdit(id){
-  const it = queueItem(id); if (!it || it.kind==="invoice" || it.kind==="sent") return;
+  const it = queueItem(id); if (!it || it.kind==="invoice" || it.kind==="sent" || it.kind==="watch") return;
   if (!confirmLeaveForm()) return;
   navRememberPlace(null);
   if (it.kind!=="new"){
@@ -2793,6 +2819,7 @@ function renderQueueTray(){
   const cards = items.map(it=>{
     if (it.kind==="invoice") return renderInvoiceCard(it);
     if (it.kind==="sent") return renderSentCard(it);
+    if (it.kind==="watch") return renderWatchCard(it);
     const k = KIND[it.kind] || KIND.new;
     const tm = typeMeta(it.type);
     const addr = [it.address,it.town,it.postcode].filter(Boolean).join(", ");
@@ -2834,7 +2861,7 @@ function renderQueueTray(){
       </div>
       <button class="btn btn-text btn-sm" onclick="qCloseTray()"${tip("Hide this tray. Anything not handled shows again next check.")}>Hide</button>
     </div>
-    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b>, a <b>cancellation</b> or an <b>invoice sent</b> from Tide. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click. The exceptions: reports the auto-send script has emailed are marked <b>Sent</b>, and check-ins everyone has signed on the signing page are marked <b>Signed</b>, by themselves, listed here; a <b>Report sent</b> card only shows if one couldn't be marked. With a device key this is checked every 3 minutes.`)}
+    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b>, a <b>cancellation</b> or an <b>invoice sent</b> from Tide. A <b>New booking email</b> card is a heads-up from the 5-minute booking watch: open the email; Claude's hourly check then turns it into a booking card. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click. The exceptions: reports the auto-send script has emailed are marked <b>Sent</b>, and check-ins everyone has signed on the signing page are marked <b>Signed</b>, by themselves, listed here; a <b>Report sent</b> card only shows if one couldn't be marked. With a device key this is checked every 3 minutes.`)}
     ${state.queueMsg ? `<div class="qwarn" style="margin-top:10px;">${esc(state.queueMsg)}</div>` : ""}
     ${state.autoSentMsg ? `<div class="qline" style="margin-top:10px;">${esc(state.autoSentMsg)} ✓</div>` : ""}
     ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing new to review ✓</div>` : ""}
