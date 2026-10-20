@@ -752,6 +752,26 @@
   .rp-lk{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--line); border-radius:6px; color:var(--brand-text); text-decoration:none; }
   .rp-lk:hover{ border-color:var(--brand-text); }
   .rp-lk-off{ color:var(--stone); border-style:dashed; }
+  button.rp-lk{ background:transparent; font:inherit; cursor:pointer; }
+  .rp-tile.rpv-cur{ outline:3px solid var(--coral, #E8735A); outline-offset:2px; }
+  body.rpv-open{ overflow:hidden; }
+  .rpv{ position:fixed; inset:0; z-index:9000; background:rgba(10,14,30,.88); display:flex; flex-direction:column; }
+  .rpv-bar{ display:flex; align-items:center; gap:10px; padding:8px 12px; background:#141D3D; color:#fff; }
+  .rpv-title{ min-width:0; flex:1; }
+  .rpv-no{ font-size:12px; color:#AFC0E4; }
+  .rpv-addr{ font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rpv-count{ font-size:13px; color:#AFC0E4; white-space:nowrap; }
+  .rpv-btn{ background:#1F2D5A; color:#fff; border:1px solid #33457E; border-radius:8px; min-width:40px; height:38px; font-size:24px; line-height:1; cursor:pointer; }
+  .rpv-btn:disabled{ opacity:.35; cursor:default; }
+  .rpv-btn:not(:disabled):hover{ background:#2A3C74; }
+  .rpv-x{ margin-left:6px; }
+  .rpv-acts{ display:flex; gap:6px; }
+  .rpv-lk{ background:transparent; border:1px solid #33457E; border-radius:8px; color:#fff; padding:7px 10px; font:inherit; font-size:13px; text-decoration:none; cursor:pointer; white-space:nowrap; }
+  .rpv-lk:hover{ border-color:#E8735A; }
+  .rpv-body{ flex:1; position:relative; }
+  .rpv-body iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
+  .rpv-load{ position:absolute; top:40%; left:0; right:0; text-align:center; color:#fff; font-size:15px; pointer-events:none; }
+  .rp-lk-job{ margin-left:auto; color:var(--ink-soft); }
   .rp-key{ display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:14px; font-size:12px; color:var(--ink-soft); }
   .rp-key span{ display:inline-flex; align-items:center; gap:6px; }
   @media (max-width:860px){
@@ -3274,6 +3294,7 @@ const ICON_GRID = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 const RP_ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
 const RP_ICON_DOC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
 const RP_ICON_AGENT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>';
+const RP_ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
 const RP_ICON_PHOTO = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 17l-5-5-9 8"/></svg>';
 const RP_LOGO = '<img class="rp-logo" src="sig/email/wps-logo-navy.png" alt="Wellington Property Services" loading="lazy">';
 const RP_STATUSES = [
@@ -3346,8 +3367,76 @@ function rpRedraw(){
   if (!g || !r){ render(); return; }
   g.innerHTML = renderRpGroups(); r.innerHTML = renderRpResults();
 }
-function rpOpen(id){ openEdit(id); }
-function rpKey(ev, id){ if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); openEdit(id); } }
+// Tile click (Lex, 20 Oct 20:14-20:20): opens the report PDF straight away, not the job, in a viewer on top of the
+// Reports page (no new tab). Previous / Next (and the arrow keys) step through the reports in the current filter and
+// sort; Close or Esc goes back to the same place. Google Drive's own preview shows the PDF (works on the PC and tablet
+// signed in as info@). Phones (Lex: not used for this) just open the PDF in a new tab. No PDF yet (upcoming jobs,
+// reports sent before the script) = the job opens, as before. The "Job" button on a tile always opens the job.
+// The viewer is its own layer on the page, outside render(), so the dashboard's auto-refresh never reloads the PDF.
+function rpOpen(id){
+  const j = (state.jobs || []).find(x => x.id === id), u = j ? rpReportUrl(j) : "";
+  if (!u){ openEdit(id); return; }
+  if (window.innerWidth < 700){ window.open(u, "_blank", "noopener"); return; }
+  const ids = rpSorted((state.jobs || []).filter(x => rpMatch(x) && rpReportUrl(x))).map(x => x.id);
+  rpView = { ids: ids.length ? ids : [id], i: Math.max(0, ids.indexOf(id)), back: document.activeElement };
+  rpViewDraw();
+}
+let rpView = null;
+function rpViewJob(){ return rpView ? (state.jobs || []).find(x => x.id === rpView.ids[rpView.i]) : null; }
+function rpViewDraw(){
+  const j = rpViewJob(); if (!j){ rpViewClose(); return; }
+  let el = document.getElementById("rpViewer");
+  if (!el){
+    el = document.createElement("div"); el.id = "rpViewer"; el.className = "rpv"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+    el.innerHTML = `<div class="rpv-bar">
+        <button class="rpv-btn" id="rpvPrev" onclick="rpViewGo(-1)" title="Previous report (left arrow)" aria-label="Previous report">&#8249;</button>
+        <div class="rpv-title"><div class="rpv-no" id="rpvNo"></div><div class="rpv-addr" id="rpvAddr"></div></div>
+        <span class="rpv-count" id="rpvCount"></span>
+        <button class="rpv-btn" id="rpvNext" onclick="rpViewGo(1)" title="Next report (right arrow)" aria-label="Next report">&#8250;</button>
+        <span class="rpv-acts" id="rpvActs"></span>
+        <button class="rpv-btn rpv-x" onclick="rpViewClose()" title="Close (Esc)" aria-label="Close">&times;</button>
+      </div>
+      <div class="rpv-body"><iframe id="rpvFrame" title="Report" allow="fullscreen" referrerpolicy="no-referrer"></iframe><div class="rpv-load" id="rpvLoad">Loading the report from Google Drive&hellip;</div></div>`;
+    document.body.appendChild(el);
+    document.addEventListener("keydown", rpViewKey, true);
+    document.body.classList.add("rpv-open");
+    document.getElementById("rpvFrame").addEventListener("load", () => { const l = document.getElementById("rpvLoad"); if (l) l.style.display = "none"; });
+  }
+  const tm = typeMeta(j.type), url = rpReportUrl(j), n = rpView.ids.length;
+  document.getElementById("rpvNo").textContent = (j.jobNo || "") + " · " + tm.label + (j.reportKind === "signed" ? " · signed copy" : "");
+  document.getElementById("rpvAddr").textContent = fullAddress(j) || "";
+  document.getElementById("rpvCount").textContent = n > 1 ? (rpView.i + 1) + " of " + n : "";
+  document.getElementById("rpvPrev").disabled = rpView.i <= 0;
+  document.getElementById("rpvNext").disabled = rpView.i >= n - 1;
+  const pUrl = /^https?:\/\//.test(String(j.photoLink||"")) ? j.photoLink : "";
+  document.getElementById("rpvActs").innerHTML =
+    `<a class="rpv-lk" href="${esc(url)}" target="_blank" rel="noopener" title="Open this PDF in its own tab">New tab</a>` +
+    (pUrl ? `<a class="rpv-lk" href="${esc(pUrl)}" target="_blank" rel="noopener" title="Download the photo set (zip)">Photos</a>` : "") +
+    `<button class="rpv-lk" onclick="rpViewToJob()" title="Close the viewer and open the job">Job</button>`;
+  const f = document.getElementById("rpvFrame"), src = "https://drive.google.com/file/d/" + j.reportFileId + "/preview";
+  if (f.getAttribute("src") !== src){ document.getElementById("rpvLoad").style.display = ""; f.setAttribute("src", src); }
+  const x = el.querySelector(".rpv-x"); if (x && !el.contains(document.activeElement)) x.focus();
+  document.querySelectorAll(".rp-tile.rpv-cur").forEach(t => t.classList.remove("rpv-cur"));
+  const tile = document.querySelector('.rp-tile[data-jid="' + j.id + '"]'); if (tile){ tile.classList.add("rpv-cur"); tile.scrollIntoView({ block: "nearest" }); }
+}
+function rpViewGo(d){ if (!rpView) return; const i = rpView.i + d; if (i < 0 || i >= rpView.ids.length) return; rpView.i = i; rpViewDraw(); }
+function rpViewKey(e){
+  if (!rpView) return;
+  if (e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); rpViewClose(); }
+  else if (e.key === "ArrowLeft"){ e.preventDefault(); rpViewGo(-1); }
+  else if (e.key === "ArrowRight"){ e.preventDefault(); rpViewGo(1); }
+}
+function rpViewClose(){
+  const el = document.getElementById("rpViewer"); if (el) el.remove();
+  document.removeEventListener("keydown", rpViewKey, true);
+  document.body.classList.remove("rpv-open");
+  const j = rpViewJob(), back = rpView && rpView.back; rpView = null;
+  const tile = j && document.querySelector('.rp-tile[data-jid="' + j.id + '"]');
+  if (tile){ tile.focus({ preventScroll: true }); setTimeout(() => tile.classList.remove("rpv-cur"), 1600); }
+  else if (back && back.focus) try { back.focus({ preventScroll: true }); } catch(e){}
+}
+function rpViewToJob(){ const j = rpViewJob(); rpViewClose(); if (j) openEdit(j.id); }
+function rpKey(ev, id){ if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); rpOpen(id); } }
 function rpGroupHtml(title, group, opts){
   const f = rpF();
   const rows = opts.map(o => {
@@ -3446,12 +3535,13 @@ function rpTile(j){
   const rUrl = rpReportUrl(j), pUrl = /^https?:\/\//.test(String(j.photoLink||"")) ? j.photoLink : "";
   const before = s.code === "upcoming" || s.code === "today" || s.code === "due";
   const lk = (u, icon, t, title) => `<a class="rp-lk" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(title)}">${icon}${t}</a>`;
+  const jobBtn = `<button type="button" class="rp-lk rp-lk-job" onclick="event.stopPropagation();openEdit('${j.id}')" title="Open the job">${RP_ICON_EDIT}Job</button>`;
   const acts = [
     rUrl ? lk(rUrl, RP_ICON_DOC, j.reportKind === "signed" ? "Signed report" : "Report", j.reportKind === "signed" ? "The signed copy (opens in Google Drive as info@)" : "The report as sent (opens in Google Drive as info@)") : (before ? `<span class="rp-lk rp-lk-off">No report yet</span>` : ""),
     pUrl ? lk(pUrl, RP_ICON_PHOTO, "Photos", "Download the photo set (zip)") : (before ? `<span class="rp-lk rp-lk-off">No photos yet</span>` : "")
-  ].filter(Boolean).join("");
+  ].filter(Boolean).join("") + jobBtn;
   const photos = acts ? `<div class="rp-acts">${acts}</div>` : "";
-  return `<div class="rp-tile" role="button" tabindex="0" data-jid="${j.id}" onclick="rpOpen('${j.id}')" onkeydown="rpKey(event,'${j.id}')" title="Open ${esc(j.jobNo || "job")}">
+  return `<div class="rp-tile" role="button" tabindex="0" data-jid="${j.id}" onclick="rpOpen('${j.id}')" onkeydown="rpKey(event,'${j.id}')" title="${rUrl ? "Open the report PDF" : "Open " + esc(j.jobNo || "job")}">
     <div class="rp-ph${thumb ? "" : " rp-nophoto"}"${tid && !thumb ? ` data-thumb="${tid}"` : ""}>${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('rp-nophoto');this.outerHTML=RP_LOGO">` : RP_LOGO}<span class="type-badge" title="${esc(tm.label)}">${esc(tm.code)}</span></div>
     <div class="rp-body">
       <div class="rp-no">${esc(j.jobNo || "No job number")}</div>
@@ -3681,7 +3771,7 @@ function renderInner(app){
     <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" ? " wrap-wide" : ""}">
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status: Upcoming, Today, Report due, Out for signing (with days left in the comment window) and Completed. <b>Click a tile</b> to open the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status: Upcoming, Today, Report due, Out for signing (with days left in the comment window) and Completed. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
@@ -4573,7 +4663,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#70)";
+const BUILD = "20 Oct 2026 (#71)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
