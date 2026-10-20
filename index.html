@@ -119,6 +119,7 @@
 
   /* compact dashboard (one screen) */
   .wrap-dash{ max-width:1560px; }
+  .wrap-wide{ max-width:none; }   /* Reports page (Lex, 20 Oct): use the whole screen for tiles */
   .wrap-dash .page-head{ padding-top:20px; }
   .d-tiles{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
   .d-tile{ text-align:left; background:var(--card); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; min-width:0; }
@@ -729,11 +730,13 @@
   .rp-grp label.rp-zero{ opacity:.45; }
   .rp-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; color:var(--ink-soft); font-size:14px; }
   .rp-head .filter-select{ min-width:150px; }
-  .rp-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:14px; }
+  .rp-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; }
   .rp-tile{ background:var(--card); border:1.5px solid var(--line); border-radius:10px; overflow:hidden; cursor:pointer; display:flex; flex-direction:column; }
   .rp-tile:hover, .rp-tile:focus-visible{ border-color:var(--peri); outline:none; }
   .rp-ph{ aspect-ratio:4/3; background:var(--paper-deep); display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; color:var(--stone); }
   .rp-ph img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .rp-ph.rp-nophoto{ background:#1F2D5A; }   /* no photo yet: the WPS logo on navy (Lex, 20 Oct) */
+  .rp-ph .rp-logo{ width:80%; height:auto; object-fit:contain; }
   .rp-ph .type-badge{ position:absolute; top:8px; left:8px; }
   .rp-body{ padding:10px 12px 12px; }
   .rp-no{ font-size:12px; color:var(--ink-soft); letter-spacing:.02em; }
@@ -3268,7 +3271,7 @@ const ICON_GRID = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 const RP_ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
 const RP_ICON_DOC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
 const RP_ICON_AGENT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>';
-const RP_DOOR = '<svg width="54" height="54" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 54V26a14 14 0 0 1 28 0v28"/><path d="M24 54V27a8 8 0 0 1 16 0v27"/><line x1="12" y1="54" x2="52" y2="54"/><circle cx="36" cy="42" r="1.6" fill="currentColor"/></svg>';
+const RP_LOGO = '<img class="rp-logo" src="sig/email/wps-logo-navy.png" alt="Wellington Property Services" loading="lazy">';
 const RP_STATUSES = [
   { code:"upcoming", label:"Upcoming",        dot:"background:transparent;border:2.5px solid var(--coral-dark)", fg:"var(--coral-dark)" },
   { code:"today",    label:"Today",           dot:"background:var(--rp-blue)",   fg:"var(--rp-blue-text)" },
@@ -3375,7 +3378,7 @@ function rpTile(j){
   }
   const photos = /^https?:\/\//.test(String(j.photoLink||"")) ? `<div class="rp-acts"><a href="${esc(j.photoLink)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Photos</a></div>` : "";
   return `<div class="rp-tile" role="button" tabindex="0" data-jid="${j.id}" onclick="rpOpen('${j.id}')" onkeydown="rpKey(event,'${j.id}')" title="Open ${esc(j.jobNo || "job")}">
-    <div class="rp-ph">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : RP_DOOR}<span class="type-badge" title="${esc(tm.label)}">${esc(tm.code)}</span></div>
+    <div class="rp-ph${thumb ? "" : " rp-nophoto"}">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('rp-nophoto');this.outerHTML=RP_LOGO">` : RP_LOGO}<span class="type-badge" title="${esc(tm.label)}">${esc(tm.code)}</span></div>
     <div class="rp-body">
       <div class="rp-no">${esc(j.jobNo || "No job number")}</div>
       <div class="rp-addr">${esc(addr)}</div>
@@ -3600,10 +3603,10 @@ function renderInner(app){
     <div class="shell">
     ${renderSidebar()}
     <main class="main">
-    <div class="wrap${state.view === "today" ? " wrap-dash" : ""}">
+    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" ? " wrap-wide" : ""}">
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status: Upcoming, Today, Report due, Out for signing (with days left in the comment window) and Completed. <b>Click a tile</b> to open the job. The front photo shows once the script saves one; until then a door picture stands in.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status: Upcoming, Today, Report due, Out for signing (with days left in the comment window) and Completed. <b>Click a tile</b> to open the job. The front photo shows once the script saves one; until then the WPS logo stands in.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
@@ -4486,7 +4489,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#67)";
+const BUILD = "20 Oct 2026 (#68)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
