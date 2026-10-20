@@ -1321,7 +1321,26 @@ function dueInfo(j){
   if (mins < 360) return { cls:"due-soon", late:false, text:"Report due in "+fmt(mins)+agoTxt, due:d, ago };
   return { cls:"due-ok", late:false, text:"Report due "+d.toLocaleString("en-GB",{weekday:"short",hour:"2-digit",minute:"2-digit"})+agoTxt, due:d, ago };
 }
+// Change history (Lex, 20 Oct, D8): a short dated line per change, newest first, kept on the job (last 40),
+// so there's a record of what changed and when if a report is ever disputed.
+function logChange(j, text){
+  if (!j || !text) return;
+  j.history = Array.isArray(j.history) ? j.history : [];
+  j.history.unshift({ at: new Date().toISOString(), dev: navigator.platform||"", what: String(text).slice(0, 300) });
+  if (j.history.length > 40) j.history.length = 40;
+}
+const HIST_FIELDS = [["date","Date"],["time","Time"],["address","Address"],["postcode","Postcode"],["client","Agent"],["type","Type"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no."],["photoLink","Photo link"],["keysFrom","Keys from"],["keysBack","Keys back to"],["notes","Notes"]];
+function jobDiff(a, b){
+  const st = a.status && b.status && a.status !== b.status ? ["Status: "+statusMeta(a.status).label+" → "+statusMeta(b.status).label] : [];
+  return st.concat(HIST_FIELDS.filter(([k]) => String(a[k]||"") !== String(b[k]||"")).map(([k,l]) => k === "notes" ? "Notes changed" : l+": "+(String(a[k]||"")||"–")+" → "+(String(b[k]||"")||"–"))).join("; ");
+}
+function renderHistory(f){
+  const h = Array.isArray(f.history) ? f.history : []; if (!h.length) return "";
+  return `<details class="field wide ph-box"><summary class="ph-h" style="cursor:pointer">Change history (${h.length})</summary>
+    ${h.map(x => `<div class="ph-row"><span class="ph-d">${esc(new Date(x.at).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</span><span>${esc(x.what)}</span></div>`).join("")}</details>`;
+}
 function setJobStatus(j, code){
+  if (j.status && j.status !== code) logChange(j, "Status: "+statusMeta(j.status).label+" → "+statusMeta(code).label);
   j.status = code;
   if (code==="processing" && !j.processingAt) j.processingAt = new Date().toISOString();
   if (code==="booked") delete j.processingAt;
@@ -1556,7 +1575,9 @@ function baseFilteredJobs(){
       const q = state.search.toLowerCase();
       return (j.address||"").toLowerCase().includes(q) || (j.town||"").toLowerCase().includes(q) ||
              (j.postcode||"").toLowerCase().includes(q) || (j.client||"").toLowerCase().includes(q) ||
-             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.tenantEmails||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q);
+             (j.jobNo||"").toLowerCase().includes(q) || (j.tenants||"").toLowerCase().includes(q) || (j.tenantEmails||"").toLowerCase().includes(q) || (j.invoiceNo||"").toLowerCase().includes(q) ||
+             // 20 Oct (D8): notes, keys notes and copy-to emails searched too
+             (j.notes||"").toLowerCase().includes(q) || (j.keysFromNote||"").toLowerCase().includes(q) || (j.keysBackNote||"").toLowerCase().includes(q) || (j.agentEmail||"").toLowerCase().includes(q);
     });
 }
 function filteredJobs(){
@@ -1769,6 +1790,7 @@ function submitForm(){
   const prev = idx>=0 ? state.jobs[idx] : {};
   if (job.invoice && job.invoice!==prev.invoice){ if (job.invoice==="invoiced" && !prev.invoicedAt) job.invoicedAt = new Date().toISOString(); if (job.invoice==="paid") job.paidAt = new Date().toISOString(); }
   const merged = Object.assign({}, prev, job);   // keeps photo link, calendar id, dates etc.
+  if (idx >= 0){ const dtxt = jobDiff(prev, merged); if (dtxt) logChange(merged, dtxt); } else logChange(merged, "Job created");
   if (idx>=0) state.jobs[idx] = merged; else state.jobs.push(merged);
   const saved = merged;
   setJobStatus(saved, saved.status);
@@ -1787,12 +1809,14 @@ function submitForm(){
 function deleteJob(id){
   const job = state.jobs.find(j=>j.id===id);
   if (!job) return false;
-  if (!confirm("Delete "+(job.jobNo||"this job")+(job.address ? " ("+job.address+")" : "")+"?\n\nIt's removed from the Job Log, the Google Sheet and the calendar. This can't be undone. Archive keeps it instead.")) return false;
+  if (!confirm("Delete "+(job.jobNo||"this job")+(job.address ? " ("+job.address+")" : "")+"?\n\nIt's removed from the Job Log, the Google Sheet and the calendar. Undo shows for a few seconds after. Archive keeps it instead.")) return false;
+  const copy = snapJob(job);
   deleteJobCalendarEvent(job);
   mergeJobNoHigh();   // remember its number so it's never reused
   state.jobs = state.jobs.filter(j=>j.id!==id);
   saveJobs();
   render();
+  setTimeout(() => showUndo((job.jobNo||"Job")+" deleted", { __deleted: copy }), 0);   // D8, 20 Oct: undo for delete
   return true;
 }
 
@@ -1825,6 +1849,11 @@ function showUndo(msg, before){
 function hideUndo(){ const bar = document.getElementById("undo-bar"); if (bar) bar.classList.remove("show"); document.body.classList.remove("undo-on"); undoSnap = null; }
 function doUndo(){
   if (!undoSnap) return hideUndo();
+  if (undoSnap.__deleted){   // put a deleted job back; its calendar event was removed, so it gets a new one
+    const back = undoSnap.__deleted; delete back.gcalEventId;
+    if (!state.jobs.some(x => x.id === back.id)){ logChange(back, "Restored after delete"); state.jobs.push(back); saveJobs(); try { syncJobToCalendar(back); } catch(e){} render(); }
+    return hideUndo();
+  }
   const j = state.jobs.find(x => x.id === undoSnap.id);
   if (j){ Object.keys(j).forEach(k => delete j[k]); Object.assign(j, undoSnap); saveJobs(); render(); }
   hideUndo();
@@ -2010,6 +2039,16 @@ function setStatusFilter(code){
 }
 
 // ---------------------------------------------------------------- export / import
+// CSV export (Lex, 20 Oct, D8): every job as a spreadsheet (opens in Excel or Google Sheets)
+function exportCsv(){
+  const cols = [["jobNo","Job no"],["type","Type"],["status","Status"],["date","Date"],["time","Time"],["address","Address"],["town","Town"],["postcode","Postcode"],["client","Agent"],["bedrooms","Bedrooms"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no"],["invoiceAmount","Invoice amount"],["sentAt","Sent"],["invoicedAt","Invoiced"],["paidAt","Paid"],["dayMiles","Day miles"],["photoLink","Photo link"],["notes","Notes"]];
+  const q = v => { const t = String(v==null ? "" : v); return /[",\n\r]/.test(t) || /^[=+\-@]/.test(t) ? '"'+t.replace(/^([=+\-@])/,"'$1").replace(/"/g,'""')+'"' : t; };
+  const rows = [cols.map(c => c[1]).join(",")].concat(state.jobs.slice().sort((a,b) => String(a.date||"").localeCompare(String(b.date||""))).map(j => cols.map(c => q(j[c[0]])).join(",")));
+  const blob = new Blob(["\ufeff"+rows.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = "WPS-Job-Log-" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 function exportData(){
   const payload = { exportedAt: new Date().toISOString(), jobs: state.jobs, clients: state.clients };
   const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
@@ -3332,6 +3371,9 @@ function renderToday(){
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
   dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
   photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
+  // D8 (20 Oct): two jobs with the same number (two devices numbering before a sync) are flagged, not fixed silently
+  { const seenNo = {}; live.forEach(j => { if (!j.jobNo) return; (seenNo[j.jobNo] = seenNo[j.jobNo] || []).push(j); });
+    Object.values(seenNo).filter(a => a.length > 1).forEach(a => dnAdd(20, "coral", "Two jobs share the number "+a[0].jobNo+": open one and give it a new number", a[1], `<button class="d-mv" onclick="openEdit('${a[1].id}')">Open</button>`)); }
   live.filter(j => j.invoice === "invoiced" && feeMismatch(j)).forEach(j => { const m = feeMismatch(j);
     dnAdd(85, "coral", "Invoice "+gbp(m.invoiced)+", price list "+gbp(m.expected), j, `<button class="d-mv" onclick="openEdit('${j.id}')"${tip("Open the job. Check the invoice in Tide or the price list.")}>Check</button>`); });
   active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
@@ -3532,6 +3574,10 @@ function renderUtilityRow(){
     <button class="btn-link" onclick="exportData()"${hint("Saves a copy of every job to this computer")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Export backup
+    </button>
+    <button class="btn-link" onclick="exportCsv()"${hint("Every job as a spreadsheet file (Excel or Google Sheets)")}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      Export spreadsheet (CSV)
     </button>
     <label class="btn-link" style="cursor:pointer;"${hint("Replaces this browser's jobs with a backup file. Careful.")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -4756,6 +4802,7 @@ function renderForm(){
       </label>
       ${renderPhotoLinkField(f)}
       ${renderPropertyHistory(f)}
+      ${renderHistory(f)}
     </div>
 
     <div class="form-actions">
