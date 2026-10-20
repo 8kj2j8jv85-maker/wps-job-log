@@ -154,6 +154,13 @@
   #undo-bar button{ border:0; border-radius:6px; background:var(--coral); color:#fff; font:inherit; font-weight:600; padding:6px 12px; cursor:pointer; }
   #undo-bar button.undo-x{ background:transparent; padding:6px 4px; font-weight:400; opacity:.8; }
   @media (max-width:600px){ #undo-bar{ width:calc(100vw - 32px); box-sizing:border-box; justify-content:space-between; bottom:12px; } #undo-bar span{ flex:1; } }
+  .pr-top{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-bottom:10px; font-size:13px; }
+  .pr-top select{ margin-left:6px; padding:5px 8px; }
+  .pr-wrap{ overflow-x:auto; }
+  .pr-tab{ border-collapse:collapse; font-size:13px; }
+  .pr-tab th, .pr-tab td{ padding:4px 5px; text-align:left; white-space:nowrap; }
+  .pr-tab thead th{ font-weight:600; color:var(--ink-soft); font-size:12px; }
+  .pr-in{ width:64px; padding:6px 7px; font-variant-numeric:tabular-nums; }
   .d-info{ display:flex; flex-direction:column; gap:2px; margin:-2px 0 6px; padding-left:74px; font-size:12.5px; color:var(--ink); line-height:1.4; }
   .d-tel{ color:var(--coral-dark); font-weight:600; text-decoration:none; white-space:nowrap; }
   @media (max-width:600px){ .d-info{ padding-left:0; font-size:13px; } }
@@ -896,7 +903,8 @@ function normalizeClients(arr){
   if (!Array.isArray(arr)) return null;
   const out = arr.map(x => typeof x === "string"
     ? { name:x, contactName:"", contactPhone:"", contactEmail:"" }
-    : { name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" }
+    : Object.assign({ name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" },
+        x.prices && typeof x.prices === "object" ? { prices: x.prices } : {})
   ).filter(c=>c.name);
   return out.length ? out : null;
 }
@@ -2537,7 +2545,8 @@ function renderInvoiceCard(it){
     ? `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing changes.")}>Clear</button>`
     : `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
   return `<div class="qcard">
-    <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}<span>${esc(it.client)||"Client not clear"}</span></div>
+    <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}${(() => { const jj = state.jobs.find(x => x.jobNo && x.jobNo === it.jobNo), e = jj ? expectedFee(jj) : null, a = moneyAmount(it.amount);
+      return e == null ? "" : `<span${a != null && Math.abs(a-e) > 0.005 ? ' style="color:var(--coral);font-weight:600"' : ""}>Price list ${gbp(e)}${a != null && Math.abs(a-e) > 0.005 ? " (doesn't match)" : ""}</span>`; })()}<span>${esc(it.client)||"Client not clear"}</span></div>
     ${jobLine}
     ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
     ${warn}
@@ -3129,13 +3138,52 @@ function dnTray(){
 // Money by client (Lex, 18 Oct; idea from Jobber's past-due invoices and client balances): who owes what and
 // for how long. Amounts only where the Tide email gave one (kept on the job from 18 Oct); older jobs show a count.
 function moneyAmount(t){ const m = String(t||"").replace(/,/g,"").match(/(\d+(?:\.\d{1,2})?)/); return m ? parseFloat(m[1]) : null; }
+// Price list (Lex, 20 Oct, D3): per client, a fee for each job type by bedrooms, plus an amount per extra area.
+// Kept on the client (Clients tab of the Job Log Sheet). Used for expected fees, the To invoice total and to flag a
+// Tide invoice that doesn't match.
+const PRICE_TYPES = ["ICI","CO","MTI","SOC","CLN"];
+const PRICE_BEDS = ["1","2","3","4","5","6"];
+function expectedFee(j){
+  const c = clientByName(j.client||""); const p = c && c.prices && c.prices[j.type]; if (!p) return null;
+  const bed = String(j.bedrooms||"").trim() || "1";
+  const base = moneyAmount(p[bed]); if (base == null) return null;
+  const ex = moneyAmount(p.extra), n = parseInt(j.extraAreas,10);
+  return base + (ex && n > 0 ? ex*n : 0);
+}
+function feeMismatch(j){
+  const a = moneyAmount(j.invoiceAmount), e = expectedFee(j);
+  return a != null && e != null && Math.abs(a - e) > 0.005 ? { invoiced:a, expected:e } : null;
+}
+function gbp(n){ return "£"+(Math.round(n*100)/100).toFixed(n % 1 ? 2 : 0); }
+function openPrices(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "prices"; state.menuOpen = false; navSetView("today"); render(); }
+function setPrice(client, type, key, val){
+  const c = clientByName(client); if (!c) return;
+  c.prices = c.prices || {}; c.prices[type] = c.prices[type] || {};
+  const v = String(val||"").replace(/[£,\s]/g,"");
+  if (v === "") delete c.prices[type][key]; else if (!isNaN(parseFloat(v))) c.prices[type][key] = String(parseFloat(v)); else { render(); return; }
+  if (!Object.keys(c.prices[type]).length) delete c.prices[type];
+  saveClients(); render();
+}
+function renderPricePanel(){
+  const names = state.clients.map(c => c.name).filter(n => n && n !== "Lex test");
+  if (!names.length) return `<div class="t-empty">Add an agent on a job first.</div>`;
+  const sel = state.priceClient && names.includes(state.priceClient) ? state.priceClient : (names.find(n => /winkworth/i.test(n)) || names[0]);
+  const c = clientByName(sel), pr = (c && c.prices) || {};
+  const cell = (t,k) => `<td><input class="pr-in" inputmode="decimal" aria-label="${esc(t)} ${k==="extra"?"each extra area":k+" bed"}" value="${esc((pr[t]||{})[k]||"")}" onchange="setPrice(${esc(JSON.stringify(sel))},'${t}','${k}',this.value)" placeholder="—" /></td>`;
+  return `<div class="pr-top"><label>Agent <select onchange="state.priceClient=this.value;render()">${names.map(n=>`<option${n===sel?" selected":""}>${esc(n)}</option>`).join("")}</select></label>
+      <span class="c-dim">Fees in £ by bedrooms. Leave a box blank if you don't charge it that way. Saved straight away, and to Google on the next save.</span></div>
+    <div class="pr-wrap"><table class="pr-tab"><thead><tr><th>Type</th>${PRICE_BEDS.map(b=>`<th>${b} bed</th>`).join("")}<th>Each extra area</th></tr></thead>
+      <tbody>${PRICE_TYPES.map(t=>`<tr><th>${esc(typeMeta(t).label||t)}</th>${PRICE_BEDS.map(b=>cell(t,b)).join("")}${cell(t,"extra")}</tr>`).join("")}</tbody></table></div>
+    <div class="c-dim" style="margin-top:8px">A job with no bedrooms set uses the 1 bed price. Expected fee shows on the job form and in To invoice; a Tide invoice that doesn't match shows in Do next.</div>`;
+}
 function moneyByClient(list, dateOf){
   const now = Date.now(), g = {};
   list.forEach(j => {
     const k = j.client || "No client";
     const x = g[k] || (g[k] = { client:k, n:0, total:0, unknown:0, oldest:0 });
     x.n++;
-    const a = moneyAmount(j.invoiceAmount); if (a == null) x.unknown++; else x.total += a;
+    let a = moneyAmount(j.invoiceAmount); if (a == null){ a = expectedFee(j); if (a != null) x.fromList = (x.fromList||0) + 1; }
+    if (a == null) x.unknown++; else x.total += a;
     const d = dateOf(j); if (d){ const days = Math.floor((now - new Date(d).getTime())/86400000); if (days > x.oldest) x.oldest = days; }
   });
   return Object.values(g).sort((a,b) => b.oldest - a.oldest || b.n - a.n);
@@ -3146,7 +3194,7 @@ function moneySummary(list, dateOf, noun, sinceWord){
   return `<div class="ow-sum">${rows.map(r => `<div class="ow-row${r.oldest > 30 ? " ow-old" : ""}">
       <span class="ow-c">${esc(r.client)}</span>
       <span>${r.n} ${noun}${r.n===1?"":"s"}</span>
-      <span>${r.total ? "£"+r.total.toFixed(2)+(r.unknown ? " + "+r.unknown+" not known" : "") : (noun==="invoice" ? "amount not known" : "")}</span>
+      <span>${r.total ? "£"+r.total.toFixed(2)+(r.fromList ? (r.fromList===r.n ? " (price list)" : " ("+r.fromList+" from price list)") : "")+(r.unknown ? " + "+r.unknown+" not known" : "") : (noun==="invoice" ? "amount not known" : (r.unknown ? "no price list" : ""))}</span>
       <span class="ow-d">${r.oldest ? "oldest "+sinceWord+" "+r.oldest+" day"+(r.oldest===1?"":"s")+" ago" : ""}</span>
     </div>`).join("")}</div>`;
 }
@@ -3244,6 +3292,8 @@ function renderToday(){
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
   dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
   photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
+  live.filter(j => j.invoice === "invoiced" && feeMismatch(j)).forEach(j => { const m = feeMismatch(j);
+    dnAdd(85, "coral", "Invoice "+gbp(m.invoiced)+", price list "+gbp(m.expected), j, `<button class="d-mv" onclick="openEdit('${j.id}')"${tip("Open the job. Check the invoice in Tide or the price list.")}>Check</button>`); });
   active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
     `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
@@ -3300,6 +3350,7 @@ function renderToday(){
     case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
     case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: (j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
     case "health": title = "System health"; body = renderHealthPanel(); break;
+    case "prices": title = "Price list"; body = renderPricePanel(); break;
     case "turn": title = "Performance";
       body = renderPerformance(live, now) + note("On time = report sent within the target from the visit: check-outs 48h, everything else 72h. Completed = check-ins once signed or deemed agreed, everything else once sent. Last month is compared up to the same day. On time only counts jobs visited from 11 Oct, when the Job Log went live, so the September changeover backlog stays out. Completed counts every job."); break;
   }
@@ -3431,6 +3482,10 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
+    <button class="btn-link" onclick="openPrices()"${hint("Your fees per agent, job type and bedrooms")}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+      Price list
+    </button>
     ${state.gcalConnected || keyMode() ? "" : CAL_BTN()}
     <details class="side-moretools"${state.moreTools ? " open" : ""} ontoggle="state.moreTools=this.open">
       <summary class="btn-link"${tip("Backups and the calendar connection. Rarely needed: the Google Sheet is the main copy.")}>More ▸</summary>
@@ -4493,6 +4548,7 @@ function renderForm(){
       </label>
       <label class="field">Invoice number
         <input type="text" id="f_invoiceNo" value="${esc(f.invoiceNo||"")}" placeholder="From Tide (optional)" />
+        ${(() => { const e = expectedFee(f), m = feeMismatch(f); return e != null ? `<span class="field-hint"${m ? ' style="color:var(--coral)"' : ""}>Price list: ${gbp(e)}${f.invoiceAmount ? " · invoiced "+esc(f.invoiceAmount) : ""}${m ? " (doesn't match)" : ""}</span>` : (f.client ? `<span class="field-hint">No price on the price list for this.</span>` : ""); })()}
       </label>
 
       <label class="field">Agent / client
