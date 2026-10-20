@@ -3228,7 +3228,9 @@ const PRICE_BEDS = ["1","2","3","4","5","6"];
 function expectedFee(j){
   const c = clientByName(j.client||""); const p = c && c.prices && c.prices[j.type]; if (!p) return null;
   const bed = String(j.bedrooms||"").trim() || "1";
-  const base = moneyAmount(p[bed]); if (base == null) return null;
+  // 20 Oct (Lex): houses cost more. House prices are kept as h1..h6; a house with no house price uses the flat price.
+  const house = j.propertyType === "House" && moneyAmount(p["h"+bed]) != null;
+  const base = moneyAmount(house ? p["h"+bed] : p[bed]); if (base == null) return null;
   const ex = moneyAmount(p.extra), n = parseInt(j.extraAreas,10);
   return base + (ex && n > 0 ? ex*n : 0);
 }
@@ -3251,12 +3253,14 @@ function renderPricePanel(){
   if (!names.length) return `<div class="t-empty">Add an agent on a job first.</div>`;
   const sel = state.priceClient && names.includes(state.priceClient) ? state.priceClient : (names.find(n => /winkworth/i.test(n)) || names[0]);
   const c = clientByName(sel), pr = (c && c.prices) || {};
-  const cell = (t,k) => `<td><input class="pr-in" inputmode="decimal" aria-label="${esc(t)} ${k==="extra"?"each extra area":k+" bed"}" value="${esc((pr[t]||{})[k]||"")}" onchange="setPrice(${esc(JSON.stringify(sel))},'${t}','${k}',this.value)" placeholder="—" /></td>`;
+  const H = state.priceHouse ? "h" : "";
+  const cell = (t,k) => `<td><input class="pr-in" inputmode="decimal" aria-label="${esc(t)} ${k==="extra"?"each extra area":k+" bed"}" value="${esc((pr[t]||{})[k]||"")}" onchange="setPrice(${esc(JSON.stringify(sel))},'${t}','${k}',this.value)" placeholder="${k[0]==="h" && (pr[t]||{})[k.slice(1)] ? esc((pr[t]||{})[k.slice(1)]) : "—"}" /></td>`;
   return `<div class="pr-top"><label>Agent <select onchange="state.priceClient=this.value;render()">${names.map(n=>`<option${n===sel?" selected":""}>${esc(n)}</option>`).join("")}</select></label>
+      <span class="view-toggle"><button class="${H ? "" : "active"}" onclick="state.priceHouse=false;render()">Flats</button><button class="${H ? "active" : ""}" onclick="state.priceHouse=true;render()">Houses</button></span>
       <span class="c-dim">Fees in £ by bedrooms. Leave a box blank if you don't charge it that way. Saved straight away, and to Google on the next save.</span></div>
     <div class="pr-wrap"><table class="pr-tab"><thead><tr><th>Type</th>${PRICE_BEDS.map(b=>`<th>${b} bed</th>`).join("")}<th>Each extra area</th></tr></thead>
-      <tbody>${PRICE_TYPES.map(t=>`<tr><th>${esc(typeMeta(t).label||t)}</th>${PRICE_BEDS.map(b=>cell(t,b)).join("")}${cell(t,"extra")}</tr>`).join("")}</tbody></table></div>
-    <div class="c-dim" style="margin-top:8px">A job with no bedrooms set uses the 1 bed price. Expected fee shows on the job form and in To invoice; a Tide invoice that doesn't match shows in Do next.</div>`;
+      <tbody>${PRICE_TYPES.map(t=>`<tr><th>${esc(typeMeta(t).label||t)}</th>${PRICE_BEDS.map(b=>cell(t,H+b)).join("")}${cell(t,"extra")}</tr>`).join("")}</tbody></table></div>
+    <div class="c-dim" style="margin-top:8px">${H ? "House prices are used when the job's Property type is House. A blank house box falls back to the flat price. Each extra area is the same for flats and houses." : "Flat prices are used for flats and for jobs with no property type."} A job with no bedrooms set uses the 1 bed price. Expected fee shows on the job form and in To invoice; a Tide invoice that doesn't match shows in Do next.</div>`;
 }
 function moneyByClient(list, dateOf){
   const now = Date.now(), g = {};
