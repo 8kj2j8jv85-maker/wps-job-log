@@ -3385,7 +3385,7 @@ function rpSearchHit(j, q){
 // ("Dilshan" / "DIlshan", "McQueens" / "McQueens London Real Estate"). Names that are the same apart from capitals,
 // spaces and punctuation, or where one firm name just carries on from another, show as one client. The name used on
 // WPS jobs wins. Names that are only similar (e.g. Jacquie / Jacqueline) are NOT merged unless listed here by Lex.
-const RP_CLIENT_SAME = {};   // { "other name": "name to show" }, only names Lex has said are the same
+const RP_CLIENT_SAME = { "Jacqueline Mathieson": "Jacquie Mathieson" };   // { "other name": "name to show" }, only names Lex has said are the same (Jacquie: Lex 21 Oct)
 function rpClientKey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
 let rpCanonCache = { sig:"", map:{} };
 function rpCanonMap(){
@@ -4767,7 +4767,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#74)";
+const BUILD = "21 Oct 2026 (#75)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
