@@ -3381,11 +3381,36 @@ function rpSearchHit(j, q){
   if (!q) return true;
   return [j.jobNo, j.address, j.town, j.postcode, j.client, j.tenants, j.notes].some(v => String(v||"").toLowerCase().indexOf(q) >= 0);
 }
+// Client names on the Reports page (Lex, 21 Oct): the Dropbox folder names and the Job Log names don't always match
+// ("Dilshan" / "DIlshan", "McQueens" / "McQueens London Real Estate"). Names that are the same apart from capitals,
+// spaces and punctuation, or where one firm name just carries on from another, show as one client. The name used on
+// WPS jobs wins. Names that are only similar (e.g. Jacquie / Jacqueline) are NOT merged unless listed here by Lex.
+const RP_CLIENT_SAME = {};   // { "other name": "name to show" }, only names Lex has said are the same
+function rpClientKey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+let rpCanonCache = { sig:"", map:{} };
+function rpCanonMap(){
+  const jobs = rpAll(), sig = jobs.length + "|" + ((state.archive || []).length) + "|" + ((state.jobs || []).length);
+  if (rpCanonCache.sig === sig) return rpCanonCache.map;
+  const wpsNames = new Set((state.jobs || []).map(j => j.client || "").filter(Boolean));
+  const names = Array.from(new Set(jobs.map(j => j.client || "").filter(Boolean)));
+  names.sort((a, b) => (wpsNames.has(b) - wpsNames.has(a)) || rpClientKey(a).length - rpClientKey(b).length || a.localeCompare(b));
+  const canon = [], map = {};
+  names.forEach(n => {
+    const alias = RP_CLIENT_SAME[n];
+    if (alias){ map[n] = alias; return; }
+    const k = rpClientKey(n);
+    const hit = k && canon.find(c => { const ck = rpClientKey(c); return ck === k || (ck.length >= 5 && k.indexOf(ck) === 0); });
+    if (hit) map[n] = hit; else { canon.push(n); map[n] = n; }
+  });
+  rpCanonCache = { sig, map };
+  return map;
+}
+function rpClientOf(j){ const n = j.client || ""; return n ? (rpCanonMap()[n] || n) : ""; }
 function rpMatch(j, skip){
   const f = rpF(), q = String(state.rpSearch||"").trim().toLowerCase();
   if (!rpSearchHit(j, q)) return false;
   if (skip !== "type"   && f.type.length   && !f.type.includes(j.type || "")) return false;
-  if (skip !== "client" && f.client.length && !f.client.includes(j.client || "")) return false;
+  if (skip !== "client" && f.client.length && !f.client.includes(rpClientOf(j))) return false;
   if (skip !== "status" && f.status.length && !f.status.includes(rpStatus(j))) return false;
   if (skip !== "date"   && f.date.length   && !f.date.some(c => rpDateMatch(j, c))) return false;
   if (skip !== "src"    && f.src.length    && !f.src.includes(rpSrc(j))) return false;
@@ -3504,8 +3529,8 @@ function renderRpGroups(){
   const srcs = (state.archive && state.archive.length) ? RP_SOURCES.map(o => ({ code:o.code, label:o.label, n:count("src", j => rpSrc(j) === o.code) })) : [];
   const yrs = Array.from(new Set(jobs.map(j => (j.date || "").slice(0, 4) || "none"))).sort().reverse();
   const years = yrs.length > 1 ? yrs.map(y => ({ code:y, label:y === "none" ? "No date" : y, n:count("year", j => ((j.date || "").slice(0, 4) || "none") === y) })) : [];
-  const names = Array.from(new Set(jobs.map(j => j.client || "").filter(Boolean))).sort((a, b) => a.localeCompare(b));
-  const clients = names.map(c => ({ code:c, label:c, n:count("client", j => (j.client||"") === c) }));
+  const names = Array.from(new Set(jobs.map(rpClientOf).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const clients = names.map(c => ({ code:c, label:c, n:count("client", j => rpClientOf(j) === c) }));
   const sts = RP_STATUSES.map(s => ({ code:s.code, label:s.label, dot:s.dot, n:count("status", j => rpStatus(j) === s.code) }));
   const dates = RP_DATES.map(d => ({ code:d.code, label:d.label, n:count("date", j => rpDateMatch(j, d.code)) }));
   return (srcs.length ? rpGroupHtml("Reports", "src", srcs) : "") + rpGroupHtml("Report type", "type", types) + rpGroupHtml("Client", "client", clients) + rpGroupHtml("Status", "status", sts) + rpGroupHtml("Job date", "date", dates) + (years.length ? rpGroupHtml("Year", "year", years) : "");
@@ -4742,7 +4767,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#73)";
+const BUILD = "21 Oct 2026 (#74)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
