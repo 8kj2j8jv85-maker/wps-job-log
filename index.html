@@ -1641,6 +1641,7 @@ function captureFormValues(){
   setIf('extraAreas','f_extraAreas');
   if (f.tenantRows) f.tenantRows = f.tenantRows.map((t,i) => ({ name: grab('t_name_'+i) ?? t.name, phone: grab('t_phone_'+i) ?? t.phone, email: grab('t_email_'+i) ?? t.email }));
   setIf('notes','f_notes');
+  setIf('keysFrom','f_keysFrom'); setIf('keysFromNote','f_keysFromNote'); setIf('keysBack','f_keysBack'); setIf('keysBackNote','f_keysBackNote');
   setIf('photoLink','f_photoLink');
   setIf('invoice','f_invoice');
   setIf('invoiceNo','f_invoiceNo');
@@ -1694,6 +1695,11 @@ function saveAgentContact(){
   render();
 }
 
+// Keys back defaults to where they came from (Lex can change it)
+function keysFromChange(el){
+  const b = document.getElementById("f_keysBack"); if (!b || b.value) return;
+  if (el.value === "tenant") b.value = "none"; else if (KEYS_BACK.some(k => k[0] === el.value)) b.value = el.value;
+}
 function submitForm(){
   const g = id => document.getElementById(id);
   const date = g("f_date").value;
@@ -1717,6 +1723,8 @@ function submitForm(){
     tenantList: [], tenants: "", tenantEmails: "", tenantPhones: "",
     agentEmail: cleanEmails((state.editing.copyTo||[]).join(", ")),
     notes: g("f_notes").value,
+    keysFrom: g("f_keysFrom").value, keysFromNote: g("f_keysFromNote").value.trim(),
+    keysBack: g("f_keysBack").value, keysBackNote: g("f_keysBackNote").value.trim(),
     invoice: g("f_invoice").value,
     invoiceNo: g("f_invoiceNo").value.trim(),
   };
@@ -2077,6 +2085,7 @@ function gcalEventBody(j){
   if (j.tenants) descParts.push("Tenant/contact: "+j.tenants);
   if (j.tenantEmails) descParts.push("Tenant emails: "+j.tenantEmails);
   if (j.agentEmail) descParts.push("Copy to: "+j.agentEmail);
+  if (keysLine(j)) descParts.push("Keys: "+keysLine(j));
   if (j.notes) descParts.push("Notes: "+j.notes);
   return { summary: gcalEventSummary(j), location: fullAddress(j), description: descParts.join("\n"), start, end };
 }
@@ -3077,8 +3086,32 @@ const PHONE_RE = /(?:\+44\s?|\b0)\d(?:[\s-]?\d){8,10}\b/g;
 function linkPhones(t){
   return esc(t).replace(PHONE_RE, m => `<a href="tel:${m.replace(/[\s-]/g,"")}" class="d-tel">${m}</a>`);
 }
+// Keys (Lex, 20 Oct, D1): where the keys come from and where they go back, per job. Collected keys that
+// haven't been marked returned after the visit show in Do next.
+const KEYS_FROM = [["","—"],["tenant","Tenant lets me in"],["office","Agent office"],["concierge","Concierge"],["lockbox","Key safe / lockbox"],["landlord","Landlord"],["other","Other (see note)"]];
+const KEYS_BACK = [["","—"],["none","Nothing to return"],["office","Agent office"],["concierge","Concierge"],["lockbox","Key safe / lockbox"],["property","Leave in the property"],["landlord","Landlord"],["tenant","Hand to tenant"],["other","Other (see note)"]];
+function keysLabel(list, v){ const r = list.find(x => x[0] === v); return r && v ? r[1] : ""; }
+function keysLine(j){
+  const from = keysLabel(KEYS_FROM, j.keysFrom), back = keysLabel(KEYS_BACK, j.keysBack);
+  if (!from && !back) return "";
+  const a = from ? (j.keysFrom === "tenant" ? from : "collect from "+from.toLowerCase()) + (j.keysFromNote ? " ("+j.keysFromNote+")" : "") : "";
+  const b = back && j.keysBack !== "none" ? "back to "+back.toLowerCase() + (j.keysBackNote ? " ("+j.keysBackNote+")" : "") : "";
+  return [a, b].filter(Boolean).join(" · ") + (j.keysReturnedAt ? " · returned "+shortDay(new Date(j.keysReturnedAt)) : "");
+}
+function keysOut(j, now){
+  if (!j.keysFrom || j.keysFrom === "tenant" || !j.keysBack || ["none","property","tenant"].includes(j.keysBack) || j.keysReturnedAt) return false;
+  if (j.status === "archived") return false;
+  const v = visitTime(j); return !!v && v <= (now || new Date());
+}
+function keysReturned(id){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  const before = snapJob(j); j.keysReturnedAt = new Date().toISOString();
+  saveJobs(); render(); showUndo(`${j.jobNo || "Job"} keys marked returned`, before);
+}
 function todayInfo(j){
   const bits = [];
+  const kl = keysLine(j);
+  if (kl) bits.push(`<span><span class="c-dim">Keys:</span> ${esc(kl)}</span>`);
   if (j.tenants) bits.push(`<span><span class="c-dim">Tenant:</span> ${linkPhones(j.tenants)}</span>`);
   if (j.notes) bits.push(`<span><span class="c-dim">Notes:</span> ${linkPhones(String(j.notes).replace(/\s+/g," ").slice(0,160))}${String(j.notes).length>160 ? "…" : ""}</span>`);
   return bits.length ? `<div class="d-info">${bits.join("")}</div>` : "";
@@ -3209,6 +3242,8 @@ function renderToday(){
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
   dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
   photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
+  active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
+    `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
@@ -3878,7 +3913,7 @@ function planListHtml(iso, home, order, legs, deps, real, missing, reordered, gm
     if (s){ const j = s.j;
       rows += `<div class="pl-stop"><span class="pl-n" style="background:${MAP_TYPE_COL[j.type]||"#555"}">${i+1}</span>
           <span class="pl-t">${esc(j.time || "No time")}</span>
-          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>`; }
+          <button class="c-job" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}"><b>${esc(j.jobNo||"")}</b> · ${esc(typeMeta(j.type).code)} · ${esc([j.address, j.postcode].filter(Boolean).join(", "))}</button></div>${keysLine(j) ? `<div class="pl-leg">🔑 ${esc(keysLine(j))}</div>` : ""}`; }
   });
   return `<div class="pl-home">🏠 ${esc(home.label)}</div>${rows}${order.length ? `<div class="pl-home">🏠 ${esc(home.label)}</div>` : ""}
     <div class="pl-tot">${real ? "" : "About "}<b>${totMi.toFixed(0)} miles</b> and <b>${fmtMins(totMin)}</b> driving${real ? " (Google road times, with expected traffic where it applies)" : ""}${order.length ? ` · mileage for the day: ${real ? "" : "about "}${totMi.toFixed(1)} mi` : ""}</div>
@@ -4528,6 +4563,19 @@ function renderForm(){
       <label class="field wide">Notes
         <textarea id="f_notes" placeholder="Access details, anything else worth flagging">${esc(f.notes)}</textarea>
       </label>
+      <label class="field">Keys from
+        <select id="f_keysFrom" onchange="keysFromChange(this)">${KEYS_FROM.map(k=>`<option value="${k[0]}" ${(f.keysFrom||"")===k[0]?"selected":""}>${esc(k[1])}</option>`).join("")}</select>
+      </label>
+      <label class="field">Where / who
+        <input type="text" id="f_keysFromNote" value="${esc(f.keysFromNote||"")}" placeholder="e.g. Winkworth, 429 Roman Road" />
+      </label>
+      <label class="field">Keys back to
+        <select id="f_keysBack">${KEYS_BACK.map(k=>`<option value="${k[0]}" ${(f.keysBack||"")===k[0]?"selected":""}>${esc(k[1])}</option>`).join("")}</select>
+        ${f.keysReturnedAt ? `<span class="field-hint">Returned ${esc(shortDay(new Date(f.keysReturnedAt)))}.</span>` : ""}
+      </label>
+      <label class="field">Where / who
+        <input type="text" id="f_keysBackNote" value="${esc(f.keysBackNote||"")}" placeholder="Leave blank if the same place" />
+      </label>
       ${renderPhotoLinkField(f)}
     </div>
 
@@ -4884,7 +4932,7 @@ let navReturn = { y: null, id: null };   // where the page was when the form ope
 
 const NAV_FIELDS = { jobNo:"f_jobNo", type:"f_type", status:"f_status", date:"f_date", time:"f_time", propertyType:"f_propertyType",
   address:"f_address", town:"f_town", postcode:"f_postcode", bedrooms:"f_bedrooms", extraAreas:"f_extraAreas",
-  notes:"f_notes", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
+  notes:"f_notes", keysFrom:"f_keysFrom", keysFromNote:"f_keysFromNote", keysBack:"f_keysBack", keysBackNote:"f_keysBackNote", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
 function formSnapshot(){
   const f = state.editing; if (!f) return null;
   const val = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
