@@ -137,6 +137,10 @@
   .c-job{ flex:1; min-width:0; text-align:left; background:none; border:none; padding:0; font:inherit; color:var(--peri); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .c-job b{ font-weight:600; }
   .c-dim{ color:var(--ink-soft); font-weight:400; }
+  .d-panel-top{ margin:0 0 14px; border:2px solid var(--brand, #1F2D5A); }
+  .d-panel-top h3{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .d-x{ font:inherit; font-size:12.5px; font-weight:600; background:none; border:1px solid var(--line); border-radius:8px; padding:4px 10px; color:var(--ink-soft); cursor:pointer; }
+  .d-x:hover{ color:var(--ink); border-color:var(--ink-soft); }
   .d-panel .t-row{ padding:6px 0; font-size:13.5px; }
   .d-more{ font-size:12.5px; margin-top:6px; margin-right:16px; }
   .d-note{ font-size:12px; color:var(--stone); margin-top:6px; }
@@ -3209,10 +3213,17 @@ function todayInfo(j){
   if (j.notes) bits.push(`<span><span class="c-dim">Notes:</span> ${linkPhones(String(j.notes).replace(/\s+/g," ").slice(0,160))}${String(j.notes).length>160 ? "…" : ""}</span>`);
   return bits.length ? `<div class="d-info">${bits.join("")}</div>` : "";
 }
-function setDashPanel(k){ state.dashPanel = k; state.dashAll = false; render(); }
+function setDashPanel(k){ state.dashPanel = k || null; state.dashAll = false; render(); if (k) focusDashPanel(); }
+function toggleDashPanel(k){ setDashPanel(state.dashPanel === k ? null : k); }
+// Bring the open list into view without jumping when it's already on screen (phone mostly)
+function focusDashPanel(){
+  requestAnimationFrame(() => { const el = document.getElementById("dashPanel"); if (!el || !el.getBoundingClientRect) return;
+    const r = el.getBoundingClientRect(), vh = window.innerHeight || 800;
+    if (r.top < 0 || r.top > vh * 0.55) window.scrollTo({ top: Math.max(0, window.scrollY + r.top - 70), behavior: "smooth" }); });
+}
 function toggleDashAll(){ state.dashAll = !state.dashAll; render(); }
 // Do next buttons (18 Oct): Rearrange opens in the Reports due list (one Rearrange box on the page at a time)
-function dnRearrange(id){ state.dashPanel = "due"; state.dashAll = true; state.rearrangeId = null; openRearrange(id); }
+function dnRearrange(id){ state.dashPanel = "due"; state.dashAll = true; state.rearrangeId = null; openRearrange(id); focusDashPanel(); }
 function dnTray(){
   if (!document.querySelector(".tray")){ state.queueChecked = true; render(); }   // tray was hidden: show it again
   const t = document.querySelector(".tray"); if (t && t.scrollIntoView) t.scrollIntoView({block:"start", behavior:"smooth"});
@@ -3239,7 +3250,7 @@ function feeMismatch(j){
   return a != null && e != null && Math.abs(a - e) > 0.005 ? { invoiced:a, expected:e } : null;
 }
 function gbp(n){ return "£"+(Math.round(n*100)/100).toFixed(n % 1 ? 2 : 0); }
-function openPrices(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "prices"; state.menuOpen = false; navSetView("today"); render(); }
+function openPrices(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "prices"; state.menuOpen = false; navSetView("today"); render(); focusDashPanel(); }
 function setPrice(client, type, key, val){
   const c = clientByName(client); if (!c) return;
   c.prices = c.prices || {}; c.prices[type] = c.prices[type] || {};
@@ -3337,7 +3348,8 @@ function renderToday(){
   const countOf = k => { const t = tiles.find(x => x[0]===k); return typeof t[2]==="number" ? t[2] : 0; };
   // Default panel: the most urgent thing with something in it
   let panel = state.dashPanel;
-  if (!panel) panel = (overdue || unconfirmed.length) ? "due" : midPicked.length ? "mid" : remindersDue ? "win" : amN ? "amend" : ["due","times","photos","win","sig","inv"].find(k => countOf(k)) || "due";
+  // 20 Oct (Lex): the list opens right under the tiles when a tile is pressed, and stays closed until then
+  // (it used to sit at the bottom of the page, out of sight). Do next already shows what's urgent.
   const toneCol = { late:"var(--red)", warn:"var(--amber)", coral:"var(--coral-dark)" };
   const TILE_TIPS = {
     due:"Visited jobs whose report hasn't been sent yet, soonest due first. Jobs still at Booked after their visit time are listed separately to confirm", book:"Bookings Claude found in Gmail, waiting for you to check",
@@ -3351,7 +3363,7 @@ function renderToday(){
   const groupHead = GROUPS.map(([g, lbl, n]) => `<div class="d-ghead d-g-${g}" style="grid-column:span ${n}">${lbl}</div>`).join("");
   // Tiles as a compact strip (Lex, 18 Oct): number beside the label, so the strip is one short row on a PC and
   // a sideways-scrolling row on the phone. The full sub line is in the hover text, so nothing is cut off.
-  const tileHtml = groupHead + tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile d-g-${TILE_GROUP[k]}${panel===k?' on':''}${n===0 && panel!==k ? ' zero' : ''}${["sig","inv","turn"].includes(k) ? ' d-gstart' : ''}" onclick="setDashPanel('${k}')"${tip(TILE_TIPS[k]+(sub ? " ("+sub+")" : "")+". Click to see the list below.")}>
+  const tileHtml = groupHead + tiles.map(([k, lbl, n, sub, tone]) => `<button class="d-tile d-g-${TILE_GROUP[k]}${panel===k?' on':''}${n===0 && panel!==k ? ' zero' : ''}${["sig","inv","turn"].includes(k) ? ' d-gstart' : ''}" onclick="toggleDashPanel('${k}')" aria-expanded="${panel===k}"${tip(TILE_TIPS[k]+(sub ? " ("+sub+")" : "")+". Click to open the list just below; click again to close it.")}>
       <span class="d-num" style="color:${k==='turn' ? tc(wkStats) : (toneCol[tone] || (n && n!=='–' ? 'var(--brand-text)' : 'var(--stone)'))}">${n}</span>
       <span class="d-txt"><span class="d-lbl">${lbl}</span>${sub ? `<span class="d-sub"${tone==='late'?' style="color:var(--red)"':''}>${esc(sub)}</span>` : ""}</span>
     </button>`).join("");
@@ -3364,7 +3376,7 @@ function renderToday(){
     if (j && j.parkedAt){ if (!dnParked.includes(j)) dnParked.push(j); return; }
     dn.push({ rank, tone, what, j, acts: acts || "", i: dn.length });
   };
-  const dnRr = j => `<button class="d-mv" onclick="dnRearrange('${j.id}')"${tip("Visit didn't happen. Opens Rearrange in the Reports due list below.")}>Rearrange</button>`;
+  const dnRr = j => `<button class="d-mv" onclick="dnRearrange('${j.id}')"${tip("Visit didn't happen. Opens Rearrange in the Reports due list under the tiles.")}>Rearrange</button>`;
   const dueSoon = due.filter(x => !x.d.late && x.d.due - now < 24*3600000);
   const remindDue = windows.filter(x => x.st==="open" && needsManualReminder(x.j, now));
   const hs = healthSummary();
@@ -3457,7 +3469,11 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`Start each day with <b>Check everything now</b> (top right). Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to see its full list in the panel at the bottom. <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`Start each day with <b>Check everything now</b> (top right). Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
+    ${panel ? `<div class="t-card d-card d-panel d-panel-top" id="dashPanel">
+      <h3>${esc(title)} <button class="d-x" onclick="setDashPanel(null)"${tip("Close this list")}>✕ Close</button></h3>
+      ${body}
+    </div>` : ""}
     <div class="d-row">
       ${dnHtml}
       <div class="t-card d-card">
@@ -3470,11 +3486,7 @@ function renderToday(){
       <h3>${state.weekMode === "map" ? "Map" : "Next 7 days"} <span class="count"><span class="view-toggle wm-toggle"><button class="${state.weekMode!=='map'?'active':''}" onclick="setWeekMode('days')"${tip("Day by day")}>Days</button><button class="${state.weekMode==='map'?'active':''}" onclick="setWeekMode('map')"${tip("Upcoming jobs on a map, to see which visits are near each other")}>Map</button></span>${state.weekMode === "map" ? "" : coming.length+" job"+(coming.length===1?"":"s")}${timesToAgree.some(j => !j.date) ? ` · <button class="t-link wk-nodate" onclick="setDashPanel('times')"${tip("Booked jobs with no date yet. Click to see them.")}>${timesToAgree.filter(j => !j.date).length} with no date</button>` : ""}</span></h3>
       ${state.weekMode === "map" ? renderWeekMapBox() : `<div class="wk-strip">${week}</div>${freeLine}`}
     </div>
-    ${renderPlanCard()}
-    <div class="t-card d-card d-panel">
-      <h3>${esc(title)}</h3>
-      ${body}
-    </div>${renderMilestone()}`;
+    ${renderPlanCard()}${renderMilestone()}`;
 }
 
 function renderSideLinks(){
@@ -4208,7 +4220,7 @@ function renderHealthSide(){
   const label = bad ? "System health: "+bad+" problem"+(bad===1?"":"s") : warn ? "System health: "+warn+" to look at" : "System health ✓";
   return `<button class="hc-side" style="color:${bad ? "var(--coral)" : warn ? "var(--amber)" : "var(--sky)"}" onclick="openHealth()"${tip("Checked every hour by the WPS script: timers, reports waiting or held, failed emails, signed copies, mid-term picks, news, Job Log saves, email allowance, storage, web pages. Click for the list.")}>${esc(label)}</button>`;
 }
-function openHealth(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "health"; state.menuOpen = false; navSetView("today"); render(); }
+function openHealth(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "health"; state.menuOpen = false; navSetView("today"); render(); focusDashPanel(); }
 function renderHealthPanel(){
   const h = state.health;
   if (!h) return `<div class="t-empty">Not loaded yet. Click <b>Check everything now</b> (top right).</div>`;
