@@ -346,6 +346,12 @@
   .qk-cancel{ background:var(--stone-bg); color:var(--stone); }
   .qk-invoice{ background:#E6F2EA; color:var(--green); }
   .qk-watch{ background:#FFF1D6; color:#8A5A00; }
+  .ci-q .btn{ margin:4px 6px 0 0; }
+  .ci-line{ margin-top:8px; font-weight:400; }
+  .ci-set{ margin-top:10px; padding-top:8px; border-top:1px solid var(--line); font-size:13.5px; }
+  .ci-t{ font-weight:600; margin-bottom:6px; }
+  .ci-opt{ display:block; margin:5px 0; }
+  .ci-wait{ font-size:12.5px; }
   .qaddr{ margin-top:6px; font-size:14.5px; }
   .qmeta{ margin-top:3px; font-size:13.5px; color:var(--ink-soft); }
   .qline{ margin-top:5px; font-size:13px; }
@@ -945,7 +951,9 @@ function normalizeClients(arr){
   const out = arr.map(x => typeof x === "string"
     ? { name:x, contactName:"", contactPhone:"", contactEmail:"" }
     : Object.assign({ name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" },
-        x.prices && typeof x.prices === "object" ? { prices: x.prices } : {})
+        x.prices && typeof x.prices === "object" ? { prices: x.prices } : {},
+        x.checkinWay === "ask" || x.checkinWay === "agent" ? { checkinWay: x.checkinWay } : {},
+        x.checkinLead !== undefined && x.checkinLead !== "" && !isNaN(Number(x.checkinLead)) ? { checkinLead: Number(x.checkinLead) } : {})
   ).filter(c=>c.name);
   return out.length ? out : null;
 }
@@ -1936,6 +1944,163 @@ function markVisited(id){
   showUndo(`${j.jobNo || "Job"} marked visited (Processing)`, before);
 }
 
+// ---------------------------------------------------------------- check-in arrangement per agent (20 Oct, Lex)
+// Each agent says how its check-ins get their time:
+//   "ask"   the tenants say what time they'll arrive; Lex books himself in a set time before (default 1 hr 15)
+//           to park and photograph. The tenant email copies the agent in so nobody repeats themselves.
+//   "agent" the agent gives the date and Lex goes any time that day (Winkworth).
+//   ""      not set yet: the booking card asks once, then it's saved on the agent.
+// Nothing is sent from here: emails open in Gmail for Lex to check and send.
+const CHECKIN_WAYS = {
+  ask:   "Tenants choose the time. You email them, the agent is copied in",
+  agent: "The agent gives the date. You go any time that day",
+};
+const CHECKIN_LEAD_DEFAULT = 75;
+function findClientLoose(name){
+  const low = String(name||"").toLowerCase().replace(/[^a-z]/g,""); if (!low) return null;
+  return state.clients.find(c=>c.name.toLowerCase().replace(/[^a-z]/g,"")===low)
+      || state.clients.find(c=>{ const k=c.name.toLowerCase().replace(/[^a-z]/g,""); return k && (k.includes(low)||low.includes(k)); }) || null;
+}
+function checkinWay(clientName){
+  const c = findClientLoose(clientName);
+  if (c && (c.checkinWay === "ask" || c.checkinWay === "agent")) return c.checkinWay;
+  const n = String((c && c.name) || clientName || "");
+  if (/mcqueens|move\s*lettings|jags/i.test(n)) return "ask";    // starting values from how Lex works (20 Oct); change per agent
+  if (/^winkworth/i.test(n)) return "agent";
+  return "";
+}
+function checkinLead(clientName){
+  const c = findClientLoose(clientName), n = c ? Number(c.checkinLead) : NaN;
+  return c && c.checkinLead !== "" && c.checkinLead != null && n >= 0 && n <= 240 ? Math.round(n) : CHECKIN_LEAD_DEFAULT;
+}
+function leadText(mins){ const h = Math.floor(mins/60), m = mins%60; return (h ? h+" hr"+(m ? " " : "") : "")+(m ? m+" min" : "") || "0 min"; }
+function setCheckinWay(clientName, way, lead){
+  if (!clientName || !(way === "ask" || way === "agent")) return;
+  let c = findClientLoose(clientName);
+  if (!c){ c = { name: clientName, contactName:"", contactPhone:"", contactEmail:"" }; state.clients.push(c); }
+  c.checkinWay = way;
+  if (lead != null && lead !== "" && Number(lead) >= 0 && Number(lead) <= 240) c.checkinLead = Math.round(Number(lead));
+  saveClients();
+}
+function needsTenantTime(j){ return !!j && j.type === "ICI" && j.status === "booked" && !!j.date && !j.time && checkinWay(j.client) === "ask"; }
+function ciAgentEmail(j){ const c = findClientLoose(j.client); return cleanEmails(j.agentEmail) || (c ? cleanEmails(c.contactEmail) : ""); }
+function ciAgentWho(j){
+  const first = s => String(s||"").trim().split(/\s+/)[0] || "";
+  const ag = ciAgentEmail(j).split(", ")[0], ct = ag ? contactByEmail(ag) : null, c = findClientLoose(j.client);
+  const person = first(ct && ct.name) || first(c && c.contactName);
+  const firm = String(j.client||"").replace(/\s*-\s*.*$/, "");
+  return person && firm ? person+" at "+firm : (firm || "your letting agent");
+}
+function ciEmailUrl(j, su, body){
+  const cc = ciAgentEmail(j);
+  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
+    + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
+    + (cc ? "&cc="+encodeURIComponent(cc) : "")
+    + "&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
+}
+function ciAskEmailUrl(j){
+  const addr = fullAddress(j) || "[full address]", day = rrLongDay(j.date) || "[date]";
+  return ciEmailUrl(j, "Check-in - "+addr+" - "+day,
+    "Dear "+rrTenantNames(j)+",\n\nI'm the inventory clerk for your check-in at\n\n"+addr+"\n\non "+day+", arranged by "+ciAgentWho(j)+(ciAgentEmail(j) ? " (copied in)" : "")+".\n\n"
+    + "What time would you like to arrive at the property that day? I'll meet you there, go through the check-in with you and hand over the keys.\n\n"
+    + "You can also reply on WhatsApp: https://wa.me/447541345053\n\nKind regards,");
+}
+function ciConfirmEmailUrl(j){
+  const addr = fullAddress(j) || "[full address]";
+  return ciEmailUrl(j, "Check-in - "+addr+" - confirmed",
+    "Dear "+rrTenantNames(j)+",\n\nThank you. Your check-in at\n\n"+addr+"\n\nis confirmed for "+rrLongDay(j.date)+" at "+(j.tenantArrival||j.time)+". I'll meet you at the property then.\n\n"
+    + "If anything changes, reply to this email or call or WhatsApp 07541 345053.\n\nKind regards,");
+}
+function minusMins(hhmm, mins){
+  const m = /^(\d\d):(\d\d)$/.exec(hhmm||""); if (!m) return "";
+  const t = Math.max(0, Number(m[1])*60 + Number(m[2]) - mins);
+  return pad2(Math.floor(t/60))+":"+pad2(t%60);
+}
+function ciAddNote(j, line){ j.notes = j.notes ? line+"\n"+j.notes : line; }
+// Opens the "what time will you arrive?" email and records that it was opened. w = a tab already opened in the click.
+function askTenantsTime(id, w){
+  const j = state.jobs.find(x=>x.id===id); if (!j){ if (w) w.close(); return; }
+  if (!j.tenantEmails && !confirm("No tenant email on "+(j.jobNo||"this job")+". Open the email anyway (To will be blank)?")){ if (w) w.close(); return; }
+  const url = ciAskEmailUrl(j);
+  if (w) try { w.opener = null; } catch(e){}
+  if (w && !w.closed) w.location.href = url; else window.open(url, "_blank", "noopener");
+  j.tenantsAskedAt = new Date().toISOString();
+  ciAddNote(j, "Asked tenants for their arrival time "+ciDay(new Date())+(ciAgentEmail(j) ? " (agent copied in)." : "."));
+  saveJobs(); render();
+  showActionBar("Email to the tenants opened in Gmail. Check it and press Send. When they reply, press Set arrival time.");
+}
+function ciAskBtn(j){
+  const again = !!j.tenantsAskedAt;
+  return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}', window.open('', '_blank'))"${tip(again ? "Opens the same email again in Gmail, to chase the tenants." : "Opens an email in Gmail asking the tenants what time they'll arrive. The agent is copied in. You check it and press Send.")}>${again ? "Email again" : "Email tenants"}</button>`;
+}
+function ciArrivalBtn(j, where){ return `<button class="d-mv" onclick="openArrival('${j.id}','${where||"dn"}')"${tip("The tenants have told you their arrival time. Puts your visit time on the job and the calendar.")}>Set arrival time</button>`; }
+function ciDay(d){ return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
+function ciRowText(j){ return j.tenantsAskedAt ? "Waiting for tenants' time (asked "+ciDay(new Date(j.tenantsAskedAt))+")" : "Ask tenants what time they'll arrive"; }
+function openArrival(id, where){ const same = state.arrivalId === id && state.arrivalWhere === where; state.arrivalId = same ? null : id; state.arrivalWhere = where || "dn"; render(); const b = document.getElementById("arr_box"); if (b && b.scrollIntoView) b.scrollIntoView({block:"nearest"}); }
+function closeArrival(){ state.arrivalId = null; render(); }
+function arrivalPreview(id){
+  const j = state.jobs.find(x=>x.id===id), el = document.getElementById("arr_you"), t = document.getElementById("arr_time");
+  if (!j || !el || !t) return;
+  const lead = checkinLead(j.client), you = minusMins(t.value, lead);
+  el.textContent = you ? "You'll be booked in at "+you+" ("+leadText(lead)+" before, to park and take the photos)." : "";
+}
+function arrivalBox(j, where){
+  if (state.arrivalId !== j.id || (state.arrivalWhere || "dn") !== (where || "dn")) return "";
+  return `<div class="rr-box" id="arr_box">
+    <div class="rr-t">${esc(j.jobNo||"")}: tenants' arrival time</div>
+    <div class="rr-f"><label>Tenants arrive at<input type="time" id="arr_time" oninput="arrivalPreview('${j.id}')"></label></div>
+    <div id="arr_you" class="c-dim" style="margin-top:4px"></div>
+    <label class="rr-chk"><input type="checkbox" id="arr_email" checked> Open a confirmation email to the tenants in Gmail${ciAgentEmail(j) ? " (agent copied in)" : ""}</label>
+    <div class="rr-b"><button class="btn btn-coral btn-sm" onclick="saveArrival('${j.id}')">Save</button><button class="btn btn-ghost btn-sm" onclick="closeArrival()">Cancel</button></div>
+  </div>`;
+}
+function saveArrival(id){
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  const t = (document.getElementById("arr_time")||{}).value || "", wantEmail = !!(document.getElementById("arr_email")||{}).checked;
+  if (!/^\d\d:\d\d$/.test(t)){ alert("Put in the time the tenants will arrive."); return; }
+  const w = wantEmail ? window.open("", "_blank") : null;
+  if (w) try { w.opener = null; } catch(e){}
+  const before = snapJob(j), lead = checkinLead(j.client);
+  j.tenantArrival = t;
+  j.time = minusMins(t, lead);
+  ciAddNote(j, "Tenants arriving "+t+" (agreed "+ciDay(new Date())+"). Booked in at "+j.time+" to park and take the photos first.");
+  state.arrivalId = null;
+  saveJobs(); render();
+  if (state.gcalConnected) syncJobToCalendar(j);
+  if (w){ if (!w.closed) w.location.href = ciConfirmEmailUrl(j); }
+  showUndo((j.jobNo||"Job")+": tenants "+t+", you "+j.time+(wantEmail ? ". Confirmation email opened in Gmail" : ""), before);
+}
+// Setting on the agent (job form, and the booking card when it isn't set yet)
+function ciSettingLine(clientName){
+  const way = checkinWay(clientName), lead = checkinLead(clientName);
+  return way === "ask" ? CHECKIN_WAYS.ask+". You're booked in "+leadText(lead)+" before they arrive."
+       : way === "agent" ? CHECKIN_WAYS.agent+"."
+       : "Not set yet.";
+}
+function renderCheckinSetting(clientName){
+  if (!clientName) return "";
+  if (state.ciEditing === clientName){
+    const way = checkinWay(clientName), lead = checkinLead(clientName);
+    return `<div class="ci-set">
+      <div class="ci-t">How does ${esc(clientName)} arrange check-ins?</div>
+      <label class="ci-opt"><input type="radio" name="ci_way" value="ask"${way==="ask"?" checked":""}> ${esc(CHECKIN_WAYS.ask)}</label>
+      <label class="ci-opt" style="margin-left:22px">Book me in <input type="number" id="ci_lead" min="0" max="240" step="5" value="${lead}" style="width:64px"> minutes before the tenants arrive</label>
+      <label class="ci-opt"><input type="radio" name="ci_way" value="agent"${way==="agent"?" checked":""}> ${esc(CHECKIN_WAYS.agent)}</label>
+      <div class="agent-contact-actions"><button class="btn btn-coral btn-sm" onclick="saveCheckinSetting()">Save</button><button class="btn btn-ghost btn-sm" onclick="state.ciEditing=null;render()">Cancel</button></div>
+    </div>`;
+  }
+  return `<div class="agent-contact-line ci-line"><span class="c-dim">Check-ins:</span> ${esc(ciSettingLine(clientName))} <button class="btn-text" onclick="editCheckinSetting()">Change</button></div>`;
+}
+function editCheckinSetting(){ if (typeof captureFormValues === "function" && state.editing) captureFormValues(); state.ciEditing = state.editing && state.editing.client; render(); }
+function saveCheckinSetting(){
+  const name = state.ciEditing; if (!name) return;
+  const r = document.querySelector('input[name="ci_way"]:checked'); if (!r){ alert("Pick one of the two options."); return; }
+  const lead = (document.getElementById("ci_lead")||{}).value;
+  if (state.editing) captureFormValues();
+  setCheckinWay(name, r.value, lead);
+  state.ciEditing = null; render();
+}
+
 // ---------------------------------------------------------------- rearrange a missed visit (13 Oct)
 // Reports due rows (Booked past their date, or Processing) get a Rearrange button for visits that didn't
 // happen. New date known: job back to Booked on the new date, calendar event moved, confirmation email.
@@ -2480,7 +2645,7 @@ function mergeQueueDone(fromSheet){
 function queueItem(id){ return state.queue.find(i=>i.id===id); }
 // Security 17 Oct (review item 6): queue items come from a Gmail draft, so treat them as untrusted.
 // Buttons carry the id in data attributes (never inside onclick code) and only these actions can run.
-const Q_ACTIONS = { qAdd:1, qEdit:1, qApplyUpdate:1, qApplyCancel:1, qReject:1, qMarkInvoiced:1 };
+const Q_ACTIONS = { qAdd:1, qAddAsk:1, qEdit:1, qApplyUpdate:1, qApplyCancel:1, qReject:1, qMarkInvoiced:1, qWayAsk:1, qWayAgent:1 };
 function qGo(btn){
   const fn = btn && btn.getAttribute("data-qa"), id = btn && btn.getAttribute("data-qid");
   if (!Q_ACTIONS[fn] || typeof window[fn] !== "function" || !queueItem(id)) return;
@@ -2596,6 +2761,18 @@ function qAdd(id){
   render();
   syncJobToCalendar(job);
 }
+// 20 Oct: one click for "tenants choose the time" agents: adds the job, then opens the tenant email in Gmail.
+function qAddAsk(id){
+  const it = queueItem(id); if (!it || it.kind !== "new" && findMatch(it)) return;
+  const w = window.open("", "_blank");
+  const n = state.jobs.length;
+  qAdd(id);
+  const job = state.jobs.length > n ? state.jobs[state.jobs.length-1] : null;
+  if (!job){ if (w) w.close(); return; }
+  askTenantsTime(job.id, w);
+}
+function qWayAsk(id){ const it = queueItem(id); if (it){ setCheckinWay(resolveClientName(it.client), "ask"); render(); } }
+function qWayAgent(id){ const it = queueItem(id); if (it){ setCheckinWay(resolveClientName(it.client), "agent"); render(); } }
 function qEdit(id){
   const it = queueItem(id); if (!it || it.kind==="invoice" || it.kind==="sent" || it.kind==="watch") return;
   if (!confirmLeaveForm()) return;
@@ -2830,7 +3007,18 @@ function renderQueueTray(){
     if (it.kind!=="new" && !match) warn = `<div class="qwarn">Couldn't find this job in your log — use "Edit & add" if it should be logged.</div>`;
     if (dup) warn = `<div class="qwarn">Possible duplicate of <span class="mono">${esc(dup.jobNo)}</span> (${formatDate(dup.date)}).</div>`;
     let actions = "";
-    if (it.kind==="new" || !match){
+    const ciWay = (it.kind==="new" || !match) && it.type === "ICI" && it.client ? checkinWay(it.client) : null;
+    const ciName = ciWay !== null ? ((findClientLoose(it.client)||{}).name || it.client) : "";
+    if (ciWay === "ask" && it.date && !it.time){
+      warn += `<div class="qline ci-q">${esc(ciName)} check-ins: the tenants choose the time.</div>`;
+      actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qAddAsk" data-qid="${esc(it.id)}"${hint("Adds the job, then opens an email in Gmail asking the tenants what time they'll arrive (agent copied in). You check it and press Send.")}>Add to log + email tenants</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qAdd" data-qid="${esc(it.id)}"${hint("Adds the job only. You can email the tenants later from Do next.")}>Add to log only</button>
+                 <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qEdit" data-qid="${esc(it.id)}"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
+    } else if (it.kind==="new" || !match){
+      if (ciWay === "") warn += `<div class="qline ci-q">How does ${esc(ciName)} arrange check-ins? Choose once and it's remembered:
+        <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qWayAsk" data-qid="${esc(it.id)}"${hint("You email the tenants to ask their arrival time, with the agent copied in, and get there early to take the photos")}>Tenants choose the time</button>
+        <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qWayAgent" data-qid="${esc(it.id)}"${hint("The agent gives the date and you go any time that day")}>Agent gives the date</button></div>`;
+      else if (ciWay === "agent") warn += `<div class="qline ci-q">${esc(ciName)} check-ins: the agent gives the date, you go any time that day.</div>`;
       actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qAdd" data-qid="${esc(it.id)}"${hint("Adds it as a new job straight away")}>Add to log</button>
                  <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qEdit" data-qid="${esc(it.id)}"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
     } else if (it.kind==="update"){
@@ -3300,7 +3488,8 @@ function windowRow(x, now){
 }
 // 20 Oct (Lex): Winkworth check-outs normally have no tenants present, so Lex does them any time on the booked
 // (end-of-tenancy) date, or the next day if keys come back late. A dated one needs no agreed time.
-function anyTimeOK(j){ return j.type === "CO" && !!j.date && /^winkworth/i.test(String(j.client||"").trim()); }
+function anyTimeOK(j){ return (j.type === "CO" && !!j.date && /^winkworth/i.test(String(j.client||"").trim()))
+  || (j.type === "ICI" && !!j.date && checkinWay(j.client) === "agent"); }   // 20 Oct: agents set to "agent gives the date"
 function rrBtn(j){ return `<button class="d-mv" onclick="openRearrange('${j.id}')"${tip("Visit didn't happen. Set a new date, or send it to Times to agree, and open an email to the tenant.")}>Rearrange</button>`; }
 function cRow(j, opts){
   opts = opts || {};
@@ -3553,6 +3742,7 @@ function renderToday(){
   active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
     `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
+    if (needsTenantTime(j)){ dnAdd(75, j.tenantsAskedAt ? "" : "warn", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   if (toInvoice.length) dnAdd(90, "coral", toInvoice.length+" report"+(toInvoice.length===1?"":"s")+" sent, not invoiced", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
@@ -3565,7 +3755,7 @@ function renderToday(){
       <h3>Do next <span class="count">${dn.length ? dn.length+" thing"+(dn.length===1?"":"s") : ""}</span></h3>
       ${dn.length ? (state.dnAll ? dn : dn.slice(0, DN_MAX)).map(x => `<div class="dn-row dn-${x.tone || "plain"}">
           <span class="dn-what">${esc(x.what)}</span>${x.j ? dnJob(x.j) : `<span class="dn-gap"></span>`}${(x.acts || x.j) ? `<span class="d-acts">${x.acts}${x.j ? `<button class="d-mv dn-park" onclick="parkJob('${x.j.id}', true)"${tip("Take this job off Do next until you un-park it. It still shows in the tiles and lists.")}>Park</button>` : ""}</span>` : ""}
-        </div>`).join("")
+        </div>${x.j ? arrivalBox(x.j, "dn") : ""}`).join("")
         + (dn.length > DN_MAX ? `<button class="t-link d-more" onclick="state.dnAll=!state.dnAll;render()">${state.dnAll ? "Show fewer" : "Show all "+dn.length}</button>` : "")
         : `<div class="t-empty">Nothing urgent. All caught up.</div>`}
       ${dnParked.length ? `<div class="dn-parked"><span class="c-dim">Parked (${dnParked.length}):</span>${dnParked.map(j => `<span class="dn-pk"><button class="t-link" onclick="openEdit('${j.id}')" data-jid="${j.id}" title="${esc(fullAddress(j))}">${esc(j.jobNo||"")}</button><button class="d-mv" onclick="parkJob('${j.id}', false)"${tip("Put this job back on Do next")}>Un-park</button></span>`).join("")}</div>` : ""}
@@ -3594,7 +3784,9 @@ function renderToday(){
       + (sentNoDate ? note(sentNoDate+" check-in report"+(sentNoDate===1?"":"s")+" marked Sent before dates were recorded, so not shown.") : ""); break;
     case "amend": title = "Amendments"; body = renderAmendCard(true); break;
     case "times": { title = "Times to agree";
-      const ttRow = j => cRow(j, {noTime:true, extra: j.rearrangePending ? `<span class="rr-tag"${tip("Rearranged after a missed visit. Waiting on the tenant for a new date. Open the job to set it.")}>Rearranged</span>` : ""});
+      const ttRow = j => needsTenantTime(j)
+        ? cRow(j, {noTime:true, extra: `<span class="c-dim ci-wait">${esc(ciRowText(j))}</span><span class="d-acts">${ciArrivalBtn(j, "tt")}${ciAskBtn(j)}</span>`}) + arrivalBox(j, "tt")
+        : cRow(j, {noTime:true, extra: j.rearrangePending ? `<span class="rr-tag"${tip("Rearranged after a missed visit. Waiting on the tenant for a new date. Open the job to set it.")}>Rearranged</span>` : ""});
       const noDate = timesToAgree.filter(j => !j.date), dated = timesToAgree.filter(j => j.date);
       // 18 Oct (Lex): booked jobs with no date at all shown on their own (Jobber keeps an "unscheduled" bucket)
       body = timesToAgree.length ? (noDate.length ? `<div class="d-sect">Booked, no date yet (${noDate.length})</div>` + rows(noDate, ttRow, "") : "")
@@ -4723,6 +4915,7 @@ function renderAgentContactPanel(f){
         </div>
       ` : `<div class="agent-contact-line" style="color:var(--ink-soft); font-weight:400;">No contact details saved for ${esc(f.client)} yet.</div>`}
       <button class="btn-text" onclick="toggleAgentContactEdit(true)">${hasContact ? "Edit" : "Add"} agent contact details</button>
+      ${renderCheckinSetting(c.name)}
     </div>
   </div>`;
 }
