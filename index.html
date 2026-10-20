@@ -211,6 +211,9 @@
   .rr-box input[type=date], .rr-box input[type=time]{ font:inherit; padding:5px 7px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); }
   .rr-box .rr-chk{ flex-direction:row; align-items:center; gap:6px; color:var(--ink); font-size:13px; margin:4px 0 8px; }
   .rr-box .rr-b{ display:flex; gap:8px; flex-wrap:wrap; }
+  .rr-box .rr-note{ margin:8px 0 4px; }
+  .rr-box .rr-note textarea{ font:inherit; font-size:13px; width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); resize:vertical; }
+  .rr-box .ci-plain{ color:var(--red); font-size:12px; margin:4px 0; }
   .rr-warn{ color:var(--red); font-size:12px; margin-top:4px; }
   .rr-tag{ white-space:nowrap; font-size:11.5px; color:var(--coral-dark); background:var(--coral-bg); border-radius:5px; padding:2px 7px; }
   .d-ghead{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); padding:0 2px 2px; border-bottom:2px solid var(--line); margin-bottom:-2px; }
@@ -2008,16 +2011,25 @@ function ciAskEmailUrl(j){
     + "What time would you like to arrive at the property that day? Our clerk will meet you there, go through the check-in with you and hand over the keys. Just reply to this email with a time.\n\n"
     + "Kind regards,");
 }
+// Extra line for the tenants (Lex, 20 Oct): typed in Set arrival time, saved on the job with the email it belongs to
+// (ciNoteFor = "kind|date|time"), so it only ever goes in that one email. The WPS script (CheckinSend) puts the same
+// line into the navy email. No links and no WhatsApp (replies must come by email).
+const CI_NOTE_MAX = 300;
+function ciNoteClean(s){ return String(s||"").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, CI_NOTE_MAX); }
+function ciNoteBad(s){ return /whatsapp|wa\.me|https?:|www\./i.test(s); }
+function ciNoteFor(j, kind){ return j && j.ciNote && j.ciNoteFor === kind+"|"+j.date+"|"+j.tenantArrival ? j.ciNote : ""; }
 function ciConfirmEmailUrl(j){
   const addr = fullAddress(j) || "[full address]";
   return ciEmailUrl(j, "Check-in - "+addr+" - confirmed",
     "Dear "+rrTenantNames(j)+",\n\nThank you. Your check-in at\n\n"+addr+"\n\nis confirmed for "+rrLongDay(j.date)+" at "+(j.tenantArrival||j.time)+". Our clerk will meet you at the property then.\n\n"
+    + (ciNoteFor(j,"confirm") ? ciNoteFor(j,"confirm")+"\n\n" : "")
     + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,");
 }
 function ciProposeEmailUrl(j){
   const addr = fullAddress(j) || "[full address]", day = rrLongDay(j.date);
   return ciEmailUrl(j, "Check-in - "+addr+" - "+day+" at "+j.tenantArrival+"?",
     "Dear "+rrTenantNames(j)+",\n\nThank you for letting us know. "+j.tenantAsked+" doesn't quite work for us on "+day+". Could we make it "+j.tenantArrival+" instead?\n\n"
+    + (ciNoteFor(j,"propose") ? ciNoteFor(j,"propose")+"\n\n" : "")
     + "Please reply to confirm, or suggest another time.\n\nKind regards,");
 }
 // "Send emails for me" (20 Oct, Lex): per device. Off = emails open in Gmail for Lex to send. On = the WPS script
@@ -2149,6 +2161,8 @@ function arrivalBox(j, where){
     <div class="rr-f"><label>Tenants asked for<input type="time" id="arr_asked" value="${esc(j.tenantAsked||"")}" oninput="arrivalPreview('${j.id}','asked')"></label><label>Confirm them for<input type="time" id="arr_time" value="${esc(j.tenantArrival||"")}"${j.tenantArrival ? ' data-touched="1"' : ""} oninput="arrivalPreview('${j.id}','time')"></label></div>
     <div class="c-dim" style="font-size:12px">Change "Confirm them for" if their time doesn't work for you.</div>
     <div id="arr_you" class="c-dim" style="margin-top:4px"></div>
+    <label class="rr-note">Extra line for the tenants (optional)<textarea id="arr_note" rows="2" maxlength="${CI_NOTE_MAX}" placeholder="e.g. If your flight is delayed, just reply to this email and we'll adjust the time."></textarea></label>
+    ${ciAuto() ? "" : `<div class="ci-plain">${esc("Send emails for me is OFF: this email opens in Gmail as plain text, without the WPS look. Turn it on to send the designed email.")}</div>`}
     <label class="rr-chk"><input type="checkbox" id="arr_email" checked> <span id="arr_email_lbl">${ciAuto() ? "Send a confirmation email to the tenants now" : "Open a confirmation email to the tenants in Gmail"}${ciAgentEmail(j) ? " (agent copied in)" : ""}</span></label>
     <div class="rr-b"><button class="btn btn-coral btn-sm" onclick="saveArrival('${j.id}')">Save</button><button class="btn btn-ghost btn-sm" onclick="closeArrival()">Cancel</button></div>
   </div>`;
@@ -2159,12 +2173,15 @@ function saveArrival(id){
   const wantEmail = !!(document.getElementById("arr_email")||{}).checked, auto = ciAuto();
   if (!/^\d\d:\d\d$/.test(t)){ alert("Put in the time the tenants asked for."); return; }
   const kind = asked && asked !== t ? "propose" : "confirm";
+  const note = ciNoteClean((document.getElementById("arr_note")||{}).value);
+  if (note && ciNoteBad(note)){ alert("The extra line can't have links, web addresses or WhatsApp in it (replies need to come by email)."); return; }
   const w = wantEmail && !auto ? window.open("", "_blank") : null;
   if (w) try { w.opener = null; } catch(e){}
   const before = snapJob(j), lead = checkinLead(j.client);
   j.tenantAsked = asked || t;
   j.tenantArrival = t;
   j.time = minusMins(t, lead);
+  if (note && wantEmail){ j.ciNote = note; j.ciNoteFor = kind+"|"+j.date+"|"+t; } else { delete j.ciNote; delete j.ciNoteFor; }
   if (kind === "propose"){ j.tenantTimeProposed = true;
     ciAddNote(j, "Tenants asked for "+asked+"; suggested "+t+" instead ("+ciDay(new Date())+"). Waiting for them to agree. Booked in at "+j.time+" for now."); }
   else { delete j.tenantTimeProposed;
