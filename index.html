@@ -584,7 +584,7 @@
     .wk-isfree{ display:none; }
     .wk-freeline{ display:flex; }
     .dn-row{ flex-wrap:wrap; row-gap:3px; }
-    .dn-what{ min-width:0; }
+    .dn-what{ min-width:0; white-space:normal; }
     .dn-row .c-job{ flex:1 1 100%; order:3; white-space:normal; }
   }
   @media (max-width:900px) and (min-width:601px){ .d-tiles{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
@@ -2098,7 +2098,9 @@ function ciAskBtn(j){
 }
 function ciArrivalBtn(j, where){ return `<button class="d-mv" onclick="openArrival('${j.id}','${where||"dn"}')"${tip("The tenants have told you their arrival time. Puts your visit time on the job and the calendar.")}>Set arrival time</button>`; }
 function ciDay(d){ return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
-function ciRowText(j){ const a = ciAskedAt(j); return a ? "Waiting for tenants' time (asked "+ciDay(new Date(a))+")" : "Ask tenants what time they'll arrive"; }
+function ciRowText(j){
+  const rp = ciReplyAt(j); if (rp){ const d = new Date(rp); return "Tenants replied "+ciDay(d)+" "+pad2(d.getHours())+":"+pad2(d.getMinutes()); }
+  const a = ciAskedAt(j); return a ? "Waiting for tenants' time (asked "+ciDay(new Date(a))+")" : "Ask tenants what time they'll arrive"; }
 // Tenant emails log (Lex, 20 Oct): the script's "Check-in emails" tab is the record of what went to tenants.
 // The dashboard reads it on every check, so a send shows here even if this browser lost its own note.
 function ciLogRows(jobNo){ const rows = (state.ciLog && state.ciLog.rows) || []; const k = normJobNo(jobNo||""); return k ? rows.filter(r => normJobNo(r.job) === k) : []; }
@@ -2109,16 +2111,21 @@ function ciAskedAt(j){
 }
 // Lex (20 Oct): a refused send is only a problem if that job never got that email. A second click on an email
 // that already went (refused as a repeat) is shown grey as "not sent again", never as a problem.
-function ciLogDup(r){ return r.status !== "Sent" && ciLogRows(r.job).some(x => x.status === "Sent" && x.kind === r.kind); }
-const CI_LOG_WORDS = { ask:"Asked for their time", confirm:"Time confirmed", propose:"New time suggested" };
+function ciLogDup(r){ return r.status !== "Sent" && r.kind !== "reply" && ciLogRows(r.job).some(x => x.status === "Sent" && x.kind === r.kind); }
+const CI_LOG_WORDS = { ask:"Asked for their time", confirm:"Time confirmed", propose:"New time suggested", reply:"Tenant replied" };
+// 20 Oct (Keeper): latest tenant reply after our latest email to them, or "".
+function ciReplyAt(j){
+  const rows = ciLogRows(j.jobNo), ours = rows.filter(r => r.status === "Sent").map(r => r.at).sort().pop() || "";
+  return rows.filter(r => r.kind === "reply" && r.at > ours).map(r => r.at).sort().pop() || "";
+}
 function ciLogLine(r, withJob){
   const d = new Date(r.at), when = isNaN(d) ? "" : ciDay(d)+" "+pad2(d.getHours())+":"+pad2(d.getMinutes());
   const job = withJob ? state.jobs.find(j => normJobNo(j.jobNo||"") === normJobNo(r.job)) : null;
-  const ok = r.status === "Sent", dup = ciLogDup(r);
+  const ok = r.status === "Sent" || r.kind === "reply", dup = ciLogDup(r);
   return `<div class="ph-row"${dup ? ' style="opacity:.6"' : ""}><span class="ph-d">${esc(when)}</span>`
     + (withJob ? (job ? `<button type="button" class="t-link" onclick="openEdit('${job.id}')">${esc(r.job)}</button>` : `<span class="mono">${esc(r.job)}</span>`) : "")
     + `<span${ok || dup ? "" : ' style="color:var(--red)"'}>${esc(CI_LOG_WORDS[r.kind] || r.kind)}${ok ? "" : dup ? " - repeat click, not sent again" : " - NOT SENT"}</span>`
-    + `<span class="c-dim">${esc(ok ? (r.to + (r.cc ? " (cc "+r.cc+")" : "")) : dup ? "It had already gone, so the tenants didn't get it twice." : r.detail)}</span>`
+    + `<span class="c-dim">${esc(r.kind === "reply" ? (r.to + ": " + r.detail) : ok ? (r.to + (r.cc ? " (cc "+r.cc+")" : "")) : dup ? "It had already gone, so the tenants didn't get it twice." : r.detail)}</span>`
     + (withJob && job ? `<span class="c-dim">${esc(shortAddr(job))}</span>` : "") + `</div>`;
 }
 function shortAddr(j){ return [j.address, j.postcode].filter(Boolean).join(", "); }
@@ -3800,7 +3807,7 @@ function renderToday(){
   const midPicked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
   const ciRecent = ((state.ciLog && state.ciLog.rows) || []).filter(r => Date.parse(r.at) > now.getTime() - 14*86400000).sort((a,b) => String(b.at).localeCompare(String(a.at)));
   const ciSent = ciRecent.filter(r => r.status === "Sent").length;
-  const ciRefused = ciRecent.filter(r => r.status !== "Sent" && !ciLogDup(r)).length;   // real problems only
+  const ciRefused = ciRecent.filter(r => r.status !== "Sent" && r.kind !== "reply" && !ciLogDup(r)).length;   // real problems only (tenant replies aren't problems)
 
   // Tiles: [key, label, number shown, sub line, tone]
   const tc = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green)" : s.pct>=50 ? "var(--amber)" : "var(--red)";
@@ -3857,6 +3864,9 @@ function renderToday(){
   if (hs && hs.problems) dnAdd(5, "late", hs.missing ? "System check not started yet" : "System check: "+hs.problems+" problem"+(hs.problems===1?"":"s"), null, `<button class="d-mv" onclick="openHealth()">See</button>`);
   else if (hs && hs.warns) dnAdd(88, "", "System check: "+hs.warns+" thing"+(hs.warns===1?"":"s")+" to look at", null, `<button class="d-mv" onclick="openHealth()">See</button>`);
   if (amN) dnAdd(10, "late", amN+" job"+(amN===1?"":"s")+" with tenant comments", null, `<button class="d-mv" onclick="setDashPanel('amend')">Review</button>`);
+  // 20 Oct (Keeper): a report the auto-send script held back (latest Report sends line for it is Held)
+  ((state.kp && state.kp.held) || []).forEach(h => { const hj = state.jobs.find(x => normJobNo(x.jobNo) === normJobNo(h.job)) || null;
+    dnAdd(15, "late", "Report held"+(hj ? "" : " ("+(h.job || h.file)+")")+": "+(h.why.length > 48 ? h.why.slice(0, 46)+"…" : h.why), hj, `<a class="d-mv" href="${HELD_FOLDER_URL}" target="_blank" rel="noopener"${tip("Not sent: "+h.why+". Fix it, then move the PDF from Held back into WPS Ready to send. It goes within 15 minutes.")}>Held folder</a>`); });
   due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j));   // 18 Oct: no Rearrange once visited (Processing)
   midPicked.forEach(j => { const r = slotFor(j); dnAdd(25, "warn", "Tenant picked "+r.slotText, j, `<button class="d-mv sl-ok" onclick="slotApprove('${j.id}')">Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')">Decline</button>`); });
   unconfirmed.forEach(x => dnAdd(30, "warn", "Visit passed, still Booked", x.j, `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${dnRr(x.j)}`));
@@ -3872,7 +3882,7 @@ function renderToday(){
   active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
     `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
-    if (needsTenantTime(j)){ dnAdd(75, ciAskedAt(j) ? "" : "warn", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
+    if (needsTenantTime(j)){ const rp = ciReplyAt(j); dnAdd(rp ? 35 : 75, rp || !ciAskedAt(j) ? "warn" : "", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   active.filter(needsTenantAgree).forEach(j => dnAdd(76, "", "Suggested "+j.tenantArrival+", waiting for tenants to agree (they asked "+j.tenantAsked+")", j, ciArrivalBtn(j, "dn")));
@@ -4060,7 +4070,7 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
     </button>
-    <a class="btn-link" href="manual.pdf?v=20261020b" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+    <a class="btn-link" href="manual.pdf?v=20261020c" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
@@ -4094,7 +4104,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "20 Oct 2026 (#56)";
+const BUILD = "20 Oct 2026 (#65)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -5337,7 +5347,7 @@ function renderForm(){
       </label>
       ${renderPhotoLinkField(f)}
       ${renderPropertyHistory(f)}
-      ${renderCiLogBox(f)}
+      ${renderCiLogBox(f)}${renderVrBox(f)}
       ${renderHistory(f)}
     </div>
 
@@ -5477,14 +5487,17 @@ function rowsToObjects(rows){
   const di = rows[0].indexOf("Data (do not edit)");
   return rows.slice(1).map(row => { try { return JSON.parse(row[di]); } catch(e){ return null; } }).filter(Boolean);
 }
+// 20 Oct (Keeper): a change made by the Photo Tool on this device marks the browser's "local saved" time; treat it
+// as a local change so it goes up to the Sheet instead of being replaced by the Sheet copy.
+function localNewer(){ const a = lsGet(LS_LOCAL_SAVED_AT) || "", s = lsGet(LS_CLOUD_SYNCED_AT) || ""; return !!(a && s && a > s && state.jobs.length); }
 async function dashSync(quiet){
   setCloud("saving");
   try {
-    if (dirtyAny()){ await dashSave(); return; }
+    if (dirtyAny() || localNewer()){ await dashSave(); return; }
     const d = await dashCall("jlRead");
     if (!d.ok){ if (d.code !== "key") setCloud("error", "Couldn't read the Job Log: "+(d.error || "no answer")); return; }
     if (d.meta && d.meta.savedAt && d.meta.savedAt !== (lsGet(LS_CLOUD_SYNCED_AT) || "")){
-      if (dirtyAny()){ await dashSave(); return; }   // changed here while reading: save (merges)
+      if (dirtyAny() || localNewer()){ await dashSave(); return; }   // changed here while reading: save (merges)
       if (!applyCloudCopy(d.meta, rowsToObjects(d.jobs), rowsToObjects(d.clients), d.hasContacts ? rowsToObjects(d.contacts) : null, false)) return;
       setCloud("saved");
       if (quiet) safeRender(); else render();
@@ -5504,8 +5517,21 @@ async function dashCycle(){
     if (!keyMode()) return;
     await dashQueue(true);
     loadAmendments(true);
+    loadKp();
     autoDeem();
   } finally { state.dashBusy = false; }
+}
+// Keeper (20 Oct): held reports and day-before reminders from the script logs (Dash op kpRead, script file Keeper).
+const HELD_FOLDER_URL = "https://drive.google.com/drive/folders/1i3YRfUbB6zQ_dDPHv8F9ZDkmBepn8hCO";
+async function loadKp(){
+  if (!keyMode()) return;
+  try { const d = await dashCall("kpRead"); if (d && d.ok){ state.kp = { at: new Date(), held: d.held || [], reminders: d.reminders || [], keeper: d.keeper || {} }; safeRender(); } }
+  catch(e){ console.log("[WPS] keeper read failed", e); }
+}
+function vrRowsFor(jobNo){ const k = normJobNo(jobNo||""); return ((state.kp && state.kp.reminders) || []).filter(r => k && normJobNo(r.job) === k); }
+function renderVrBox(f){
+  const rows = vrRowsFor(f.jobNo); if (!rows.length) return "";
+  return `<div class="field wide ph-box"><div class="ph-h">Day-before reminders (${rows.length})</div>${rows.slice().reverse().map(r => `<div class="ph-row"><span class="ph-d">${esc(r.at)}</span><span${r.status === "Sent" ? "" : ' style="color:var(--red)"'}>${r.status === "Sent" ? "Reminder sent" : "Reminder "+esc(r.status)}</span><span class="c-dim">for the visit on ${esc(r.visit)}</span></div>`).join("")}</div>`;
 }
 // Device key box (More > Device key)
 async function saveDeviceKey(){

@@ -87,10 +87,11 @@
       <div>21. If something goes wrong</div>
       <div>22. Known gaps</div>
       <div>23. New on 20 October</div>
+      <div>24. The Keeper (20 October evening)</div>
     </div>
   </div>
   <div class="small">
-    Version of 20 October 2026 (replaces the 19 October version). Section 23 lists the 20 October additions (keys, day-before reminders, price list, money by month, property history, next mid-term due, mileage, CSV export, undo delete, change history). Otherwise it matches the tools after the 19 October changes: Do next and Park, the Board view, the Map, Plan my day with Google road times, mid-terms and the tenant slot link, and the news line. Screenshots use made-up jobs, addresses and names (Example Lettings, Sample Estates, example.com emails), so no real tenant details appear. The screenshot clock is set to Tuesday 13 October, so dates in the pictures won't match today. The lettering is slightly different from your screen; the buttons and layout are the same. The news headlines in the pictures are made-up examples.
+    Version of 20 October 2026 (replaces the 19 October version). Section 24 covers the Keeper (20 October evening: the Job Log updating itself, tenant replies, held reports, Photo Tool and Dictation joined up, run checks, nightly tidy, weekly backup). Section 23 lists the 20 October additions (keys, day-before reminders, price list, money by month, property history, next mid-term due, mileage, CSV export, undo delete, change history). Otherwise it matches the tools after the 19 October changes: Do next and Park, the Board view, the Map, Plan my day with Google road times, mid-terms and the tenant slot link, and the news line. Screenshots use made-up jobs, addresses and names (Example Lettings, Sample Estates, example.com emails), so no real tenant details appear. The screenshot clock is set to Tuesday 13 October, so dates in the pictures won't match today. The lettering is slightly different from your screen; the buttons and layout are the same. The news headlines in the pictures are made-up examples.
   </div>
 </section>
 
@@ -913,7 +914,7 @@
   <li><b>The tenant slot link</b> hasn't been tried end to end with a real tenant and the real calendar yet.</li>
   <li><b>Plan my day</b> on the iPhone: not reported back yet.</li>
   <li><b>Syncing by itself needs the device key.</b> With a key set (More &gt; Device key) the Dashboard saves and loads every few minutes; on a device without one, tap Save &amp; get latest.</li>
-  <li><b>Signed is automatic only for the WPS signing page</b> (when every signer has signed, with the device key). Old Acrobat sends are still set by hand.</li>
+  <li><b>Signed is automatic only for the WPS signing page</b> (when every signer has signed). The WPS script now sets it in the Job Log itself, even with no dashboard open. Old Acrobat sends are still set by hand.</li>
   <li><b>The first real auto-sent report and the first real check-in on the signing page</b> haven't been checked end to end yet.</li>
   <li><b>The auto-send doesn't check the photo link opens</b>; it uses the link on the job or page 1 of the report.</li>
   <li><b>WhatsApp bookings</b> can't be seen by the inbox check.</li>
@@ -923,11 +924,12 @@
   <li><b>A tab not signed in to Google</b> saves only in the browser; the calendar catches up on the next save after sign-in.</li>
   <li><b>The calendar error message</b> hasn't been seen on a real failure yet.</li>
   <li><b>"Changed both here and on another device"</b> was seen once on 13 October; which device caused it isn't known.</li>
-  <li><b>The Photo Tool and Dictation don't read the Google Sheet.</b> The Photo Tool sees jobs only in the same Chrome as the Job Log, and its list only offers jobs dated 21 days before to 2 days after the photos. Dictation reads the Job Log on the same phone only. Rooms from the last visit only know visits dictated on that phone.</li>
+  <li><b>The Photo Tool and Dictation read the Google Sheet only on a device with the device key</b> (More &gt; Device key on the Dashboard). Without one they see the jobs in that browser only. The Photo Tool's list still only offers jobs dated 21 days before to 2 days after the photos. Rooms from the last visit only know visits dictated on that phone.</li>
   <li><b>Photo links</b> still use wellingtonparker.com (they work). The new photos.wellington-ps.co.uk address isn't set up.</li>
   <li><b>Extract job details</b> only reads a clean address line. When the address is buried in a sentence, type it in.</li>
   <li>If two devices each add a new job before syncing and pick the same number, the device that saves second moves its own new job to the next free number by itself and shows a message (old number and new number). The job saved first keeps its number, and the change is in the job's Change history. A number typed by hand that clashes is still only flagged in Do next ("Two jobs share the number").</li>
-  <li><b>Day-before reminders</b> start only once the VisitRemind script file is pasted and switched on (vrStart). Not yet tried with a real tenant.</li>
+  <li><b>Day-before reminders</b> start once the VisitRemind script file is pasted and kpStart has been run. Not yet tried with a real tenant.</li>
+  <li><b>The Keeper</b> (joining up and maintenance, 20 October evening) hasn't run against real Google yet: the first runs, the first nightly tidy and the first Monday backup are still to be checked.</li>
   <li><b>Mileage</b> is only counted for days you opened Plan my day with Google road times.</li>
   <li>The iPhone can clear Dictation's saved notes if it isn't opened for about 7 days. Copy notes to Claude the same day.</li>
 </ul>
@@ -952,6 +954,24 @@
   <tr><td><b>Undo delete</b></td><td>After Delete job</td><td>An Undo bar shows for a few seconds. The job comes back with a new calendar event.</td></tr>
   <tr><td><b>Change history</b></td><td>Job form</td><td>A dated line for each change to a job (last 40), for the record if a report is disputed.</td></tr>
 </table>
+
+<h1>24. The Keeper (20 October evening)</h1>
+<p>A script file in the WPS Amendments script that joins the tools up and keeps them ticking over. You don't press anything: it runs by itself.</p>
+<table>
+  <tr><th>What</th><th>Where you see it</th><th>How it works</th></tr>
+  <tr><td><b>Job Log updates itself</b></td><td>Job Log, every device</td><td>Every 5 minutes the script marks jobs <b>Sent</b> (report emailed by the script), <b>Signed</b> (everyone signed on the signing page) and <b>Deemed agreed</b> (check-in, 7 days, no open comments), using the dashboard's own rules. No dashboard needs to be open. Each change is in the job's Change history as "WPS script".</td></tr>
+  <tr><td><b>Comments closed by a re-issue</b></td><td>Amendments tab</td><td>Comment rows sent in before a job's re-issue are set to "Done - re-issued &lt;date&gt;", so the deemed-agreed email and the dashboard can close the job after the new 7 days.</td></tr>
+  <tr><td><b>Tenants replied</b></td><td>Do next, job form</td><td>When a tenant of a check-in we've emailed writes back, Do next says <b>Tenants replied</b> with the time. Read it in Gmail, then press <b>Set arrival time</b>.</td></tr>
+  <tr><td><b>Report held</b></td><td>Do next</td><td>A report the auto-send held back shows with the reason and a <b>Held folder</b> button. Fix it and move the PDF back into WPS Ready to send.</td></tr>
+  <tr><td><b>Day-before reminders</b></td><td>Job form</td><td>Each reminder sent for that job, with the time.</td></tr>
+  <tr><td><b>Photo links</b></td><td>Photo Tool</td><td>With the device key, the photo link goes straight into the Job Log when you press Process &amp; download zip ("Photo link saved to the Job Log" under the link).</td></tr>
+  <tr><td><b>Dictation to Drive</b></td><td>Dictation</td><td><b>Save to Drive</b> (and Copy for Claude) saves the notes in Google Drive &gt; WPS Dictation as "&lt;job no&gt; - &lt;type&gt; - dictation.txt", so Claude can read them for the report.</td></tr>
+  <tr><td><b>Tide invoices</b></td><td>To review</td><td>The script turns Tide's invoice copies into Invoice sent cards by itself (Claude's hourly check does too; the same card never shows twice).</td></tr>
+  <tr><td><b>Run checks</b></td><td>System health</td><td>Every timer records when it last finished. System health says if one has stopped or failed, restarts the ones that don't email anyone, and only reports the ones that do. It also warns if Claude's hourly inbox check stops reading agent emails.</td></tr>
+  <tr><td><b>Nightly tidy</b></td><td>WPS Amendments Sheet, Drive</td><td>About 3am: log rows over 6 months move to "Old - &lt;tab&gt;" tabs, old Job Log queue drafts are deleted, and a copy of the live script is saved in Drive &gt; WPS Backups &gt; Live script.</td></tr>
+  <tr><td><b>Weekly backup and summary</b></td><td>Drive, info@</td><td>Monday about 7am: copies of the Job Log, the WPS Amendments Sheet and the script go into Drive &gt; WPS Backups &gt; &lt;date&gt; (8 weeks kept), then one email to info@ with last week's numbers and anything that needs a look.</td></tr>
+</table>
+<div class="tip"><b>In the script editor:</b> kpStatus shows what ran when; kpPreview shows what the next run would change (changes nothing); kpUndo puts the old timers back.</div>
 
 
 </body>
