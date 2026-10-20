@@ -120,7 +120,7 @@
   /* compact dashboard (one screen) */
   .wrap-dash{ max-width:1560px; }
   .wrap-dash .page-head{ padding-top:20px; }
-  .d-tiles{ display:grid; grid-template-columns:repeat(11,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
+  .d-tiles{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
   .d-tile{ text-align:left; background:var(--card); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; min-width:0; }
   .d-tile:hover{ border-color:var(--peri); }
   .d-tile.on{ border-color:var(--brand); background:var(--sky); }
@@ -2079,14 +2079,54 @@ function askTenantsTime(id, w){
   showActionBar("Email to the tenants opened in Gmail. Check it and press Send. When they reply, press Set arrival time.");
 }
 function ciAskBtn(j){
-  const again = !!j.tenantsAskedAt;
+  const again = !!ciAskedAt(j);
   if (state.ciBusy === j.id) return `<span class="c-dim">Sending…</span>`;
   if (ciAuto()) return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}')"${tip(again ? "Sends the same email again now, to chase the tenants. Agent copied in." : "Sends the tenants an email now asking what time they'll arrive. Agent copied in.")}>${again ? "Send again" : "Send to tenants"}</button>`;
   return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}', window.open('', '_blank'))"${tip(again ? "Opens the same email again in Gmail, to chase the tenants." : "Opens an email in Gmail asking the tenants what time they'll arrive. The agent is copied in. You check it and press Send.")}>${again ? "Email again" : "Email tenants"}</button>`;
 }
 function ciArrivalBtn(j, where){ return `<button class="d-mv" onclick="openArrival('${j.id}','${where||"dn"}')"${tip("The tenants have told you their arrival time. Puts your visit time on the job and the calendar.")}>Set arrival time</button>`; }
 function ciDay(d){ return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
-function ciRowText(j){ return j.tenantsAskedAt ? "Waiting for tenants' time (asked "+ciDay(new Date(j.tenantsAskedAt))+")" : "Ask tenants what time they'll arrive"; }
+function ciRowText(j){ const a = ciAskedAt(j); return a ? "Waiting for tenants' time (asked "+ciDay(new Date(a))+")" : "Ask tenants what time they'll arrive"; }
+// Tenant emails log (Lex, 20 Oct): the script's "Check-in emails" tab is the record of what went to tenants.
+// The dashboard reads it on every check, so a send shows here even if this browser lost its own note.
+function ciLogRows(jobNo){ const rows = (state.ciLog && state.ciLog.rows) || []; const k = normJobNo(jobNo||""); return k ? rows.filter(r => normJobNo(r.job) === k) : []; }
+function ciAskedAt(j){
+  if (j.tenantsAskedAt) return j.tenantsAskedAt;
+  const hit = ciLogRows(j.jobNo).filter(r => r.kind === "ask" && r.status === "Sent" && (!j.date || r.key === "ask|"+j.date)).sort((a,b) => String(b.at).localeCompare(String(a.at)))[0];
+  return hit ? hit.at : "";
+}
+const CI_LOG_WORDS = { ask:"Asked for their time", confirm:"Time confirmed", propose:"New time suggested" };
+function ciLogLine(r, withJob){
+  const d = new Date(r.at), when = isNaN(d) ? "" : ciDay(d)+" "+pad2(d.getHours())+":"+pad2(d.getMinutes());
+  const job = withJob ? state.jobs.find(j => normJobNo(j.jobNo||"") === normJobNo(r.job)) : null;
+  const ok = r.status === "Sent";
+  return `<div class="ph-row"><span class="ph-d">${esc(when)}</span>`
+    + (withJob ? (job ? `<button type="button" class="t-link" onclick="openEdit('${job.id}')">${esc(r.job)}</button>` : `<span class="mono">${esc(r.job)}</span>`) : "")
+    + `<span${ok ? "" : ' style="color:var(--red)"'}>${esc(CI_LOG_WORDS[r.kind] || r.kind)}${ok ? "" : " - not sent"}</span>`
+    + `<span class="c-dim">${esc(ok ? (r.to + (r.cc ? " (cc "+r.cc+")" : "")) : r.detail)}</span>`
+    + (withJob && job ? `<span class="c-dim">${esc(shortAddr(job))}</span>` : "") + `</div>`;
+}
+function shortAddr(j){ return [j.address, j.postcode].filter(Boolean).join(", "); }
+function renderCiLogBox(f){
+  const rows = ciLogRows(f.jobNo).slice().sort((a,b) => String(b.at).localeCompare(String(a.at)));
+  if (!rows.length) return "";
+  return `<div class="field wide ph-box"><div class="ph-h">Emails to the tenants (${rows.length})</div>${rows.map(r => ciLogLine(r, false)).join("")}</div>`;
+}
+async function loadCiLog(){
+  try {
+    // Same route as the other WPS Amendments tabs: Google sign-in, or the device key (Dash READ_TABS, script v20+)
+    const r = await gapi("https://sheets.googleapis.com/v4/spreadsheets/"+AMEND_SHEET_ID+"/values/"+encodeURIComponent("'Check-in emails'!A:H")+"?valueRenderOption=UNFORMATTED_VALUE");
+    const v = r.values || [];
+    const when = x => {   // Sheets day number (London wall clock) or text
+      if (typeof x === "number"){ const u = new Date(Math.round((x-25569)*86400000)); const d = new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds()); return isNaN(d) ? "" : d.toISOString(); }
+      const d = new Date(x); return isNaN(d) ? "" : d.toISOString();
+    };
+    const rows = v.slice(1).map(x => ({ at: when(x[0]), job: String(x[1]||""), kind: String(x[2]||""), key: String(x[3]||""), to: String(x[4]||""), cc: String(x[5]||""), status: String(x[6]||""), detail: String(x[7]||"") }));
+    state.ciLog = { at: new Date(), rows: rows.filter(r => r.job && r.at) };
+  } catch(e){
+    console.log("[WPS] check-in emails read failed", e);   // e.g. script older than v20 refuses the tab
+  }
+}
 function openArrival(id, where){ const same = state.arrivalId === id && state.arrivalWhere === where; state.arrivalId = same ? null : id; state.arrivalWhere = where || "dn"; render(); const b = document.getElementById("arr_box"); if (b && b.scrollIntoView) b.scrollIntoView({block:"nearest"}); }
 function closeArrival(){ state.arrivalId = null; render(); }
 function arrivalPreview(id, from){
@@ -3271,6 +3311,7 @@ function loadAmendments(quiet){
       await loadSlots();   // mid-term slot picks (19 Oct), same Sheet and sign-in
       await loadHealth();  // system health (19 Oct), same Sheet and sign-in
       await loadSignings();  // 19 Oct: marks Signed when everyone in the latest round has signed
+      await loadCiLog();     // 20 Oct: what went to tenants (Check-in emails tab)
       state.amend = { loaded:true, at:new Date(), autoRem, jobs: Object.values(byJob).sort((a,b)=>((sheetDate(a.first)||0)-(sheetDate(b.first)||0))) };
       autoDeem();
     } catch(e){
@@ -3737,6 +3778,8 @@ function renderToday(){
   const amN = am.loaded ? am.jobs.length : null;
   const mids = midtermsToBook(active);
   const midPicked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
+  const ciRecent = ((state.ciLog && state.ciLog.rows) || []).filter(r => Date.parse(r.at) > now.getTime() - 14*86400000).sort((a,b) => String(b.at).localeCompare(String(a.at)));
+  const ciRefused = ciRecent.filter(r => r.status !== "Sent").length;
 
   // Tiles: [key, label, number shown, sub line, tone]
   const tc = s => !s ? "var(--stone)" : s.pct>=80 ? "var(--green)" : s.pct>=50 ? "var(--amber)" : "var(--red)";
@@ -3750,6 +3793,7 @@ function renderToday(){
     ["sig", "Out for signature", awaitingSig.length, "", ""],
     ["win", "Comment windows", openWin, remindersDue ? remindersDue+" reminder"+(remindersDue===1?"":"s")+" due" : "", remindersDue ? "warn" : ""],
     ["amend", "Amendments", amN==null ? "–" : amN, amN==null ? "click to load" : "", amN ? "late" : ""],
+    ["temail", "Tenant emails", state.ciLog ? ciRecent.length : "–", state.ciLog ? (ciRefused ? ciRefused+" not sent" : "last 14 days") : "not loaded", ciRefused ? "warn" : ""],
     ["inv", "To invoice", toInvoice.length, "", toInvoice.length ? "coral" : ""],
     ["paid", "Awaiting payment", unpaid.length, "", ""],
     ["turn", "On time (7 days)", wkStats ? wkStats.pct+"%" : "–", wkStats ? "avg "+wkStats.avg+"h" : "none visited since 11 Oct", ""],
@@ -3763,12 +3807,12 @@ function renderToday(){
   const TILE_TIPS = {
     due:"Visited jobs whose report hasn't been sent yet, soonest due first. Jobs still at Booked after their visit time are listed separately to confirm", book:"Bookings Claude found in Gmail, waiting for you to check",
     sig:"Check-in reports sent and waiting for signatures in Acrobat", win:"The 7-day comment window on each sent check-in report",
-    amend:"Tenant comments from the amendments form that are still open", times:"Booked jobs with no time agreed yet",
+    amend:"Tenant comments from the amendments form that are still open", temail:"Every check-in email sent to tenants in the last 14 days (asked for their time, confirmed, new time suggested), from the script's log", times:"Booked jobs with no time agreed yet",
     photos:"Visited jobs with no photo link saved yet", mid:"Mid-terms with no date yet: send the tenant a slot link, then approve the time they pick", inv:"Reports sent but not invoiced yet", paid:"Invoiced but not paid yet",
     turn:"How many reports went out on time over the last 7 days. Click for the full performance view: this month, last month, streak and personal bests"
   };
-  const TILE_GROUP = { due:"todo", times:"todo", photos:"todo", mid:"todo", book:"todo", sig:"wait", win:"wait", amend:"wait", inv:"money", paid:"money", turn:"perf" };
-  const GROUPS = [["todo","To do now",5],["wait","Waiting on others",3],["money","Money",2],["perf","Performance",1]];
+  const TILE_GROUP = { due:"todo", times:"todo", photos:"todo", mid:"todo", book:"todo", sig:"wait", win:"wait", amend:"wait", temail:"wait", inv:"money", paid:"money", turn:"perf" };
+  const GROUPS = [["todo","To do now",5],["wait","Waiting on others",4],["money","Money",2],["perf","Performance",1]];
   const groupHead = GROUPS.map(([g, lbl, n]) => `<div class="d-ghead d-g-${g}" style="grid-column:span ${n}">${lbl}</div>`).join("");
   // Tiles as a compact strip (Lex, 18 Oct): number beside the label, so the strip is one short row on a PC and
   // a sideways-scrolling row on the phone. The full sub line is in the hover text, so nothing is cut off.
@@ -3807,7 +3851,7 @@ function renderToday(){
   active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
     `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
-    if (needsTenantTime(j)){ dnAdd(75, j.tenantsAskedAt ? "" : "warn", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
+    if (needsTenantTime(j)){ dnAdd(75, ciAskedAt(j) ? "" : "warn", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   active.filter(needsTenantAgree).forEach(j => dnAdd(76, "", "Suggested "+j.tenantArrival+", waiting for tenants to agree (they asked "+j.tenantAsked+")", j, ciArrivalBtn(j, "dn")));
@@ -3849,6 +3893,9 @@ function renderToday(){
       + (am.loaded ? "" : note("Load amendments so closed windows can move to Deemed agreed."))
       + (sentNoDate ? note(sentNoDate+" check-in report"+(sentNoDate===1?"":"s")+" marked Sent before dates were recorded, so not shown.") : ""); break;
     case "amend": title = "Amendments"; body = renderAmendCard(true); break;
+    case "temail": title = "Emails to tenants (last 14 days)";
+      body = (state.ciLog ? rows(ciRecent, r => ciLogLine(r, true), "No check-in emails sent to tenants in the last 14 days.") : `<div class="t-empty">Not loaded yet. Press Check everything now.</div>`)
+        + note("From the WPS script's Check-in emails log, so it's the real record of what went out. \"Not sent\" lines say why. Each job's form lists its own emails too."); break;
     case "times": { title = "Times to agree";
       const ttRow = j => needsTenantTime(j)
         ? cRow(j, {noTime:true, extra: `<span class="c-dim ci-wait">${esc(ciRowText(j))}</span><span class="d-acts">${ciArrivalBtn(j, "tt")}${ciAskBtn(j)}</span>`}) + arrivalBox(j, "tt")
@@ -5269,6 +5316,7 @@ function renderForm(){
       </label>
       ${renderPhotoLinkField(f)}
       ${renderPropertyHistory(f)}
+      ${renderCiLogBox(f)}
       ${renderHistory(f)}
     </div>
 
