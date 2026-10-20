@@ -16,7 +16,7 @@
 const WM = {
   ON: false,
   BG: '#141D3D', NAVY: '#1F2D5A', NAVY2: '#2B3D74', LINE: '#33467F', CORAL: '#E8735A',
-  TEXT: '#F3F5FA', SOFT: '#C3CBE3',
+  TEXT: '#F3F5FA', SOFT: '#C3CBE3', HL: '#F2937D',   // HL: lighter coral for highlighted text on navy (readable contrast)
   LOGO: 'https://8kj2j8jv85-maker.github.io/wps-job-log/sig/email/wps-logo-navy.png',
   AIIC: 'https://8kj2j8jv85-maker.github.io/wps-job-log/sig/email/aiic-navy.png',
   PHONE: '07541 345053', PHONE_INTL: '+447541345053',
@@ -35,6 +35,9 @@ function wmText_(s) {
   }).replace(/\n/g, '<br>');
 }
 
+// Lex 20 Oct: the details people must not miss (address, dates) sit in the box with coral values, and the
+// comments-form instructions sit in their own panel with a coral heading and one coral button.
+
 // m = { title, preheader, blocks: [ {p}, {rows:[[label,value]]}, {button:href, text, primary}, {buttons:[...]},
 //                                    {steps:{title, items:[...]}}, {small}, {link:href, text, before} ] }
 function wmHtml_(m) {
@@ -45,7 +48,7 @@ function wmHtml_(m) {
     return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + WM.NAVY2 + '" style="background:' + WM.NAVY2 + ';border-left:4px solid ' + WM.CORAL + ';margin:2px 0 18px"><tr><td style="padding:12px 16px">'
       + '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' + rs.map(function (r) {
         return '<tr><td valign="top" style="padding:5px 14px 5px 0;' + F + 'font-size:11px;letter-spacing:1px;text-transform:uppercase;color:' + WM.SOFT + ';white-space:nowrap">' + wmEsc_(r[0]) + '</td>'
-          + '<td valign="top" style="padding:4px 0;' + F + 'font-size:15px;line-height:1.4;font-weight:bold;color:' + WM.TEXT + '">' + wmText_(r[1]) + '</td></tr>';
+          + '<td valign="top" style="padding:4px 0;' + F + 'font-size:15px;line-height:1.4;font-weight:bold;color:' + (/^(property|date|time|suggested time|comments close)/i.test(r[0]) ? WM.HL : WM.TEXT) + '">' + wmText_(r[1]) + '</td></tr>';
       }).join('') + '</table></td></tr></table>';
   };
   const button = function (b) {
@@ -62,6 +65,17 @@ function wmHtml_(m) {
           + '<td valign="top" style="' + F + 'font-size:14px;line-height:1.5;color:' + WM.TEXT + '">' + wmText_(t) + '</td></tr></table>';
       }).join('') + '</td></tr></table>';
   };
+  const panel = function (x) {
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + WM.NAVY2 + '" style="background:' + WM.NAVY2 + ';border-radius:8px;margin:4px 0 18px"><tr><td style="padding:16px 18px 8px">'
+      + '<p style="margin:0 0 8px;' + F + 'font-size:16px;font-weight:bold;color:' + WM.HL + '">' + wmEsc_(x.title) + '</p>'
+      + (x.lead ? '<p style="margin:0 0 10px;' + F + 'font-size:14px;line-height:1.5;color:' + WM.TEXT + '">' + wmText_(x.lead) + '</p>' : '')
+      + (x.items || []).map(function (t, i) {
+        return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px"><tr><td valign="top" style="padding:0 10px 0 0;' + F + 'font-size:14px;font-weight:bold;color:' + WM.HL + '">' + (i + 1) + '.</td>'
+          + '<td valign="top" style="' + F + 'font-size:14px;line-height:1.5;color:' + WM.TEXT + '">' + wmText_(t) + '</td></tr></table>';
+      }).join('')
+      + (x.button ? '<div style="margin:8px 0 6px">' + button({ button: x.button, text: x.buttonText }) + '</div>' : '')
+      + '</td></tr></table>';
+  };
   const body = (m.blocks || []).map(function (b) {
     if (b.p != null) return p(b.p);
     if (b.small != null) return small(b.small);
@@ -69,6 +83,7 @@ function wmHtml_(m) {
     if (b.button) return '<div style="margin:4px 0 8px">' + button(b) + '</div>';
     if (b.buttons) return b.buttons.length ? '<div style="margin:4px 0 8px">' + b.buttons.map(button).join('') + '</div>' : '';
     if (b.steps) return steps(b.steps);
+    if (b.panel) return panel(b.panel);
     if (b.link) return '<p style="margin:0 0 14px;' + F + 'font-size:15px;line-height:1.55;color:' + WM.TEXT + '">' + wmText_(b.before || '')
       + '<a href="' + wmEsc_(b.link) + '" style="color:' + WM.CORAL + ';font-weight:bold;text-decoration:underline">' + wmEsc_(b.text || b.link) + '</a></p>';
     return '';
@@ -128,11 +143,50 @@ function wmBlocksFromParas_(paras, isObj) {
   });
   return blocks;
 }
+// Comments form instructions -> one panel; the closing date goes into the details box.
+const WM_DATE_RE = /((Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December)( \d{4})?)/;
+function wmCommentsPanel_(blocks) {
+  let date = '', url = '', at = -1;
+  const keep = [];
+  blocks.forEach(function (b) {
+    const t = b.p || '';
+    const dm = (/(closes on|until|by) /i.test(t) && WM_DATE_RE.exec(t)) || null;
+    if (dm && !date) { date = dm[1]; if (b.p && /closes on /i.test(t) && t.length < 200) b = { p: t.replace('closes on ' + date, 'is closing soon') }; }
+    if (b.p && /comments form/i.test(t)) { if (at < 0) at = keep.length; const um = /(https?:\/\/\S+)/.exec(t); if (um && !url) url = um[1].replace(/[).,]+$/, ''); return; }
+    if (b.p && /^comments form: /i.test(t)) return;
+    if (b.link && /comment/i.test(b.text || '')) { url = url || b.link; if (at < 0) at = keep.length; return; }
+    if (b.small && /^https?:/.test(b.small) && at >= 0 && !url) { url = b.small; return; }
+    if (b.p && /item numbers/i.test(t) && at >= 0) return;
+    if (b.p && /7 days from receiving/i.test(t)) { keep.push({ p: 'If we don\'t hear from you within 7 days, the report will be deemed agreed by all parties.' }); return; }
+    keep.push(b);
+  });
+  if (at < 0) return blocks;
+  const items = [url ? 'Open the comments form with the button below.' : 'Open the report and click "click here to open our comments form" (page 8, or the Please note page near the end).',
+    'Add each point with its item number from the report. Comments sent by other means cannot be accepted.'];
+  if (date) items.push('Send your comments before ' + date + '.');
+  keep.splice(at, 0, { panel: { title: 'Need to add something?', lead: 'If you find anything not recorded in the report, or disagree with anything in it, please tell us through our comments form.', items: items, button: url, buttonText: 'Open the comments form' } });
+  if (date) {
+    const box = keep.filter(function (b) { return b.rows; })[0];
+    if (box) box.rows.push(['Comments close', date]);
+  }
+  return keep;
+}
+// Sentences that carry the address inline ("...report for <address> closes on...") -> details box
+function wmPullAddress_(blocks) {
+  if (blocks.some(function (b) { return b.rows; })) return blocks;
+  const re = /\b(?:report for|for:?) ((?:Flat \w+, )?\d+[A-Za-z]?,? [^.;:\n]{3,90}?\b[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2})\b/;
+  for (let i = 0; i < blocks.length; i++) {
+    const m = blocks[i].p && re.exec(blocks[i].p);
+    if (m) { blocks[i] = { p: blocks[i].p.replace(' for ' + m[1], '') }; blocks.splice(i + 1, 0, { rows: [['Property', m[1]]] }); break; }
+  }
+  return blocks;
+}
+
 // Plain-text email (process emails, receipts) -> themed HTML. The text keeps going out as the plain part.
 function wmFromText_(text, title) {
   const t = String(text || '').replace(/\r/g, '').replace(WM_SIG_RE, '');
   const paras = t.split(/\n\s*\n/);
-  const blocks = wmBlocksFromParas_(paras, false);
+  const blocks = wmCommentsPanel_(wmPullAddress_(wmBlocksFromParas_(paras, false)));
   const first = (blocks.filter(function (b) { return b.p && !/^(dear|hello|hi)\b/i.test(b.p); })[0] || {}).p || '';
   return wmHtml_({ title: title || wmTitleFor_(t), preheader: first.slice(0, 110), blocks: blocks });
 }
@@ -158,10 +212,10 @@ function wmFromParts_(parts, title) {
     }
     split.push(x);
   });
-  const blocks = wmBlocksFromParas_(split, true).map(function (b) {
+  const blocks = wmCommentsPanel_(wmBlocksFromParas_(split, true).map(function (b) {
     if (b.p && /^https?:\/\//.test(b.p)) return { small: b.p };
     return b;
-  });
+  }));
   const all = split.filter(function (x) { return typeof x === 'string'; }).join(' ');
   const first = (blocks.filter(function (b) { return b.p && !/^(dear|hello|hi)\b/i.test(b.p); })[0] || {}).p || '';
   return wmHtml_({ title: title || wmTitleFor_(all), preheader: first.slice(0, 110), blocks: blocks });
@@ -193,10 +247,17 @@ function wmSendSamples_() {
     { before: '', link: 'https://www.wellington-ps.co.uk', text: 'open the comments form' },
     'You will need the item numbers from the report. Comments sent by other means cannot be accepted.', '',
     'You have 7 days from receiving the report to send any comments (until Monday 9 November). If we don\'t hear from you within 7 days, the report will be deemed agreed by all parties.']);
+  const rem = sgCompose_(['Dear Robbie,', '', 'Just a reminder to review and sign the Inventory and Check In report for:', addr, '',
+    { button: 'https://www.wellington-ps.co.uk', text: 'Review and sign the report' }, '',
+    'This link is just for you, so please don\'t forward this email.', '',
+    'The 7-day window for comments closes on Monday 9 November. If you find anything not recorded in the report, or disagree with anything in it, please use our comments form:',
+    { before: '', link: 'https://www.wellington-ps.co.uk', text: 'open the comments form' }, '',
+    'If we don\'t hear from you by then, the report will be deemed agreed by all parties.']);
+  send('signing reminder', 'Reminder: WPS000000 - Inventory and Check In - ' + addr + ' - please sign', rem.body, rem.html);
   send('signing invite', 'WPS000000 - Inventory and Check In - ' + addr + ' - please review and sign', inv.body, inv.html);
   const rb = rsBody_('CO', 'bowpropman@winkworth.co.uk', addr, 'http://www.wellingtonparker.com/photos/WPS000000.zip', 'http://www.wellingtonparker.com/photos/WPS000001.zip');
   send('report to agent', 'WPS000000 - Check Out - ' + addr, rb.body, rb.html);
-  const d = 'Hello,\n\nJust a reminder that the 7-day window for comments on the Inventory and Check In report for ' + addr + ' closes on Monday 9 November.\n\nIf you find anything not recorded in the report, or disagree with anything in it, please use our comments form: open the report and click "click here to open our comments form" (page 8, or the Please note page near the end). You will need the job number at the top of the report and the item numbers.\n\nIf we don\'t hear from you by then, the report will be deemed agreed by all parties.' + PE_SIG;
+  const d = 'Hello,\n\nJust a reminder that the 7-day window for comments on the Inventory and Check In report for ' + addr + ' closes on Monday 9 November.\n\nIf you find anything not recorded in the report, or disagree with anything in it, please use our comments form: open the report and click "click here to open our comments form" (page 8, or the Please note page near the end). You will need the job number at the top of the report and the item numbers.\n\nComments form: ' + (typeof sgCommentsUrl_ === 'function' ? sgCommentsUrl_('WPS000000', addr) : 'https://www.wellington-ps.co.uk') + '\n\nIf we don\'t hear from you by then, the report will be deemed agreed by all parties.' + PE_SIG;
   send('process email D', 'Reminder: WPS000000 - Inventory and Check In - ' + addr + ' - comments close 9 Nov', d, receiptHtml_(d));
   Logger.log('Samples sent to ' + to);
 }
