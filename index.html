@@ -981,6 +981,37 @@ function mergeJobLists(local, cloud, dirty){
   local.forEach(l => { if (!C.has(l.id) && dirty.ids[l.id]) out.push(l); });   // added here; otherwise deleted elsewhere
   return out;
 }
+// D8 (Lex, 20 Oct): two devices can each make a new job before syncing and both pick the same next number.
+// The Sheet only takes one save at a time, so whichever device saves second merges first: here. Any job made on
+// this device (not in the Sheet yet) whose number the Sheet already has is moved to the next free number for its
+// month. The job already in the Sheet keeps its number, so the other device never changes. Numbers typed by hand
+// in another format are left alone (the duplicate flag in Do next still shows them).
+function fixJobNoClashes(cloudJobs){
+  const cloudIds = new Set((cloudJobs||[]).map(j => j && j.id));
+  const taken = new Set((cloudJobs||[]).map(j => normJobNo(j && j.jobNo)).filter(Boolean));
+  const moved = [];
+  state.jobs.forEach(j => {
+    if (!j || cloudIds.has(j.id) || !j.jobNo) return;
+    const n = normJobNo(j.jobNo);
+    if (!taken.has(n)){ taken.add(n); return; }
+    if (!/^WPS\d{4}\d+$/.test(n)) return;
+    const old = j.jobNo;
+    let nn = nextJobNumber(j.date), guard = 0;
+    while (taken.has(normJobNo(nn)) && guard++ < 200){ const m = /^(WPS\d{4})(\d+)$/.exec(nn); nn = m[1] + pad2(parseInt(m[2],10) + 1); }
+    j.jobNo = nn; taken.add(normJobNo(nn));
+    mergeJobNoHigh();
+    logChange(j, "Job number changed from "+old+" to "+nn+" ("+old+" was already used on another device)");
+    moved.push({ job:j, old });
+  });
+  if (moved.length){
+    state.jobNoMoved = (state.jobNoMoved||[]).concat(moved.map(m => m.old+" → "+m.job.jobNo));
+    setTimeout(() => {
+      moved.forEach(m => { if (m.job.gcalEventId) try { syncJobToCalendar(m.job); } catch(e){} });
+      showActionBar("Job number clash with another device: "+moved.map(m => m.old+" is now "+m.job.jobNo+(m.job.address ? " ("+m.job.address+")" : "")).join("; ")+".");
+    }, 0);
+  }
+  return moved;
+}
 function mergeByName(local, cloud, key){
   const seen = new Set(cloud.map(x => String(x[key]||"").toLowerCase()));
   return cloud.concat(local.filter(x => !seen.has(String(x[key]||"").toLowerCase())));
@@ -1170,6 +1201,7 @@ function applyCloudCopy(meta, jobs, clientsRaw, contactsRaw, merge){
   fillContactsFromData();
   lsSet(LS_CONTACTS, JSON.stringify(state.contacts));
   try { mergeJobNoHigh(meta.jobNoHigh ? JSON.parse(meta.jobNoHigh) : null); } catch(e){ mergeJobNoHigh(); }
+  if (merge) fixJobNoClashes(jobs);   // D8, 20 Oct: a job made here with a number another device already saved gets the next free number
   try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
   if (meta.slotSettings && !(merge && dirty.slot)) lsSet(LS_SLOT_SET, meta.slotSettings);   // slot picker settings saved from another device
   localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
@@ -3601,7 +3633,7 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
     </button>
-    <a class="btn-link" href="manual.pdf?v=20261020" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+    <a class="btn-link" href="manual.pdf?v=20261020b" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
