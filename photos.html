@@ -353,6 +353,7 @@
 <div id="progress" class="progress hidden"><div class="box"><div id="progTitle" style="font-weight:600">Working&hellip;</div><div id="progText" class="muted small" style="margin-top:4px"></div><div class="bar"><div id="progBar"></div></div></div></div>
 
 <!-- integrity: the browser refuses the file if the CDN copy is ever changed (hash checked 17 Oct 2026 against cdnjs and jsdelivr, identical) -->
+<script src="wpslink.js?v=20261020"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 "use strict";
@@ -503,6 +504,7 @@ function loadJobs(){
   if (!jobs || !jobs.length){
     try { const j = localStorage.getItem(LS_BACKUP_JOBS); if (j){ jobs = JSON.parse(j); src = "Job Log backup"; } } catch(e){}
   }
+  if (S.sheetJobs && window.WPSLink){ jobs = WPSLink.merge(jobs, S.sheetJobs); src = src ? src + " + Job Log Sheet" : "Job Log Sheet"; }   // 20 Oct: device key
   S.jobs = (jobs||[]).filter(j => j && j.jobNo);
   S.jobsSource = src;
   const n = $("jobsNote");
@@ -985,6 +987,7 @@ function render(){
           </div>
           <div class="preview-name">Zip: <span class="mono">${esc(zipName(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, firstArea(g, amap) || "Kitchen", 1))}</span></div>
           ${m.link ? `<div class="linkrow"><input readonly value="${esc(m.link)}" id="lnk_${g.id}" /><button class="btn btn-ghost btn-sm" data-act="copy" data-g="${g.id}" title="Copies the photo link to paste into the report">Copy link</button></div>` : ""}
+          ${m.sheetMsg ? `<div class="small muted">${esc(m.sheetMsg)}</div>` : ""}
         </div>
         <div class="gactions">
           ${isLaterSibling ? `<span class="small muted">Goes in the zip with the first set</span>` : `<button class="btn btn-coral" data-act="process" data-g="${g.id}" ${ready?"":"disabled"} title="${ready ? "Renames, watermarks and zips this job's photos, then saves the photo link to the job" : "Needs a job number and postcode first"}" data-hint="${ready ? "Saves the zip and the photo link" : "Needs job number + postcode"}">Process &amp; download zip</button>`}
@@ -1317,13 +1320,30 @@ function downloadBlob(blob, name){
 function saveLinkToJobLog(m){
   if (!m.jobId) return;
   try {
-    const raw = localStorage.getItem(LS_JOBS); if (!raw) return;
-    const jobs = JSON.parse(raw);
-    const j = jobs.find(x => x.id === m.jobId); if (!j) return;
-    j.photoLink = m.link;
-    localStorage.setItem(LS_JOBS, JSON.stringify(jobs));
-    localStorage.setItem("wps_job_log_local_saved_at_v1", new Date().toISOString());   // so the next Sync now keeps the link (11 Oct)
+    const raw = localStorage.getItem(LS_JOBS);
+    const jobs = raw ? JSON.parse(raw) : [];
+    const j = jobs.find(x => x.id === m.jobId);
+    if (j){
+      j.photoLink = m.link; j.updatedAt = new Date().toISOString();
+      localStorage.setItem(LS_JOBS, JSON.stringify(jobs));
+      localStorage.setItem("wps_job_log_local_saved_at_v1", new Date().toISOString());   // so the next Sync now keeps the link (11 Oct)
+      // 20 Oct: also record it as changed on this device, so the dashboard's sync sends it up instead of loading over it
+      try { const d = JSON.parse(localStorage.getItem("wps_job_log_dirty_v1") || "{}"); d.ids = d.ids || {}; d.seq = (d.seq || 0) + 1; d.ids[j.id] = d.seq; d.any = true; localStorage.setItem("wps_job_log_dirty_v1", JSON.stringify(d)); } catch(e){}
+    }
   } catch(e){}
+  // 20 Oct (Keeper): with this device's key, the link goes straight into the Job Log Sheet too, no dashboard needed
+  if (window.WPSLink && WPSLink.key()){
+    WPSLink.savePhotoLink(m.jobNo, m.jobId, m.link).then(d => {
+      if (!d) return;
+      m.sheetMsg = d.ok ? "Photo link saved to the Job Log" + (d.jobNo ? " (" + d.jobNo + ")" : "") + "." : "Photo link kept on this device only: " + (d.error || "no answer") + " The dashboard will send it up on its next sync.";
+      try { render(); } catch(e){}
+    });
+  }
+}
+// 20 Oct (Keeper): with a device key, the job list also comes from the Job Log Sheet (jobs added on another device show here)
+function refreshSheetJobs(){
+  if (!window.WPSLink || !WPSLink.key()) return;
+  WPSLink.sheetJobs().then(sj => { if (!sj) return; S.sheetJobs = sj; loadJobs(); refreshLocations(); try { render(); } catch(e){} });
 }
 async function processAll(){
   const gs = groups();
@@ -1696,6 +1716,8 @@ loadSettings();
 loadJobs();
 wire();
 render();
+refreshSheetJobs();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSheetJobs(); });
 // theme (18 Oct): same setting as the Dashboard
 (function(){
   var sel = document.getElementById("themeSel"); if (!sel) return;

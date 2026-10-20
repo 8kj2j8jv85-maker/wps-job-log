@@ -165,6 +165,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 
 <footer>
   <div class="sum" id="sum"></div>
+  <button class="btn ghost" id="driveBtn" style="display:none" title="Saves these notes in Google Drive > WPS Dictation under the job number, so Claude can read them for the report">Save to Drive</button>
   <button class="btn ghost" id="shareBtn" title="Send the notes to another app, e.g. WhatsApp or email">Share</button>
   <button class="btn primary" id="copyBtn" title="Copies every room, ready to paste into the WPS project chat">Copy for Claude</button>
 </footer>
@@ -208,6 +209,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 
 <div class="toast" id="toast"></div>
 
+<script src="wpslink.js?v=20261020"></script>
 <script>
 (function(){
 'use strict';
@@ -306,11 +308,13 @@ function refreshPlan(j){
   j.plan = {names: doneRooms(p), jobNo: p.jobNo || '', type: p.type, date: p.created};
 }
 // Job details from the Job Log on this device (read only), when the job number matches.
+var sheetJobs = null;   // 20 Oct (Keeper): jobs from the Job Log Sheet, when this device has a key
 function logJob(no){
   no = String(no||'').trim().toUpperCase(); if(!no) return null;
   try{
     var list = JSON.parse(localStorage.getItem('wps_standalone_jobs_v1') || '[]');
-    if(!Array.isArray(list)) return null;
+    if(!Array.isArray(list)) list = [];
+    if(sheetJobs && window.WPSLink) list = WPSLink.merge(list, sheetJobs);
     var hits = list.filter(function(x){ return x && String(x.jobNo||'').trim().toUpperCase() === no; });
     return hits.length === 1 ? hits[0] : null;
   }catch(e){ return null; }
@@ -617,12 +621,32 @@ $('copyBtn').addEventListener('click', function(){
   setTimeout(function(){
     var s = buildOutput(); if(!s){ toast('Nothing dictated yet.'); return; }
     copyText(s).then(function(ok){ toast(ok ? 'Copied. Paste it into the WPS project chat.' : 'Copy failed. Use Share instead.'); });
+    saveToDrive(true);
   }, want ? 400 : 0);
 });
+/* Drive copy (20 Oct, Keeper): with this device's key, the notes are saved as "<job no> - <type> - dictation.txt" in
+   Google Drive > WPS Dictation (replaced each time), so Claude can read them for the report without a paste. */
+function saveToDrive(quiet){
+  if(!window.WPSLink || !WPSLink.key()) return;
+  var j = job(), s = buildOutput();
+  if(!j || !s){ if(!quiet) toast('Nothing dictated yet.'); return; }
+  if(!/^WPS\d{6,}$/i.test(String(j.jobNo||'').trim())){ if(!quiet) toast('Put the WPS job number on this job first (Jobs).'); return; }
+  WPSLink.saveDictation(String(j.jobNo).trim().toUpperCase(), j.type, s).then(function(d){
+    if(!d) return;
+    if(d.ok){ j.driveAt = Date.now(); save(); if(!quiet) toast('Saved to Drive: ' + d.name); }
+    else if(!quiet) toast('Not saved to Drive: ' + (d.error || 'no answer'));
+  });
+}
+$('driveBtn').addEventListener('click', function(){ if(want) stop(); setTimeout(function(){ saveToDrive(false); }, want ? 400 : 0); });
+if(window.WPSLink && WPSLink.key()){
+  $('driveBtn').style.display = '';
+  WPSLink.sheetJobs().then(function(sj){ if(sj){ sheetJobs = sj; var j = job(); if(j && fillFromLog(j)){ save(); render(); } } });
+}
 $('shareBtn').addEventListener('click', function(){
   if(want) stop();
   var s = buildOutput(); if(!s){ toast('Nothing dictated yet.'); return; }
   var j = job();
+  saveToDrive(true);
   if(navigator.share){ navigator.share({title:'WPS dictation ' + (j.jobNo||''), text:s}).catch(function(){}); }
   else copyText(s).then(function(){ toast('Sharing not available here, so it was copied instead.'); });
 });
