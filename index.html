@@ -3058,6 +3058,9 @@ function windowRow(x, now){
     <div class="sub">${started} · ${line}</div>${rem}</div>
     <span class="due ${cls}" style="white-space:nowrap">${tag}</span></div>`;
 }
+// 20 Oct (Lex): Winkworth check-outs normally have no tenants present, so Lex does them any time on the booked
+// (end-of-tenancy) date, or the next day if keys come back late. A dated one needs no agreed time.
+function anyTimeOK(j){ return j.type === "CO" && !!j.date && /^winkworth/i.test(String(j.client||"").trim()); }
 function rrBtn(j){ return `<button class="d-mv" onclick="openRearrange('${j.id}')"${tip("Visit didn't happen. Set a new date, or send it to Times to agree, and open an email to the tenant.")}>Rearrange</button>`; }
 function cRow(j, opts){
   opts = opts || {};
@@ -3133,7 +3136,7 @@ function renderToday(){
   const unpaid = live.filter(j => j.invoice === "invoiced").sort(byTime);
   if (!state.amend && (keyMode() || (state.gcalToken && state.sheetsOk && Date.now() < state.gcalTokenExpiry - 60000))) setTimeout(loadAmendments, 0);
   const now = new Date();
-  const timesToAgree = active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
+  const timesToAgree = active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today) && !anyTimeOK(j)).sort(byTime);
   const photosMissing = active.filter(j => ["processing","completed"].includes(j.status) && !j.photoLink && visitTime(j) && visitTime(j) <= now && visitTime(j) > addDays(now, -30)).sort(byTime);
   const windows = live.filter(j => j.type==="ICI" && j.sentAt && j.status!=="archived").map(j => ({ j, closes: windowClose(j), st: windowState(j) }))
     .filter(x => x.st==="open" || x.st==="hold" || x.st==="due" || x.closes > addDays(now, -7)).sort((a,b) => a.closes - b.closes);
@@ -3536,7 +3539,7 @@ function mapJobs(){
   const today = isoToday(0), r = mapRange();
   const active = state.jobs.filter(j => j.status !== "archived");
   const byTime = (a,b) => ((a.date||"9")+(a.time||"99")).localeCompare((b.date||"9")+(b.time||"99"));
-  if (r === "times") return active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today)).sort(byTime);
+  if (r === "times") return active.filter(j => j.status==="booked" && !j.time && (!j.date || j.date >= today) && !anyTimeOK(j)).sort(byTime);
   const end = isoToday(r === "30" ? 30 : 7);
   return active.filter(j => j.date && j.date >= today && j.date <= end).sort(byTime);
 }
