@@ -1073,6 +1073,8 @@ function normalizeClients(arr){
     : Object.assign({ name:x.name||"", contactName:x.contactName||"", contactPhone:x.contactPhone||"", contactEmail:x.contactEmail||"" },
         x.prices && typeof x.prices === "object" ? { prices: x.prices } : {},
         x.checkinWay === "ask" || x.checkinWay === "agent" ? { checkinWay: x.checkinWay } : {},
+        x.checkoutWay === "ask" || x.checkoutWay === "none" ? { checkoutWay: x.checkoutWay } : {},
+        x.clientKind === "agent" || x.clientKind === "landlord" ? { clientKind: x.clientKind } : {},
         x.checkinLead !== undefined && x.checkinLead !== "" && !isNaN(Number(x.checkinLead)) ? { checkinLead: Number(x.checkinLead) } : {})
   ).filter(c=>c.name);
   return out.length ? out : null;
@@ -2065,12 +2067,38 @@ function findClientLoose(name){
   return state.clients.find(c=>c.name.toLowerCase().replace(/[^a-z]/g,"")===low)
       || state.clients.find(c=>{ const k=c.name.toLowerCase().replace(/[^a-z]/g,""); return k && (k.includes(low)||low.includes(k)); }) || null;
 }
+// Letting agent or private landlord (Lex, 21 Oct: private landlords get the same tenant emails, copied in).
+// Same rule as the WPS script (CheckinSend csKind_): a saved setting wins, else agency-sounding names are agents.
+const AGENT_NAME_RE = /winkworth|mcqueens|move\s*lettings|jags|chestertons|felicity|keller|lettings?|estates?|propert(y|ies)|homes|residential|agents?|\bltd\b|limited|group|partners/i;
+function clientKind(clientName){
+  const c = findClientLoose(clientName);
+  if (c && (c.clientKind === "agent" || c.clientKind === "landlord")) return c.clientKind;
+  const n = String((c && c.name) || clientName || "").trim();
+  if (!n) return "agent";
+  return AGENT_NAME_RE.test(n) ? "agent" : "landlord";
+}
 function checkinWay(clientName){
   const c = findClientLoose(clientName);
   if (c && (c.checkinWay === "ask" || c.checkinWay === "agent")) return c.checkinWay;
   const n = String((c && c.name) || clientName || "");
-  if (/mcqueens|move\s*lettings|jags/i.test(n)) return "ask";    // starting values from how Lex works (20 Oct); change per agent
-  if (/^winkworth/i.test(n)) return "agent";
+  if (/mcqueens|move\s*lettings|jags|^winkworth/i.test(n)) return "ask";    // starting values (20 Oct); Winkworth tenants choose from 21 Oct (Manny)
+  if (n && clientKind(clientName) === "landlord") return "ask";
+  return "";
+}
+// Check-outs (Lex, 21 Oct): "ask" = email the tenants 7 days before for the time they'll be out and ready (Move
+// Lettings, private landlords); "none" = nobody there, go any time that day (Winkworth); "" = not set, agreed by hand.
+// Same rule as the WPS script (CheckinSend csCoWay_).
+const CHECKOUT_WAYS = {
+  ask:  "Ask the tenants for a time (email 7 days before)",
+  none: "Nobody there. Go any time that day",
+};
+function checkoutWay(clientName){
+  const c = findClientLoose(clientName);
+  if (c && (c.checkoutWay === "ask" || c.checkoutWay === "none")) return c.checkoutWay;
+  const n = String((c && c.name) || clientName || "");
+  if (/^winkworth/i.test(n)) return "none";
+  if (/move\s*lettings/i.test(n)) return "ask";
+  if (n && clientKind(clientName) === "landlord") return "ask";
   return "";
 }
 function checkinLead(clientName){
@@ -2078,15 +2106,43 @@ function checkinLead(clientName){
   return c && c.checkinLead !== "" && c.checkinLead != null && n >= 0 && n <= 240 ? Math.round(n) : CHECKIN_LEAD_DEFAULT;
 }
 function leadText(mins){ const h = Math.floor(mins/60), m = mins%60; return (h ? h+" hr"+(m ? " " : "") : "")+(m ? m+" min" : "") || "0 min"; }
-function setCheckinWay(clientName, way, lead){
+function setCheckinWay(clientName, way, lead, coWay, kind){
   if (!clientName || !(way === "ask" || way === "agent")) return;
   let c = findClientLoose(clientName);
   if (!c){ c = { name: clientName, contactName:"", contactPhone:"", contactEmail:"" }; state.clients.push(c); }
   c.checkinWay = way;
+  if (coWay === "ask" || coWay === "none") c.checkoutWay = coWay;
+  if (kind === "agent" || kind === "landlord") c.clientKind = kind;
   if (lead != null && lead !== "" && Number(lead) >= 0 && Number(lead) <= 240) c.checkinLead = Math.round(Number(lead));
   saveClients();
 }
-function needsTenantTime(j){ return !!j && j.type === "ICI" && j.status === "booked" && !!j.date && !j.time && checkinWay(j.client) === "ask"; }
+function asksTenants(j){ return !!j && ((j.type === "ICI" && checkinWay(j.client) === "ask") || (j.type === "CO" && checkoutWay(j.client) === "ask")); }
+function needsTenantTime(j){ return !!j && j.status === "booked" && !!j.date && !j.time && asksTenants(j); }
+// Check-outs: the agreed time is the visit time (the tenants hand over the keys as you arrive), so no lead time.
+function visitLead(j){ return j && j.type === "CO" ? 0 : checkinLead(j && j.client); }
+// 7-day tenant contact (Lex, 21 Oct): where a job asking the tenants for a time stands, from the Check-in emails log.
+//   early (more than 7 days to go, not asked) - nothing on Do next yet; details - no tenant emails on the job;
+//   ask (7 days or less, not asked); wait; chase (4 days or less, no reply, asked over 20 h ago); waitChase; call
+//   (chaser sent, still nothing, 2 days or less or a day since the chaser); replied.
+const TT_ASK_DAYS = 7, TT_CHASE_DAYS = 4, TT_CALL_DAYS = 2;
+function ttDaysTo(j, now){ const t = new Date(isoToday(0)+"T00:00:00"), d = new Date(j.date+"T00:00:00"); return Math.round((d - t) / 86400000); }
+function ciChasedAt(j){
+  const hit = ciLogRows(j.jobNo).filter(r => r.kind === "chaser" && r.status === "Sent" && (!j.date || r.key === "chaser|"+j.date)).sort((a,b) => String(b.at).localeCompare(String(a.at)))[0];
+  return hit ? hit.at : (j.tenantsChasedAt || "");
+}
+function ttStage(j, now){
+  now = now || new Date();
+  const days = ttDaysTo(j, now);
+  if (ciReplyAt(j)) return { stage:"replied", days };
+  const asked = ciAskedAt(j);
+  if (!asked){
+    if (!cleanEmails(j.tenantEmails)) return { stage: days <= TT_ASK_DAYS ? "details" : "early", days };
+    return { stage: days <= TT_ASK_DAYS ? "ask" : "early", days };
+  }
+  const chased = ciChasedAt(j);
+  if (!chased) return { stage: days <= TT_CHASE_DAYS && now - new Date(asked) >= 20*3600000 ? "chase" : "wait", days, asked };
+  return { stage: days <= TT_CALL_DAYS || now - new Date(chased) >= 24*3600000 ? "call" : "waitChase", days, asked, chased };
+}
 function ciAgentEmail(j){ const c = findClientLoose(j.client); return cleanEmails(j.agentEmail) || (c ? cleanEmails(c.contactEmail) : ""); }
 function ciAgentWho(j){
   const first = s => String(s||"").trim().split(/\s+/)[0] || "";
@@ -2108,7 +2164,7 @@ function ciNoteFor(j, kind){ return j && j.ciNote && j.ciNoteFor === kind+"|"+j.
 function ciAuto(){ return keyMode(); }
 function ciToggleHtml(){ return ""; }
 const CI_NEED_KEY = "Tenant emails are sent by the WPS script, which needs this device's key (More > Device key). Nothing was sent.";
-const CI_KIND_WORDS = { ask:"Email asking the tenants for their time", confirm:"Confirmation email", propose:"Email suggesting your time" };
+const CI_KIND_WORDS = { ask:"Email asking the tenants for their time", chaser:"Chaser asking the tenants for their time", confirm:"Confirmation email", propose:"Email suggesting your time" };
 async function ciAutoSend(j, kind){
   if (!keyMode()){ showActionBar("Not sent: "+CI_NEED_KEY); return; }
   state.ciBusy = j.id; render();
@@ -2127,9 +2183,10 @@ async function ciAutoSend(j, kind){
     if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
     const when = new Date();
     if (kind === "ask") j.tenantsAskedAt = when.toISOString();
+    if (kind === "chaser") j.tenantsChasedAt = when.toISOString();
     ciAddNote(j, CI_KIND_WORDS[kind]+" sent by the dashboard "+ciDay(when)+" "+pad2(when.getHours())+":"+pad2(when.getMinutes())+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+".");
     saveJobs();
-    showActionBar("Sent: "+CI_KIND_WORDS[kind].toLowerCase()+(d.cc ? " (agent copied in)" : "")+".");
+    showActionBar("Sent: "+CI_KIND_WORDS[kind].toLowerCase()+(d.cc ? " ("+(clientKind(j.client) === "landlord" ? "landlord" : "agent")+" copied in)" : "")+".");
   } catch(e){ err = String(e && e.message || e); }
   state.ciBusy = null; render();
   if (err) showActionBar("Not sent: "+err+". Nothing went to the tenants; fix it and press the button again.");
@@ -2147,16 +2204,28 @@ function askTenantsTime(id, w){
   const j = state.jobs.find(x=>x.id===id); if (!j) return;
   return ciAutoSend(j, "ask");
 }
+function chaseTenants(id){ const j = state.jobs.find(x=>x.id===id); if (j) return ciAutoSend(j, "chaser"); }
+function ciChaseBtn(j){
+  if (state.ciBusy === j.id) return `<span class="c-dim">Sending…</span>`;
+  return `<button class="d-mv sl-ok" onclick="chaseTenants('${j.id}')"${tip("Sends the tenants a short reminder now (navy look, from hello@): we still need your time. "+ciCopyWho(j)+" copied in. Once only.")}>Send chaser</button>`;
+}
+function ciCopyWho(j){ return clientKind(j.client) === "landlord" ? "Landlord" : "Agent"; }
 function ciAskBtn(j){
   const again = !!ciAskedAt(j);
   if (state.ciBusy === j.id) return `<span class="c-dim">Sending…</span>`;
   return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}')"${tip(again ? "Sends the same email again now (navy look, from hello@), to chase the tenants. Agent copied in." : "Sends the tenants an email now (navy look, from hello@) asking what time they'll arrive. Agent copied in.")}>${again ? "Send again" : "Send to tenants"}</button>`;
 }
-function ciArrivalBtn(j, where){ return `<button class="d-mv" onclick="openArrival('${j.id}','${where||"dn"}')"${tip("The tenants have told you their arrival time. Puts your visit time on the job and the calendar.")}>Set arrival time</button>`; }
+function ciArrivalBtn(j, where){ const co = j.type === "CO"; return `<button class="d-mv" onclick="openArrival('${j.id}','${where||"dn"}')"${tip(co ? "The tenants have told you when they'll be out and ready. Puts that time on the job and the calendar." : "The tenants have told you their arrival time. Puts your visit time on the job and the calendar.")}>${co ? "Set the time" : "Set arrival time"}</button>`; }
 function ciDay(d){ return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
 function ciRowText(j){
   const rp = ciReplyAt(j); if (rp){ const d = new Date(rp); return "Tenants replied "+ciDay(d)+" "+pad2(d.getHours())+":"+pad2(d.getMinutes()); }
-  const a = ciAskedAt(j); return a ? "Waiting for tenants' time (asked "+ciDay(new Date(a))+")" : "Ask tenants what time they'll arrive"; }
+  const a = ciAskedAt(j), c = ciChasedAt(j);
+  if (c) return "Waiting for tenants' time (asked "+ciDay(new Date(a || c))+", chased "+ciDay(new Date(c))+")";
+  if (a) return "Waiting for tenants' time (asked "+ciDay(new Date(a))+")";
+  const st = ttStage(j), from = new Date(j.date+"T00:00:00"); from.setDate(from.getDate() - TT_ASK_DAYS);
+  if (st.stage === "early") return (j.type === "CO" ? "Ask tenants when they'll be out" : "Ask tenants what time they'll arrive")+" (from "+ciDay(from)+")";
+  if (st.stage === "details") return "No tenant emails yet: get them from "+(clientKind(j.client) === "landlord" ? "the landlord" : (String(j.client||"").replace(/\s*-\s*.*$/, "") || "the agent"));
+  return j.type === "CO" ? "Ask tenants when they'll be out and ready" : "Ask tenants what time they'll arrive"; }
 // Tenant emails log (Lex, 20 Oct): the script's "Check-in emails" tab is the record of what went to tenants.
 // The dashboard reads it on every check, so a send shows here even if this browser lost its own note.
 function ciLogRows(jobNo){ const rows = (state.ciLog && state.ciLog.rows) || []; const k = normJobNo(jobNo||""); return k ? rows.filter(r => normJobNo(r.job) === k) : []; }
@@ -2168,7 +2237,7 @@ function ciAskedAt(j){
 // Lex (20 Oct): a refused send is only a problem if that job never got that email. A second click on an email
 // that already went (refused as a repeat) is shown grey as "not sent again", never as a problem.
 function ciLogDup(r){ return r.status !== "Sent" && r.kind !== "reply" && ciLogRows(r.job).some(x => x.status === "Sent" && x.kind === r.kind); }
-const CI_LOG_WORDS = { ask:"Asked for their time", confirm:"Time confirmed", propose:"New time suggested", reply:"Tenant replied" };
+const CI_LOG_WORDS = { ask:"Asked for their time", chaser:"Chaser sent", confirm:"Time confirmed", propose:"New time suggested", reply:"Tenant replied" };
 // 20 Oct (Keeper): latest tenant reply after our latest email to them, or "".
 function ciReplyAt(j){
   const rows = ciLogRows(j.jobNo), ours = rows.filter(r => r.status === "Sent").map(r => r.at).sort().pop() || "";
@@ -2212,21 +2281,21 @@ function arrivalPreview(id, from){
   if (!j || !el || !a || !t) return;
   if (from === "asked" && !t.dataset.touched) t.value = a.value;
   if (from === "time") t.dataset.touched = "1";
-  const lead = checkinLead(j.client), you = minusMins(t.value, lead), diff = a.value && t.value && a.value !== t.value;
-  el.innerHTML = (you ? esc("You'll be booked in at "+you+" ("+leadText(lead)+" before, to park and take the photos).") : "")
+  const lead = visitLead(j), you = minusMins(t.value, lead), diff = a.value && t.value && a.value !== t.value;
+  el.innerHTML = (you ? esc(j.type === "CO" ? "You'll be booked in at "+you+", when they hand over the keys." : "You'll be booked in at "+you+" ("+leadText(lead)+" before, to park and take the photos).") : "")
     + (diff ? `<div class="ci-diff">${esc("Different from what they asked, so the email asks them if "+t.value+" works instead.")}</div>` : "");
-  if (lb) lb.textContent = "Send " + (diff ? "an email asking the tenants if "+t.value+" works" : "a confirmation email to the tenants") + " now" + (ciAgentEmail(j) ? " (agent copied in)" : "");
+  if (lb) lb.textContent = "Send " + (diff ? "an email asking the tenants if "+t.value+" works" : "a confirmation email to the tenants") + " now" + (ciAgentEmail(j) ? " ("+ciCopyWho(j).toLowerCase()+" copied in)" : "");
 }
 function arrivalBox(j, where){
   if (state.arrivalId !== j.id || (state.arrivalWhere || "dn") !== (where || "dn")) return "";
   return `<div class="rr-box" id="arr_box">
-    <div class="rr-t">${esc(j.jobNo||"")}: tenants' arrival time</div>
+    <div class="rr-t">${esc(j.jobNo||"")}: ${j.type === "CO" ? "time the tenants will be out and ready" : "tenants' arrival time"}</div>
     <div class="rr-f"><label>Tenants asked for<input type="time" id="arr_asked" value="${esc(j.tenantAsked||"")}" oninput="arrivalPreview('${j.id}','asked')"></label><label>Confirm them for<input type="time" id="arr_time" value="${esc(j.tenantArrival||"")}"${j.tenantArrival ? ' data-touched="1"' : ""} oninput="arrivalPreview('${j.id}','time')"></label></div>
     <div class="c-dim" style="font-size:12px">Change "Confirm them for" if their time doesn't work for you.</div>
     <div id="arr_you" class="c-dim" style="margin-top:4px"></div>
     <label class="rr-note">Extra line for the tenants (optional)<textarea id="arr_note" rows="2" maxlength="${CI_NOTE_MAX}" placeholder="e.g. If your flight is delayed, just reply to this email and we'll adjust the time."></textarea></label>
     ${keyMode() ? "" : `<div class="ci-plain">${esc(CI_NEED_KEY.replace(" Nothing was sent.", ""))}</div>`}
-    <label class="rr-chk"><input type="checkbox" id="arr_email" checked> <span id="arr_email_lbl">${"Send a confirmation email to the tenants now"}${ciAgentEmail(j) ? " (agent copied in)" : ""}</span></label>
+    <label class="rr-chk"><input type="checkbox" id="arr_email" checked> <span id="arr_email_lbl">${"Send a confirmation email to the tenants now"}${ciAgentEmail(j) ? " ("+ciCopyWho(j).toLowerCase()+" copied in)" : ""}</span></label>
     <div class="rr-b"><button class="btn btn-coral btn-sm" onclick="saveArrival('${j.id}')">Save</button><button class="btn btn-ghost btn-sm" onclick="closeArrival()">Cancel</button></div>
   </div>`;
 }
@@ -2238,7 +2307,7 @@ function saveArrival(id){
   const kind = asked && asked !== t ? "propose" : "confirm";
   const note = ciNoteClean((document.getElementById("arr_note")||{}).value);
   if (note && ciNoteBad(note)){ alert("The extra line can't have links, web addresses or WhatsApp in it (replies need to come by email)."); return; }
-  const before = snapJob(j), lead = checkinLead(j.client);
+  const before = snapJob(j), lead = visitLead(j);
   j.tenantAsked = asked || t;
   j.tenantArrival = t;
   j.time = minusMins(t, lead);
@@ -2246,14 +2315,15 @@ function saveArrival(id){
   if (kind === "propose"){ j.tenantTimeProposed = true;
     ciAddNote(j, "Tenants asked for "+asked+"; suggested "+t+" instead ("+ciDay(new Date())+"). Waiting for them to agree. Booked in at "+j.time+" for now."); }
   else { delete j.tenantTimeProposed;
-    ciAddNote(j, "Tenants arriving "+t+" (agreed "+ciDay(new Date())+"). Booked in at "+j.time+" to park and take the photos first."); }
+    ciAddNote(j, j.type === "CO" ? "Tenants out and ready "+t+" (agreed "+ciDay(new Date())+"). Booked in at "+j.time+"."
+      : "Tenants arriving "+t+" (agreed "+ciDay(new Date())+"). Booked in at "+j.time+" to park and take the photos first."); }
   state.arrivalId = null;
   saveJobs(); render();
   if (state.gcalConnected) syncJobToCalendar(j);
   showUndo((j.jobNo||"Job")+(kind === "propose" ? ": suggested "+t+" (they asked "+asked+"), you "+j.time : ": tenants "+t+", you "+j.time), before);
   if (wantEmail) ciAutoSend(j, kind);
 }
-function needsTenantAgree(j){ return !!j && j.type === "ICI" && j.status === "booked" && !!j.tenantTimeProposed && !!j.date && j.date >= isoToday(0) && checkinWay(j.client) === "ask"; }
+function needsTenantAgree(j){ return !!j && j.status === "booked" && !!j.tenantTimeProposed && !!j.date && j.date >= isoToday(0) && asksTenants(j); }
 // Setting on the agent (job form, and the booking card when it isn't set yet)
 function ciSettingLine(clientName){
   const way = checkinWay(clientName), lead = checkinLead(clientName);
@@ -2261,6 +2331,7 @@ function ciSettingLine(clientName){
        : way === "agent" ? CHECKIN_WAYS.agent+"."
        : "Not set yet.";
 }
+function coSettingLine(clientName){ const w = checkoutWay(clientName); return w ? CHECKOUT_WAYS[w]+"." : "Not set yet (times agreed by hand)."; }
 function renderCheckinSetting(clientName){
   if (!clientName) return "";
   if (state.ciEditing === clientName){
@@ -2270,18 +2341,25 @@ function renderCheckinSetting(clientName){
       <label class="ci-opt"><input type="radio" name="ci_way" value="ask"${way==="ask"?" checked":""}> ${esc(CHECKIN_WAYS.ask)}</label>
       <label class="ci-opt" style="margin-left:22px">Book me in <input type="number" id="ci_lead" min="0" max="240" step="5" value="${lead}" style="width:64px"> minutes before the tenants arrive</label>
       <label class="ci-opt"><input type="radio" name="ci_way" value="agent"${way==="agent"?" checked":""}> ${esc(CHECKIN_WAYS.agent)}</label>
+      <div class="ci-t" style="margin-top:8px">Check-outs</div>
+      <label class="ci-opt"><input type="radio" name="co_way" value="ask"${checkoutWay(clientName)==="ask"?" checked":""}> ${esc(CHECKOUT_WAYS.ask)}</label>
+      <label class="ci-opt"><input type="radio" name="co_way" value="none"${checkoutWay(clientName)==="none"?" checked":""}> ${esc(CHECKOUT_WAYS.none)}</label>
+      <div class="ci-t" style="margin-top:8px">${esc(clientName)} is</div>
+      <label class="ci-opt"><input type="radio" name="cl_kind" value="agent"${clientKind(clientName)==="agent"?" checked":""}> A letting agent</label>
+      <label class="ci-opt"><input type="radio" name="cl_kind" value="landlord"${clientKind(clientName)==="landlord"?" checked":""}> A private landlord (copied in on tenant emails; check-out fee line names the landlord)</label>
       <div class="agent-contact-actions"><button class="btn btn-coral btn-sm" onclick="saveCheckinSetting()">Save</button><button class="btn btn-ghost btn-sm" onclick="state.ciEditing=null;render()">Cancel</button></div>
     </div>`;
   }
-  return `<div class="agent-contact-line ci-line"><span class="c-dim">Check-ins:</span> ${esc(ciSettingLine(clientName))} <button class="btn-text" onclick="editCheckinSetting()">Change</button></div>`;
+  return `<div class="agent-contact-line ci-line"><span class="c-dim">Check-ins:</span> ${esc(ciSettingLine(clientName))} <span class="c-dim">Check-outs:</span> ${esc(coSettingLine(clientName))}${clientKind(clientName) === "landlord" ? ` <span class="c-dim">(private landlord)</span>` : ""} <button class="btn-text" onclick="editCheckinSetting()">Change</button></div>`;
 }
 function editCheckinSetting(){ if (typeof captureFormValues === "function" && state.editing) captureFormValues(); state.ciEditing = state.editing && state.editing.client; render(); }
 function saveCheckinSetting(){
   const name = state.ciEditing; if (!name) return;
   const r = document.querySelector('input[name="ci_way"]:checked'); if (!r){ alert("Pick one of the two options."); return; }
   const lead = (document.getElementById("ci_lead")||{}).value;
+  const co = document.querySelector('input[name="co_way"]:checked'), kd = document.querySelector('input[name="cl_kind"]:checked');
   if (state.editing) captureFormValues();
-  setCheckinWay(name, r.value, lead);
+  setCheckinWay(name, r.value, lead, co ? co.value : "", kd ? kd.value : "");
   state.ciEditing = null; render();
 }
 
@@ -4272,7 +4350,7 @@ function windowRow(x, now){
 }
 // 20 Oct (Lex): Winkworth check-outs normally have no tenants present, so Lex does them any time on the booked
 // (end-of-tenancy) date, or the next day if keys come back late. A dated one needs no agreed time.
-function anyTimeOK(j){ return (j.type === "CO" && !!j.date && /^winkworth/i.test(String(j.client||"").trim()))
+function anyTimeOK(j){ return (j.type === "CO" && !!j.date && checkoutWay(j.client) === "none")   // 21 Oct: Winkworth by default, set per client
   || (j.type === "ICI" && !!j.date && checkinWay(j.client) === "agent"); }   // 20 Oct: agents set to "agent gives the date"
 function rrBtn(j){ return `<button class="d-mv" onclick="openRearrange('${j.id}')"${tip("Visit didn't happen. Set a new date, or send it to Times to agree, and open an email to the tenant.")}>Rearrange</button>`; }
 function cRow(j, opts){
@@ -4508,6 +4586,20 @@ function renderToday(){
     if (j && j.parkedAt){ if (!dnParked.includes(j)) dnParked.push(j); return; }
     dn.push({ rank, tone, what, j, acts: acts || "", i: dn.length });
   };
+  // 7-day tenant contact (Lex, 21 Oct): cards appear 7 days before (ask), 4 days before (chaser), then call.
+  const dnTenantTime = j => {
+    const st = ttStage(j, now), set = ciArrivalBtn(j, "dn"), co = j.type === "CO";
+    const phones = String(j.tenantPhones || tenantPhonesText(j.tenantList) || "").trim();
+    const who = clientKind(j.client) === "landlord" ? "the landlord" : (String(j.client||"").replace(/\s*-\s*.*$/, "") || "the agent");
+    const left = st.days === 1 ? "1 day to go" : st.days+" days to go";
+    if (st.stage === "replied") return dnAdd(35, "warn", ciRowText(j), j, set+ciAskBtn(j));
+    if (st.stage === "early") return;   // nothing yet: it shows in Times to agree with the date the card will appear
+    if (st.stage === "details") return dnAdd(55, "warn", "No tenant emails: get them from "+who+" ("+left+")", j, `<button class="d-mv" onclick="openEdit('${j.id}')">Open job</button>`);
+    if (st.stage === "ask") return dnAdd(50, "warn", (co ? "Ask tenants when they'll be out and ready" : "Ask tenants what time they'll arrive")+" ("+left+")", j, ciAskBtn(j)+set);
+    if (st.stage === "chase") return dnAdd(52, "warn", "No reply yet ("+left+"): send the chaser", j, ciChaseBtn(j)+set);
+    if (st.stage === "call") return dnAdd(48, "late", "Still no reply ("+left+"): call the tenants"+(phones ? " on "+phones : ""), j, set);
+    return dnAdd(78, "", ciRowText(j), j, set);
+  };
   const dnRr = j => `<button class="d-mv" onclick="dnRearrange('${j.id}')"${tip("Visit didn't happen. Opens Rearrange in the Reports due list under the tiles.")}>Rearrange</button>`;
   const dueSoon = due.filter(x => !x.d.late && x.d.due - now < 24*3600000);
   const remindDue = windows.filter(x => x.st==="open" && needsManualReminder(x.j, now));
@@ -4533,7 +4625,7 @@ function renderToday(){
   active.filter(j => keysOut(j, now)).forEach(j => dnAdd(45, "warn", "Keys not returned: "+(keysLabel(KEYS_BACK, j.keysBack).toLowerCase())+(j.keysBackNote ? " ("+j.keysBackNote+")" : ""), j,
     `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
-    if (needsTenantTime(j)){ const rp = ciReplyAt(j); dnAdd(rp ? 35 : 75, rp || !ciAskedAt(j) ? "warn" : "", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
+    if (needsTenantTime(j)){ dnTenantTime(j); return; }
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Shows the navy email with the tenant's own slot link (from hello@), then you press Send")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   active.filter(needsTenantAgree).forEach(j => dnAdd(76, "", "Suggested "+j.tenantArrival+", waiting for tenants to agree (they asked "+j.tenantAsked+")", j, ciArrivalBtn(j, "dn")));
@@ -4763,7 +4855,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#86)";
+const BUILD = "21 Oct 2026 (#87)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
