@@ -1697,23 +1697,7 @@ function contactsToRows(){
   return [["Name","Email","Client","Data (do not edit)"]].concat(state.contacts.map(c => [c.name, c.email, c.client, JSON.stringify(c)]));
 }
 
-function reminderUrl(j){
-  const c = windowClose(j);
-  const when = c ? c.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}) : "[date]";
-  const re = j.reissuedAt ? " (re-issued version)" : "";
-  const su = "Reminder: "+(j.jobNo||"")+" - Inventory and Check In - "+fullAddress(j)+" - comments close "+(c ? c.toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "");
-  const body = "Hi [first name],\n\n"
-    + "Just a reminder that the 7-day window for comments on the Inventory and Check In report"+re+" for "+fullAddress(j)+" closes on "+when+".\n\n"
-    + (j.reissuedAt ? "This covers the items we changed in the re-issued report only.\n\n" : "")
-    + "If you find anything not recorded in the report, or disagree with anything in it, please use our comments form: open the report and click \"click here to open our comments form\" (page 8, or the Please note page near the end). You will need the job number at the top of the report and the item numbers.\n\n"
-    + "If we don't hear from you by then, the report will be deemed agreed by all parties.\n\nKind regards,";
-  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"+(j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")+"&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
-}
-function sendReminder(id){
-  const j = state.jobs.find(x=>x.id===id); if (!j) return;
-  window.open(reminderUrl(j), "_blank", "noopener");
-  markReminder(id, true);
-}
+function sendReminder(id){ openMsBox(id, "reminder"); }   // 21 Oct: navy email from hello@ via the script (file MailSend)
 function markReminder(id, on){
   const j = state.jobs.find(x=>x.id===id); if (!j) return;
   if (on) j.reminderAt = new Date().toISOString(); else delete j.reminderAt;
@@ -1973,7 +1957,7 @@ function submitForm(){
   let rrOffer = false;
   if (prev.rearrangePending && saved.date){ delete saved.rearrangePending; rrOffer = true; }
   saveJobs();
-  if (rrOffer) setTimeout(() => showActionBar((saved.jobNo||"Job")+" new date saved.", "Write confirmation email", () => window.open(rearrangeEmailUrl(saved, "confirm"), "_blank", "noopener")), 0);
+  if (rrOffer) setTimeout(() => showActionBar((saved.jobNo||"Job")+" new date saved.", "Email the tenant", () => openMsBox(saved.id, "rearrange-confirm")), 0);
   if (state.fromQueueId){ markQueueDone(state.fromQueueId, "added"); state.fromQueueId = null; }
   state.editing = null;
   if (!navReturn.id) navReturn.id = saved.id;   // a new job: highlight it if it's on screen
@@ -2053,7 +2037,7 @@ function markVisited(id){
 //           to park and photograph. The tenant email copies the agent in so nobody repeats themselves.
 //   "agent" the agent gives the date and Lex goes any time that day (Winkworth).
 //   ""      not set yet: the booking card asks once, then it's saved on the agent.
-// Nothing is sent from here: emails open in Gmail for Lex to check and send.
+// 21 Oct: every tenant email is sent by the WPS script in the navy look (file CheckinSend). Nothing opens in Gmail.
 const CHECKIN_WAYS = {
   ask:   "Tenants choose the time. You email them, the agent is copied in",
   agent: "The agent gives the date. You go any time that day",
@@ -2094,20 +2078,6 @@ function ciAgentWho(j){
   const firm = String(j.client||"").replace(/\s*-\s*.*$/, "");
   return person && firm ? person+" at "+firm : (firm || "your letting agent");
 }
-function ciEmailUrl(j, su, body){
-  const cc = ciAgentEmail(j);
-  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
-    + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
-    + (cc ? "&cc="+encodeURIComponent(cc) : "")
-    + "&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
-}
-function ciAskEmailUrl(j){
-  const addr = fullAddress(j) || "[full address]", day = rrLongDay(j.date) || "[date]";
-  return ciEmailUrl(j, "Check-in - "+addr+" - "+day,
-    "Dear "+rrTenantNames(j)+",\n\nWe are carrying out your inventory and check-in at\n\n"+addr+"\n\non "+day+", arranged by "+ciAgentWho(j)+(ciAgentEmail(j) ? " (copied in)" : "")+".\n\n"
-    + "What time would you like to arrive at the property that day? Our clerk will meet you there, go through the check-in with you and hand over the keys. Just reply to this email with a time.\n\n"
-    + "Kind regards,");
-}
 // Extra line for the tenants (Lex, 20 Oct): typed in Set arrival time, saved on the job with the email it belongs to
 // (ciNoteFor = "kind|date|time"), so it only ever goes in that one email. The WPS script (CheckinSend) puts the same
 // line into the navy email. No links and no WhatsApp (replies must come by email).
@@ -2115,36 +2085,15 @@ const CI_NOTE_MAX = 300;
 function ciNoteClean(s){ return String(s||"").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, CI_NOTE_MAX); }
 function ciNoteBad(s){ return /whatsapp|wa\.me|https?:|www\./i.test(s); }
 function ciNoteFor(j, kind){ return j && j.ciNote && j.ciNoteFor === kind+"|"+j.date+"|"+j.tenantArrival ? j.ciNote : ""; }
-function ciConfirmEmailUrl(j){
-  const addr = fullAddress(j) || "[full address]";
-  return ciEmailUrl(j, "Check-in - "+addr+" - confirmed",
-    "Dear "+rrTenantNames(j)+",\n\nThank you. Your check-in at\n\n"+addr+"\n\nis confirmed for "+rrLongDay(j.date)+" at "+(j.tenantArrival||j.time)+". Our clerk will meet you at the property then.\n\n"
-    + (ciNoteFor(j,"confirm") ? ciNoteFor(j,"confirm")+"\n\n" : "")
-    + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,");
-}
-function ciProposeEmailUrl(j){
-  const addr = fullAddress(j) || "[full address]", day = rrLongDay(j.date);
-  return ciEmailUrl(j, "Check-in - "+addr+" - "+day+" at "+j.tenantArrival+"?",
-    "Dear "+rrTenantNames(j)+",\n\nThank you for letting us know. "+j.tenantAsked+" doesn't quite work for us on "+day+". Could we make it "+j.tenantArrival+" instead?\n\n"
-    + (ciNoteFor(j,"propose") ? ciNoteFor(j,"propose")+"\n\n" : "")
-    + "Please reply to confirm, or suggest another time.\n\nKind regards,");
-}
-// "Send emails for me" (20 Oct, Lex): per device. Off = emails open in Gmail for Lex to send. On = the WPS script
-// sends them straight away (file CheckinSend: fixed wording, built from the job in the Job Log, with checks).
-// Needs the device key, because the script is reached with it.
-const LS_CI_AUTO = "wps_ci_autosend_v1";
-function ciAuto(){ return keyMode() && lsGet(LS_CI_AUTO) === "1"; }
-function ciToggleAuto(){
-  if (!keyMode()){ alert("Sending for you needs this device's key (More > Device key). Until then emails open in Gmail."); return; }
-  lsSet(LS_CI_AUTO, ciAuto() ? "0" : "1"); render();
-  showActionBar(ciAuto() ? "Send emails for me is ON on this device: check-in emails to tenants go straight out." : "Send emails for me is OFF on this device: emails open in Gmail for you to send.");
-}
-function ciToggleHtml(){
-  const on = ciAuto();
-  return `<button class="ci-auto ${on ? "on" : ""}" onclick="ciToggleAuto()"${tip(on ? "ON: check-in emails to tenants are sent straight away by the WPS script. Click to turn off (emails then open in Gmail for you to send)." : "OFF: check-in emails open in Gmail for you to check and send. Click to turn on when you're away from your desk.")}>Send emails for me: <b>${on ? "On" : "Off"}</b></button>`;
-}
+// Check-in emails (21 Oct, Lex: "everything goes out the way that I want it"): always sent by the WPS script
+// (file CheckinSend: fixed wording in the navy look, built from the job in the Job Log, with checks). The old
+// "Send emails for me" switch and the plain Gmail route are gone. Needs the device key (More > Device key).
+function ciAuto(){ return keyMode(); }
+function ciToggleHtml(){ return ""; }
+const CI_NEED_KEY = "Tenant emails are sent by the WPS script, which needs this device's key (More > Device key). Nothing was sent.";
 const CI_KIND_WORDS = { ask:"Email asking the tenants for their time", confirm:"Confirmation email", propose:"Email suggesting your time" };
-async function ciAutoSend(j, kind, fallbackUrl){
+async function ciAutoSend(j, kind){
+  if (!keyMode()){ showActionBar("Not sent: "+CI_NEED_KEY); return; }
   state.ciBusy = j.id; render();
   let err = "";
   try {
@@ -2166,7 +2115,7 @@ async function ciAutoSend(j, kind, fallbackUrl){
     showActionBar("Sent: "+CI_KIND_WORDS[kind].toLowerCase()+(d.cc ? " (agent copied in)" : "")+".");
   } catch(e){ err = String(e && e.message || e); }
   state.ciBusy = null; render();
-  if (err) showActionBar("Not sent: "+err, fallbackUrl ? "Open in Gmail instead" : "", fallbackUrl ? function(){ window.open(fallbackUrl, "_blank", "noopener"); } : null);
+  if (err) showActionBar("Not sent: "+err+". Nothing went to the tenants; fix it and press the button again.");
 }
 function minusMins(hhmm, mins){
   const m = /^(\d\d):(\d\d)$/.exec(hhmm||""); if (!m) return "";
@@ -2175,23 +2124,16 @@ function minusMins(hhmm, mins){
 }
 function ciAddNote(j, line){ j.notes = j.notes ? line+"\n"+j.notes : line; }
 // Opens the "what time will you arrive?" email and records that it was opened. w = a tab already opened in the click.
+// Sends the "what time will you arrive?" email through the script (navy look). w = an old blank tab, closed if given.
 function askTenantsTime(id, w){
-  const j = state.jobs.find(x=>x.id===id); if (!j){ if (w) w.close(); return; }
-  if (ciAuto()){ if (w) w.close(); return ciAutoSend(j, "ask", ciAskEmailUrl(j)); }
-  if (!j.tenantEmails && !confirm("No tenant email on "+(j.jobNo||"this job")+". Open the email anyway (To will be blank)?")){ if (w) w.close(); return; }
-  const url = ciAskEmailUrl(j);
-  if (w) try { w.opener = null; } catch(e){}
-  if (w && !w.closed) w.location.href = url; else window.open(url, "_blank", "noopener");
-  j.tenantsAskedAt = new Date().toISOString();
-  ciAddNote(j, "Asked tenants for their arrival time "+ciDay(new Date())+(ciAgentEmail(j) ? " (agent copied in)." : "."));
-  saveJobs(); render();
-  showActionBar("Email to the tenants opened in Gmail. Check it and press Send. When they reply, press Set arrival time.");
+  if (w) try { w.close(); } catch(e){}
+  const j = state.jobs.find(x=>x.id===id); if (!j) return;
+  return ciAutoSend(j, "ask");
 }
 function ciAskBtn(j){
   const again = !!ciAskedAt(j);
   if (state.ciBusy === j.id) return `<span class="c-dim">Sending…</span>`;
-  if (ciAuto()) return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}')"${tip(again ? "Sends the same email again now, to chase the tenants. Agent copied in." : "Sends the tenants an email now asking what time they'll arrive. Agent copied in.")}>${again ? "Send again" : "Send to tenants"}</button>`;
-  return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}', window.open('', '_blank'))"${tip(again ? "Opens the same email again in Gmail, to chase the tenants." : "Opens an email in Gmail asking the tenants what time they'll arrive. The agent is copied in. You check it and press Send.")}>${again ? "Email again" : "Email tenants"}</button>`;
+  return `<button class="d-mv${again ? "" : " sl-ok"}" onclick="askTenantsTime('${j.id}')"${tip(again ? "Sends the same email again now (navy look, from hello@), to chase the tenants. Agent copied in." : "Sends the tenants an email now (navy look, from hello@) asking what time they'll arrive. Agent copied in.")}>${again ? "Send again" : "Send to tenants"}</button>`;
 }
 function ciArrivalBtn(j, where){ return `<button class="d-mv" onclick="openArrival('${j.id}','${where||"dn"}')"${tip("The tenants have told you their arrival time. Puts your visit time on the job and the calendar.")}>Set arrival time</button>`; }
 function ciDay(d){ return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
@@ -2256,7 +2198,7 @@ function arrivalPreview(id, from){
   const lead = checkinLead(j.client), you = minusMins(t.value, lead), diff = a.value && t.value && a.value !== t.value;
   el.innerHTML = (you ? esc("You'll be booked in at "+you+" ("+leadText(lead)+" before, to park and take the photos).") : "")
     + (diff ? `<div class="ci-diff">${esc("Different from what they asked, so the email asks them if "+t.value+" works instead.")}</div>` : "");
-  if (lb) lb.textContent = (ciAuto() ? "Send " : "Open ") + (diff ? "an email asking the tenants if "+t.value+" works" : "a confirmation email to the tenants") + (ciAuto() ? " now" : " in Gmail") + (ciAgentEmail(j) ? " (agent copied in)" : "");
+  if (lb) lb.textContent = "Send " + (diff ? "an email asking the tenants if "+t.value+" works" : "a confirmation email to the tenants") + " now" + (ciAgentEmail(j) ? " (agent copied in)" : "");
 }
 function arrivalBox(j, where){
   if (state.arrivalId !== j.id || (state.arrivalWhere || "dn") !== (where || "dn")) return "";
@@ -2266,21 +2208,19 @@ function arrivalBox(j, where){
     <div class="c-dim" style="font-size:12px">Change "Confirm them for" if their time doesn't work for you.</div>
     <div id="arr_you" class="c-dim" style="margin-top:4px"></div>
     <label class="rr-note">Extra line for the tenants (optional)<textarea id="arr_note" rows="2" maxlength="${CI_NOTE_MAX}" placeholder="e.g. If your flight is delayed, just reply to this email and we'll adjust the time."></textarea></label>
-    ${ciAuto() ? "" : `<div class="ci-plain">${esc("Send emails for me is OFF: this email opens in Gmail as plain text, without the WPS look. Turn it on to send the designed email.")}</div>`}
-    <label class="rr-chk"><input type="checkbox" id="arr_email" checked> <span id="arr_email_lbl">${ciAuto() ? "Send a confirmation email to the tenants now" : "Open a confirmation email to the tenants in Gmail"}${ciAgentEmail(j) ? " (agent copied in)" : ""}</span></label>
+    ${keyMode() ? "" : `<div class="ci-plain">${esc(CI_NEED_KEY.replace(" Nothing was sent.", ""))}</div>`}
+    <label class="rr-chk"><input type="checkbox" id="arr_email" checked> <span id="arr_email_lbl">${"Send a confirmation email to the tenants now"}${ciAgentEmail(j) ? " (agent copied in)" : ""}</span></label>
     <div class="rr-b"><button class="btn btn-coral btn-sm" onclick="saveArrival('${j.id}')">Save</button><button class="btn btn-ghost btn-sm" onclick="closeArrival()">Cancel</button></div>
   </div>`;
 }
 function saveArrival(id){
   const j = state.jobs.find(x=>x.id===id); if (!j) return;
   const asked = (document.getElementById("arr_asked")||{}).value || "", t = (document.getElementById("arr_time")||{}).value || asked;
-  const wantEmail = !!(document.getElementById("arr_email")||{}).checked, auto = ciAuto();
+  const wantEmail = !!(document.getElementById("arr_email")||{}).checked;
   if (!/^\d\d:\d\d$/.test(t)){ alert("Put in the time the tenants asked for."); return; }
   const kind = asked && asked !== t ? "propose" : "confirm";
   const note = ciNoteClean((document.getElementById("arr_note")||{}).value);
   if (note && ciNoteBad(note)){ alert("The extra line can't have links, web addresses or WhatsApp in it (replies need to come by email)."); return; }
-  const w = wantEmail && !auto ? window.open("", "_blank") : null;
-  if (w) try { w.opener = null; } catch(e){}
   const before = snapJob(j), lead = checkinLead(j.client);
   j.tenantAsked = asked || t;
   j.tenantArrival = t;
@@ -2293,10 +2233,8 @@ function saveArrival(id){
   state.arrivalId = null;
   saveJobs(); render();
   if (state.gcalConnected) syncJobToCalendar(j);
-  const url = kind === "propose" ? ciProposeEmailUrl(j) : ciConfirmEmailUrl(j);
-  if (w){ if (!w.closed) w.location.href = url; }
-  showUndo((j.jobNo||"Job")+(kind === "propose" ? ": suggested "+t+" (they asked "+asked+"), you "+j.time : ": tenants "+t+", you "+j.time)+(wantEmail && !auto ? ". Email opened in Gmail" : ""), before);
-  if (wantEmail && auto) ciAutoSend(j, kind, url);
+  showUndo((j.jobNo||"Job")+(kind === "propose" ? ": suggested "+t+" (they asked "+asked+"), you "+j.time : ": tenants "+t+", you "+j.time), before);
+  if (wantEmail) ciAutoSend(j, kind);
 }
 function needsTenantAgree(j){ return !!j && j.type === "ICI" && j.status === "booked" && !!j.tenantTimeProposed && !!j.date && j.date >= isoToday(0) && checkinWay(j.client) === "ask"; }
 // Setting on the agent (job form, and the booking card when it isn't set yet)
@@ -2334,7 +2272,8 @@ function saveCheckinSetting(){
 // Reports due rows (Booked past their date, or Processing) get a Rearrange button for visits that didn't
 // happen. New date known: job back to Booked on the new date, calendar event moved, confirmation email.
 // Not known: date and time cleared so it shows in Times to agree, calendar event removed, email asking
-// for a new date. A note goes on the job either way. Emails open in Gmail; nothing is sent from here.
+// for a new date. A note goes on the job either way. 21 Oct: the email is the navy one from hello@, built by the
+// script (file MailSend); you see it before it goes (openMsBox). Nothing opens in Gmail.
 const RR_TYPE_WORDS = { ICI:"check-in", CO:"check-out", MTI:"mid-term inspection", SOC:"schedule of condition", CLN:"clean check" };
 const RR_MIDTERM_CC = "bowpropman@winkworth.co.uk";
 function rrLongDay(iso){ return iso ? new Date(iso+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}) : ""; }
@@ -2344,28 +2283,6 @@ function rrTenantNames(j){
   if (!n.length) return "Tenants";
   return n.length === 1 ? n[0] : n.slice(0,-1).join(", ")+" and "+n[n.length-1];
 }
-function rearrangeEmailUrl(j, kind, missedIso){
-  const tm = typeMeta(j.type), word = RR_TYPE_WORDS[j.type] || tm.label.toLowerCase();
-  const addr = fullAddress(j) || "[full address]", mid = j.type === "MTI";
-  let su, body;
-  if (kind === "confirm"){
-    const when = rrLongDay(j.date) + (j.time ? " at "+j.time : "");
-    su = tm.label+" - "+addr+" - new appointment";
-    body = "Dear "+rrTenantNames(j)+",\n\nThank you. Your "+word+" at\n\n"+addr+"\n\nhas been rearranged to "+when+".\n\n"
-      + (mid ? "The inspection usually takes less than 15 minutes. If you won't be present, please reply to confirm you're happy for us to carry out the inspection using the access keys.\n\n" : "")
-      + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,";
-  } else {
-    su = tm.label+" - "+addr+" - new date needed";
-    body = "Dear "+rrTenantNames(j)+",\n\nWe were unable to carry out the "+word+" at\n\n"+addr+"\n\n"+(missedIso ? "on "+rrLongDay(missedIso)+", so we" : "so we")+" need to arrange a new date.\n\n"
-      + "Please reply with a few days and times that suit you over the next two weeks.\n\n"
-      + (mid ? "The inspection usually takes less than 15 minutes. If you would rather not be present, let us know and we can arrange access in advance.\n\n" : "")
-      + "If you have any questions, reply to this email or call 07541 345053.\n\nKind regards,";
-  }
-  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
-    + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
-    + (mid ? "&cc="+encodeURIComponent(RR_MIDTERM_CC) : "")
-    + "&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
-}
 function rearrangeBox(j){
   if (state.rearrangeId !== j.id) return "";
   const missed = j.date ? rrShortDay(j.date)+(j.time ? " "+j.time : "") : "no date";
@@ -2373,8 +2290,8 @@ function rearrangeBox(j){
     <div class="rr-t">Rearrange ${esc(j.jobNo||"")} (visit ${esc(missed)} didn't happen)</div>
     <div>New date known? Enter it. Not known yet? Leave both blank and it goes to Times to agree.</div>
     <div class="rr-f"><label>New date<input type="date" id="rr_date" min="${isoToday(0)}"></label><label>Time<input type="time" id="rr_time"></label></div>
-    <label class="rr-chk"><input type="checkbox" id="rr_email" checked> Open an email to the tenant in Gmail${j.type==="MTI" ? " (CC "+RR_MIDTERM_CC+")" : ""}</label>
-    ${j.tenantEmails ? "" : `<div class="rr-warn">No tenant email on this job: the email opens with To blank.</div>`}
+    <label class="rr-chk"><input type="checkbox" id="rr_email"${j.tenantEmails ? " checked" : ""}> Email the tenant (navy look, from hello@; you see it before it goes)${j.type==="MTI" ? " (CC "+RR_MIDTERM_CC+")" : ""}</label>
+    ${j.tenantEmails ? "" : `<div class="rr-warn">No tenant email on this job, so no email can be sent. Add the tenant's email to the job first.</div>`}
     <div class="rr-b"><button class="btn btn-coral btn-sm" onclick="saveRearrange('${j.id}')">Save</button><button class="btn btn-ghost btn-sm" onclick="closeRearrange()">Cancel</button></div>
   </div>`;
 }
@@ -2408,8 +2325,8 @@ function saveRearrange(id){
   }
   saveJobs();
   state.rearrangeId = null;
-  if (wantEmail) window.open(rearrangeEmailUrl(j, newDate ? "confirm" : "ask", missedIso), "_blank", "noopener");
   render();
+  if (wantEmail) openMsBox(j.id, newDate ? "rearrange-confirm" : "rearrange-ask");
   showActionBar((j.jobNo||"Job")+(newDate ? " rearranged to "+rrShortDay(newDate)+(newTime ? " "+newTime : "") : " moved to Times to agree")+"."+calMsg);
 }
 // One-off bar like the undo bar, with an optional button (13 Oct)
@@ -2990,10 +2907,10 @@ function qAdd(id){
   render();
   syncJobToCalendar(job);
 }
-// 20 Oct: one click for "tenants choose the time" agents: adds the job, then opens the tenant email in Gmail.
+// 20 Oct: one click for "tenants choose the time" agents: adds the job, then sends the tenant email (script, navy look).
 function qAddAsk(id){
   const it = queueItem(id); if (!it || it.kind !== "new" && findMatch(it)) return;
-  const w = ciAuto() ? null : window.open("", "_blank");
+  const w = null;
   const n = state.jobs.length;
   qAdd(id);
   const job = state.jobs.length > n ? state.jobs[state.jobs.length-1] : null;
@@ -3240,7 +3157,7 @@ function renderQueueTray(){
     const ciName = ciWay !== null ? ((findClientLoose(it.client)||{}).name || it.client) : "";
     if (ciWay === "ask" && it.date && !it.time){
       warn += `<div class="qline ci-q">${esc(ciName)} check-ins: the tenants choose the time.</div>`;
-      actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qAddAsk" data-qid="${esc(it.id)}"${hint(ciAuto() ? "Adds the job and sends the tenants an email now asking what time they'll arrive (agent copied in). Send emails for me is on." : "Adds the job, then opens an email in Gmail asking the tenants what time they'll arrive (agent copied in). You check it and press Send.")}>${ciAuto() ? "Add to log + send to tenants" : "Add to log + email tenants"}</button>
+      actions = `<button class="btn btn-coral btn-sm" onclick="qGo(this)" data-qa="qAddAsk" data-qid="${esc(it.id)}"${hint("Adds the job and sends the tenants an email now (navy look, from hello@) asking what time they'll arrive. Agent copied in.")}>Add to log + send to tenants</button>
                  <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qAdd" data-qid="${esc(it.id)}"${hint("Adds the job only. You can email the tenants later from Do next.")}>Add to log only</button>
                  <button class="btn btn-ghost btn-sm" onclick="qGo(this)" data-qa="qEdit" data-qid="${esc(it.id)}"${hint("Opens it in the form to check before saving")}>Edit &amp; add</button>`;
     } else if (it.kind==="new" || !match){
@@ -3798,6 +3715,69 @@ function mtAfterSend(x, s, d){
 function mtButton(j, label){
   return `<button class="d-mv" onclick="openMtBox('${j.id}')"${tip("Mid-term emails in the navy look, sent from hello@ (Winkworth jobs CC "+RR_MIDTERM_CC+"). You preview it first.")}>${esc(label || "Email tenants")}</button>`;
 }
+// ---------------------------------------------------------------- navy emails sent by the script (21 Oct, Lex)
+// "Everything goes out the way that I want it": the rearrange, comment reminder and slot picker emails are built and
+// sent by the WPS script (file MailSend) in the navy look, from hello@. This box saves the job, shows the exact email
+// (To, CC, subject, the email itself), then Send. There is no Gmail route: if the script can't send, nothing goes.
+const MS_WORDS = { "rearrange-confirm":"Rearranged visit: new appointment", "rearrange-ask":"Rearranged visit: asking for a new date",
+  "reminder":"Comment reminder", "slot-link":"Mid-term: slot link", "slot-confirm":"Mid-term: picked time confirmed", "slot-decline":"Mid-term: please choose another time" };
+Object.assign(CI_LOG_WORDS, MS_WORDS);
+function openMsBox(id, kind, opts){
+  const j = state.jobs.find(x => x.id === id); if (!j || !MS_WORDS[kind]) return;
+  state.msBox = { id, kind, note: "", preview: null, busy: false, msg: "", after: opts && opts.after || null };
+  if (!keyMode()) state.msBox.msg = "Can't send: tenant emails are sent by the WPS script, which needs this device's key (More > Device key).";
+  render();
+  const b = document.getElementById("ms_box"); if (b) b.focus();
+  if (keyMode()) msPreview();
+}
+function closeMsBox(){ if (state.msBox && state.msBox.busy) return; state.msBox = null; render(); }
+function msChanged(){ const s = state.msBox; if (!s) return; const n = document.getElementById("ms_note"); if (n) s.note = n.value.trim(); s.preview = null; s.msg = ""; render(); }
+async function msPreview(){
+  const s = state.msBox, j = s && state.jobs.find(x => x.id === s.id); if (!j) return;
+  const n = document.getElementById("ms_note"); if (n) s.note = n.value.trim();
+  if (!keyMode()){ render(); return; }
+  s.busy = true; s.msg = "Saving and building the email…"; s.preview = null; render();
+  try {
+    await mtSaveFirst();
+    const d = await dashCall("msPreview", { job: j.jobNo, kind: s.kind, note: s.note });
+    if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
+    s.preview = Object.assign({ sig: s.kind+"|"+s.note }, d); s.msg = "";
+  } catch(e){ s.msg = "Can't send: "+String(e && e.message || e); }
+  s.busy = false; render();
+}
+async function msSend(){
+  const s = state.msBox, j = s && state.jobs.find(x => x.id === s.id); if (!j || !s.preview) return;
+  const n = document.getElementById("ms_note"); if (n) s.note = n.value.trim();
+  if (s.preview.sig !== s.kind+"|"+s.note){ s.preview = null; s.msg = "Something changed since the preview. Press Preview again."; render(); return; }
+  s.busy = true; s.msg = "Sending…"; render();
+  try {
+    const d = await dashCall("msSend", { job: j.jobNo, kind: s.kind, note: s.note });
+    if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
+    const when = new Date();
+    ciAddNote(j, MS_WORDS[s.kind]+" email sent by the dashboard "+ciDay(when)+" "+pad2(when.getHours())+":"+pad2(when.getMinutes())+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+".");
+    saveJobs();
+    const after = s.after; state.msBox = null; render();
+    if (after) try { after(d); } catch(e){}
+    showActionBar("Sent from hello@: "+MS_WORDS[s.kind].toLowerCase()+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+".");
+  } catch(e){ s.busy = false; s.preview = null; s.msg = "Not sent: "+String(e && e.message || e)+". Nothing went to the tenants."; render(); }
+}
+function renderMsBox(){
+  const s = state.msBox; if (!s) return "";
+  const j = state.jobs.find(x => x.id === s.id); if (!j){ state.msBox = null; return ""; }
+  const p = s.preview, dis = s.busy ? " disabled" : "";
+  return `<div class="mt-back" onclick="if(event.target===this)closeMsBox()"><div class="mt-box" id="ms_box" tabindex="-1" role="dialog" aria-label="Email to the tenants">
+    <div class="mt-h"><div><b>${esc(MS_WORDS[s.kind])}</b><div class="c-dim">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"No address")}</div></div><button class="undo-x" onclick="closeMsBox()" aria-label="Close">✕</button></div>
+    <label class="mt-f">Extra line (optional, no links)<input type="text" id="ms_note" maxlength="300" value="${esc(s.note)}" placeholder="e.g. Parking is on the street outside." onchange="msChanged()"${dis}></label>
+    ${s.msg ? `<div class="mt-msg${/^Can't|^Not sent/.test(s.msg) ? " bad" : ""}">${esc(s.msg)}</div>` : ""}
+    ${p ? `<div class="mt-who"><div><span class="c-dim">To</span> ${esc(p.to)}</div>${p.cc ? `<div><span class="c-dim">CC</span> ${esc(p.cc)}</div>` : ""}<div><span class="c-dim">Subject</span> ${esc(p.subject)}</div></div>
+      <iframe id="ms_frame" class="mt-frame" sandbox="" title="Email preview" srcdoc="${esc(p.html || "<pre style='white-space:pre-wrap;font-family:Arial'>"+esc(p.body)+"</pre>")}"></iframe>` : ""}
+    <div class="rr-b mt-b">
+      <button class="btn btn-ghost btn-sm" onclick="msPreview()"${dis}${keyMode() ? "" : " disabled"}>${p ? "Preview again" : "Preview"}</button>
+      <button class="btn btn-coral btn-sm" onclick="msSend()"${p && !s.busy ? "" : " disabled"}${tip("Sends from hello@ now, in the navy look.")}>Send</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeMsBox()"${dis}>${p ? "Don't send" : "Close"}</button>
+    </div>
+  </div></div>`;
+}
 function renderMtBox(){
   const s = state.mtBox; if (!s) return "";
   const j = state.jobs.find(x => x.id === s.id); if (!j){ state.mtBox = null; return ""; }
@@ -3885,6 +3865,7 @@ function renderInner(app){
     </div>
     ${state.editing || state.mtBox ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="Log a job by hand">+</button>`}
     ${renderMtBox()}
+    ${renderMsBox()}
   `;
 }
 
@@ -4264,9 +4245,9 @@ function windowRow(x, now){
       const ad = autoRemindDay(j);
       if (!ad || ad > now) rem = `<div class="sub">Auto reminder due ${esc(shortDay(ad || x.closes))}</div>`;
       else if (!am_loaded()) rem = `<div class="sub">Auto reminder due ${esc(shortDay(ad))} · load Amendments to confirm it went</div>`;
-      else rem = `<div class="sub">Auto reminder not in the script's log yet (due ${esc(shortDay(ad))}) · <button class="t-link" style="font-size:12px" onclick="sendReminder('${j.id}')"${tip("Only if the automatic one didn't go. Opens a ready-written reminder in Gmail.")}>write one by hand</button></div>`;
+      else rem = `<div class="sub">Auto reminder not in the script's log yet (due ${esc(shortDay(ad))}) · <button class="t-link" style="font-size:12px" onclick="sendReminder('${j.id}')"${tip("Only if the automatic one didn't go. Shows the navy reminder email, then sends it from hello@.")}>write one by hand</button></div>`;
     }
-    else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')"${hint("Opens a ready-written reminder in Gmail. Check it, then send.")} style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: write email</button></div>`;
+    else if (days <= REMINDER_DAYS_LEFT) rem = `<div class="sub"><button onclick="sendReminder('${j.id}')"${hint("Shows the navy reminder email to the tenants. Check it, then press Send (from hello@).")} style="margin-top:4px;padding:4px 9px;border:0;border-radius:6px;background:var(--coral);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Reminder due: email tenants</button></div>`;
   }
   return `<div class="t-row"><div class="t-main"><button class="t-link" onclick="openEdit('${j.id}')" data-jid="${j.id}">${esc(j.jobNo||"")} · ${esc(fullAddress(j)||"")}</button>
     <div class="sub">${started} · ${line}</div>${rem}</div>
@@ -4523,7 +4504,7 @@ function renderToday(){
   due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j));   // 18 Oct: no Rearrange once visited (Processing)
   midPicked.forEach(j => { const r = slotFor(j); dnAdd(25, "warn", "Tenant picked "+r.slotText, j, `<button class="d-mv sl-ok" onclick="slotApprove('${j.id}')">Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')">Decline</button>`); });
   unconfirmed.forEach(x => dnAdd(30, "warn", "Visit passed, still Booked", x.j, `<button class="d-mv" onclick="markVisited('${x.j.id}')"${tip("Moves the job to Processing. The report countdown still runs from the visit time.")}>Mark visited</button>${dnRr(x.j)}`));
-  remindDue.forEach(x => dnAdd(40, "warn", "Comment reminder due", x.j, `<button class="d-mv" onclick="sendReminder('${x.j.id}')"${tip("Opens a ready-written reminder in Gmail. Check it, then send.")}>Write email</button>`));
+  remindDue.forEach(x => dnAdd(40, "warn", "Comment reminder due", x.j, `<button class="d-mv" onclick="sendReminder('${x.j.id}')"${tip("Shows the navy reminder email to the tenants. Check it, then press Send (from hello@).")}>Email reminder</button>`));
   if (queueN) dnAdd(50, "warn", queueN+" item"+(queueN===1?"":"s")+" from Gmail to check", null, `<button class="d-mv" onclick="dnTray()">Open tray</button>`);
   dueSoon.forEach(x => dnAdd(60, "warn", x.d.text, x.j));
   photosMissing.forEach(j => dnAdd(70, "", "Photos not done", j, `<a class="d-mv" href="photos.html">Photo Tool</a>`));
@@ -4536,7 +4517,7 @@ function renderToday(){
     `<button class="d-mv" onclick="keysReturned('${j.id}')"${tip("Tick when the keys are back where they belong")}>Keys returned</button>`));
   timesToAgree.forEach(j => { if (midPicked.includes(j)) return;
     if (needsTenantTime(j)){ const rp = ciReplyAt(j); dnAdd(rp ? 35 : 75, rp || !ciAskedAt(j) ? "warn" : "", ciRowText(j), j, ciArrivalBtn(j, "dn")+ciAskBtn(j)); return; }
-    const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail")}>Send slot link</button>` : "";
+    const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Shows the navy email with the tenant's own slot link (from hello@), then you press Send")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   active.filter(needsTenantAgree).forEach(j => dnAdd(76, "", "Suggested "+j.tenantArrival+", waiting for tenants to agree (they asked "+j.tenantAsked+")", j, ciArrivalBtn(j, "dn")));
   if (toInvoice.length) dnAdd(90, "coral", toInvoice.length+" report"+(toInvoice.length===1?"":"s")+" sent, not invoiced", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
@@ -4733,7 +4714,7 @@ function renderUtilityRow(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       ${state.helpOn ? "Help hints: on ✓" : "Help hints: off"}
     </button>
-    <a class="btn-link" href="manual.pdf?v=20261020c" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
+    <a class="btn-link" href="manual.pdf?v=20261021" target="_blank" rel="noopener" style="text-decoration:none"${tip("The how-to manual (PDF)")}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
       Manual
     </a>
@@ -4767,7 +4748,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#75)";
+const BUILD = "21 Oct 2026 (#76)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -5364,7 +5345,7 @@ async function drawPlan(){
 // ---- Plan my day part 3 (Lex, 19 Oct): mid-terms to book and the tenant slot picker.
 // The tenant page and the free-time check live in the WPS Amendments script (file "Slots"); its "Slot requests" tab
 // is read here with the same sign-in as the amendments. Nothing is booked by the tenant: a pick shows here as a card
-// and Lex approves (date, time and calendar set on the job, confirmation email opened in Gmail) or declines (the
+// and Lex approves (date, time and calendar set on the job, navy confirmation email sent by the script) or declines (the
 // tenant picks again from the same link). Settings (days, hours, how far ahead) are saved in the Job Log Sheet's Meta
 // tab so the script and every device use the same ones.
 // ---- System health (Lex, 19 Oct): the "maintenance man". The WPS Amendments script (file "Health") checks
@@ -5502,67 +5483,18 @@ async function slotCall(body){
   return d;
 }
 function slotGreeting(j){ return "Dear "+rrTenantNames(j)+","; }
-function slotEmailUrl(j, su, body){
-  return "https://mail.google.com/mail/?authuser=info@wellingtonparker.com&view=cm&fs=1"
-    + (j.tenantEmails ? "&to="+encodeURIComponent(j.tenantEmails) : "")
-    + "&cc="+encodeURIComponent(RR_MIDTERM_CC)
-    + "&su="+encodeURIComponent(su)+"&body="+encodeURIComponent(body);
-}
-function slotInviteEmail(j, link){
-  const addr = fullAddress(j) || "[full address]", agent = (j.client||"").replace(/\s*-\s*.*$/, "") || "Your letting agent";
-  return slotEmailUrl(j, "Mid-Term Inspection - "+addr,
-    slotGreeting(j)+"\n\n"+agent+" has instructed us to carry out a routine mid-term inspection of\n\n"+addr+"\n\n"
-    + "The purpose of this visit is to make sure the property is in good order and to pick up any maintenance issues. The inspection usually takes less than 15 minutes.\n\n"
-    + "Please choose a time that suits you here:\n"+link+"\n\n"
-    + "The page only shows times that are still free. You can also tell us whether you will be there or would like us to use the access keys. Nothing is booked until we confirm by email.\n\n"
-    + "If none of the times suit you, just reply to this email.\n\n"
-    + "If you have any questions, reply to this email or call 07541 345053.\n\nKind regards,");
-}
-function slotConfirmEmail(j, req){
-  const addr = fullAddress(j) || "[full address]", keys = req.access === SLOT_ACCESS_KEYS;
-  return slotEmailUrl(j, "Mid-Term Inspection - "+addr+" - confirmed",
-    slotGreeting(j)+"\n\nThank you. Your mid-term inspection at\n\n"+addr+"\n\nis confirmed for "+req.slotText+".\n\n"
-    + (keys ? "As requested, we will use the access keys, so the inspection will go ahead even if nobody is home.\n\n"
-            : req.access ? "You told us: "+req.access.toLowerCase()+". If you can no longer be there, please reply to let us know whether we may use the access keys.\n\n" : "")
-    + "If anything changes, reply to this email or call 07541 345053.\n\nKind regards,");
-}
-function slotDeclineEmail(j, req, link){
-  const addr = fullAddress(j) || "[full address]";
-  return slotEmailUrl(j, "Mid-Term Inspection - "+addr+" - please choose another time",
-    slotGreeting(j)+"\n\nThank you for choosing a time for the mid-term inspection at\n\n"+addr+"\n\n"
-    + "Unfortunately "+(req.slotText || "that time")+" is no longer available. Please choose another time using the same link:\n"+link+"\n\n"
-    + "If none of the times suit you, just reply to this email.\n\nKind regards,");
-}
-// Pop-ups have to open inside the click, so a blank tab opens first and gets the Gmail address once the script answers
-function slotTab(){ const w = window.open("", "_blank"); if (w) try { w.opener = null; w.document.title = "Opening Gmail…"; } catch(e){} return w; }
-function slotTabGo(w, url){ if (w && !w.closed) w.location.href = url; else window.open(url, "_blank", "noopener"); }
-async function slotSend(id){
+// 21 Oct: the slot picker emails are sent by the WPS script in the navy look (file MailSend): the link email, the
+// confirmation after Approve and the "please choose another time" after Decline. You see each one before it goes.
+function slotSend(id){
   const j = state.jobs.find(x => x.id === id); if (!j) return;
-  if (!j.tenantEmails && !confirm("No tenant email on "+(j.jobNo||"this job")+". Make the link anyway (the email opens with To blank)?")) return;
-  const w = slotTab();
-  state.slotBusy = id; render();
-  try {
-    const d = await slotCall({ action:"slotLink", job: j.jobNo });
-    j.slotLinkAt = new Date().toISOString(); saveJobs();
-    await loadSlots();
-    slotTabGo(w, slotInviteEmail(j, d.link));
-  } catch(e){ if (w) w.close(); alert("Couldn't make the link for "+(j.jobNo||"this job")+": "+e.message); }
-  state.slotBusy = null; render();
-}
-async function slotCopy(id){
-  const j = state.jobs.find(x => x.id === id); if (!j) return;
-  try {
-    const d = await slotCall({ action:"slotLink", job: j.jobNo });
-    try { await navigator.clipboard.writeText(d.link); alert("Link copied. Paste it into an email to the tenant."); }
-    catch(e){ prompt("Copy this link:", d.link); }
-  } catch(e){ alert("Couldn't get the link: "+e.message); }
+  openMsBox(id, "slot-link", { after: () => { j.slotLinkAt = new Date().toISOString(); saveJobs(); loadSlots().then(render); } });
 }
 async function slotApprove(id){
   const j = state.jobs.find(x => x.id === id), req = j && slotFor(j); if (!j || !req || req.status !== "Picked") return;
   const m = /^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)$/.exec(req.slot); if (!m){ alert("The picked time couldn't be read."); return; }
-  if (!confirm("Approve "+(j.jobNo||"")+" for "+req.slotText+"?\n\nThis sets the date and time on the job, puts it in the calendar and opens the confirmation email in Gmail (CC "+RR_MIDTERM_CC+") for you to send.")) return;
-  const w = slotTab();
+  if (!confirm("Approve "+(j.jobNo||"")+" for "+req.slotText+"?\n\nThis sets the date and time on the job and puts it in the calendar. Then you see the confirmation email (navy look, from hello@, CC "+RR_MIDTERM_CC+") and press Send.")) return;
   state.slotBusy = id; render();
+  let ok = false;
   try {
     await slotCall({ action:"slotApprove", req: req.token });
     j.date = m[1]; j.time = m[2]; delete j.rearrangePending;
@@ -5573,32 +5505,38 @@ async function slotApprove(id){
     saveJobs();
     if (state.gcalConnected) syncJobToCalendar(j);
     await loadSlots();
-    slotTabGo(w, slotConfirmEmail(j, req));
-  } catch(e){ if (w) w.close(); alert("Couldn't approve: "+e.message+"\n\nNothing was changed on the job."); }
+    ok = true;
+  } catch(e){ alert("Couldn't approve: "+e.message+"\n\nNothing was changed on the job."); }
   state.slotBusy = null; render();
+  if (ok) openMsBox(id, "slot-confirm");
 }
 async function slotDecline(id){
   const j = state.jobs.find(x => x.id === id), req = j && slotFor(j); if (!j || !req || req.status !== "Picked") return;
-  if (!confirm("Decline "+req.slotText+" for "+(j.jobNo||"")+"?\n\nThe tenant can pick again from the same link. The email asking them to opens in Gmail for you to send.")) return;
-  const w = slotTab();
+  if (!confirm("Decline "+req.slotText+" for "+(j.jobNo||"")+"?\n\nThe tenant can pick again from the same link. Then you see the email asking them to (navy look, from hello@) and press Send.")) return;
   state.slotBusy = id; render();
-  try {
-    await slotCall({ action:"slotDecline", req: req.token });
-    const d = await slotCall({ action:"slotLink", job: j.jobNo });
-    await loadSlots();
-    slotTabGo(w, slotDeclineEmail(j, req, d.link));
-  } catch(e){ if (w) w.close(); alert("Couldn't decline: "+e.message); }
+  let ok = false;
+  try { await slotCall({ action:"slotDecline", req: req.token }); await loadSlots(); ok = true; }
+  catch(e){ alert("Couldn't decline: "+e.message); }
   state.slotBusy = null; render();
+  if (ok) openMsBox(id, "slot-decline");
+}
+async function slotCopy(id){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  try {
+    const d = await slotCall({ action:"slotLink", job: j.jobNo });
+    try { await navigator.clipboard.writeText(d.link); alert("Link copied. Paste it into an email to the tenant."); }
+    catch(e){ prompt("Copy this link:", d.link); }
+  } catch(e){ alert("Couldn't get the link: "+e.message); }
 }
 function slotRowExtra(j){
   const req = slotFor(j), busy = state.slotBusy === j.id;
   if (busy) return `<span class="sl-st c-dim">Working…</span>`;
   if (!state.slots || !state.slots.loaded) return `<span class="sl-st c-dim">Slot link: load the list first</span>`;
   if (req && req.status === "Picked") return `<span class="sl-st sl-picked"${tip((req.name||"")+(req.phone ? " · "+req.phone : "")+(req.note ? " · Note: "+req.note : ""))}>Picked ${esc(req.slotText)} · ${esc(req.access === SLOT_ACCESS_KEYS ? "use keys" : req.access === "I will be there" ? "will be there" : req.access.toLowerCase())}</span>
-    <span class="d-acts"><button class="d-mv sl-ok" onclick="slotApprove('${j.id}')"${tip("Sets the date and time, adds it to the calendar and opens the confirmation email in Gmail")}>Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')"${tip("Frees the time; the tenant picks again from the same link")}>Decline</button></span>`;
+    <span class="d-acts"><button class="d-mv sl-ok" onclick="slotApprove('${j.id}')"${tip("Sets the date and time, adds it to the calendar, then shows the navy confirmation email to send")}>Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')"${tip("Frees the time; the tenant picks again from the same link")}>Decline</button></span>`;
   if (req) return `<span class="sl-st c-dim">${/^Declined/.test(req.detail) ? "Declined, waiting for a new pick" : "Link sent"+(j.slotLinkAt ? " "+new Date(j.slotLinkAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "")+", no pick yet"}</span>
-    <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Opens the email with the same link again, e.g. as a chaser")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, to paste into an email or text")}>Copy link</button></span>`;
-  return `<span class="sl-st c-dim">No link sent</span><span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and opens the email in Gmail (CC "+RR_MIDTERM_CC+") for you to check and send")}>Send slot link</button></span>`;
+    <span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Sends the email with the same link again (navy look), e.g. as a chaser. At most 3 times.")}>Send again</button><button class="d-mv" onclick="slotCopy('${j.id}')"${tip("Copies the tenant's link, to paste into an email or text")}>Copy link</button></span>`;
+  return `<span class="sl-st c-dim">No link sent</span><span class="d-acts"><button class="d-mv" onclick="slotSend('${j.id}')"${tip("Makes the tenant's slot link and shows the navy email (from hello@, CC "+RR_MIDTERM_CC+"). You check it and press Send.")}>Send slot link</button></span>`;
 }
 // Next mid-term due (Lex, 20 Oct, D6): last check-in or mid-term at a property + 6 months, when nothing newer is
 // logged there. A list to check against Riley's monthly email; nothing is booked by itself.
@@ -5632,13 +5570,13 @@ function renderMidPanel(mids){
   const picked = mids.filter(j => { const r = slotFor(j); return r && r.status === "Picked"; });
   const rest = mids.filter(j => !picked.includes(j));
   const row = j => cRow(j, { extra: slotRowExtra(j) + `<span class="d-acts">${mtButton(j, "Email")}</span>` });
-  return helpBox(`Mid-terms with no date yet. 1. Press <b>Send slot link</b>: Gmail opens with the tenant's own link, CC'd to the office. Check it and send. 2. The tenant picks a free time and says if they'll be there or you can use the keys. 3. Their pick shows here and in Do next. Press <b>Approve</b> (sets the date, time and calendar, and opens the confirmation email) or <b>Decline</b> (they pick again from the same link). Nothing is booked until you approve. <b>Change</b> sets which days and hours tenants can pick. Or press <b>Email</b>: offer a day and time window, chase, confirm a time or ask the agent for tenant details, in the navy look from hello@ (Winkworth jobs CC Riley). You see the email before it goes, and can send the same offer to the other mid-terms on the round.`) + renderSlotSettings() + head
+  return helpBox(`Mid-terms with no date yet. 1. Press <b>Send slot link</b>: you see the navy email with the tenant's own link (from hello@, CC'd to the office). Check it and press Send. 2. The tenant picks a free time and says if they'll be there or you can use the keys. 3. Their pick shows here and in Do next. Press <b>Approve</b> (sets the date, time and calendar, then shows the confirmation email to send) or <b>Decline</b> (they pick again from the same link). Nothing is booked until you approve. <b>Change</b> sets which days and hours tenants can pick. Or press <b>Email</b>: offer a day and time window, chase, confirm a time or ask the agent for tenant details, in the navy look from hello@ (Winkworth jobs CC Riley). You see the email before it goes, and can send the same offer to the other mid-terms on the round.`) + renderSlotSettings() + head
     + (picked.length ? `<div class="d-sect">Tenant picked a time, approve or decline (${picked.length})</div>` + picked.map(row).join("") : "")
     + (rest.length ? `<div class="d-sect"${picked.length ? ' style="margin-top:14px"' : ""}>Need a date (${rest.length})</div>` + rest.map(row).join("") : "")
     + (!mids.length ? `<div class="t-empty">No mid-terms waiting for a date.</div>` : "")
     + renderMidRound()
     + renderMidDue()
-    + `<div class="d-note">Mid-terms at Booked with no date (or rearranged). Send slot link opens the email in Gmail with the tenant's own link; they see only free times and tell you if they'll be there or want you to use the keys. Nothing is booked until you approve. ${sl.loaded && sl.at ? "Picks checked "+new Date(sl.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})+". " : ""}<button class="t-link" onclick="refreshSlots()">Check for picks now</button></div>`;
+    + `<div class="d-note">Mid-terms at Booked with no date (or rearranged). Send slot link sends the navy email (from hello@) with the tenant's own link, after you've seen it; they see only free times and tell you if they'll be there or want you to use the keys. Nothing is booked until you approve. ${sl.loaded && sl.at ? "Picks checked "+new Date(sl.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})+". " : ""}<button class="t-link" onclick="refreshSlots()">Check for picks now</button></div>`;
 }
 function refreshSlots(){ ensureSheetsToken(async function(){ await loadSlots(); render(); }); }
 
@@ -6095,7 +6033,7 @@ window.addEventListener("storage", function(e){
 // open or something is being typed, so nothing in progress is lost.
 let lastRefreshDay = isoToday(0);
 function autoRefresh(){
-  if (document.hidden || state.editing || state.rearrangeId || state.mtBox) return;   // not while the Rearrange panel or mid-term email box is open
+  if (document.hidden || state.editing || state.rearrangeId || state.mtBox || state.msBox) return;   // not while the Rearrange panel or mid-term email box is open
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
@@ -6115,7 +6053,7 @@ window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (stat
 // ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
 // (merging if another device saved first), load other devices' changes, read the queue, amendments and signings.
 function safeRender(){
-  if (state.editing || state.rearrangeId || state.mtBox) return;
+  if (state.editing || state.rearrangeId || state.mtBox || state.msBox) return;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   const y = window.scrollY; render(); window.scrollTo(0, y);
@@ -6514,6 +6452,7 @@ window.addEventListener("popstate", function(){
 // Esc closes the form, like Cancel (fix 7). The Rearrange panel closes first if it's open.
 document.addEventListener("keydown", function(e){
   if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+  if (state.msBox){ closeMsBox(); return; }
   if (state.mtBox){ closeMtBox(); return; }
   if (state.rearrangeId && typeof closeRearrange === "function"){ closeRearrange(); return; }
   if (state.editing){ e.preventDefault(); requestCloseForm(); }
