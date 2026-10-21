@@ -3887,7 +3887,7 @@ const TODAY_LINKS = [
   ["Photo Tool", "photos.html"],
   ["Dictation", "dictate.html"],
   ["Amendments Sheet", "https://docs.google.com/spreadsheets/d/1FjRFw2l9L1T3DVbASn08NfSsvbxlGQAQ4Qu95CRK6gs"],
-  ["Amendments form", "https://script.google.com/macros/s/AKfycbxAJ7lbajJ81KFwi4G9tIGTUKXhofsFcJ8QM4K_Vu4gdOx_yaCPYpDIL-y7vQvlbPxR/exec"],
+  ["Amendments form", "comments.html"],
   ["Acrobat (e-sign)", "https://acrobat.adobe.com/"],
   ["Gmail (info@)", "https://mail.google.com/mail/u/?authuser=info@wellingtonparker.com"],
   ["Google Calendar", "https://calendar.google.com/calendar/r?authuser=info@wellingtonparker.com"],
@@ -4748,7 +4748,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#76)";
+const BUILD = "21 Oct 2026 (#77)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });

@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comments on your report - Wellington Property Services</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="sig/email/wps-logo-navy.png">
+<!-- Comments form (Lex, 21 Oct 2026): the tenant / landlord / agent comments form, moved off Google's script page
+     (which shows "This application was created by a Google Apps Script user") onto WPS's own site, in the navy look,
+     full screen. It sends to the same WPS Amendments script functions as before (uploadPhoto, submitAmendments) through
+     the script's doPost (file AmendPost), so the checks, the Amendments Sheet, the Drive photos and the emails are
+     unchanged. The form logic below (photos, validation) is the v8 form's, word for word, apart from how it sends. -->
+<style>
+  :root{ --bg:#141D3D; --navy:#1F2D5A; --navy2:#2B3D74; --line:#33467F; --coral:#E8735A; --coral2:#F2937D; --text:#F3F5FA; --soft:#C3CBE3;
+         --card:#FFFFFF; --ink:#1d2333; --muted:#5b6275; --cline:#d7dbe5; --bad:#b3261e; --badbg:#fdecea; --ok:#2E8B57; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; min-height:100%; }
+  body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif; background:var(--bg); color:var(--text); font-size:16px; line-height:1.5; }
+  a{ color:var(--coral2); }
+  /* top bar */
+  .top{ background:var(--navy); border-bottom:1px solid var(--line); }
+  .top-in{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px clamp(16px,4vw,48px); }
+  .top img.logo{ height:46px; width:auto; display:block; }
+  .top .contact{ display:flex; gap:18px; flex-wrap:wrap; font-size:14px; color:var(--soft); }
+  .top .contact a{ color:var(--text); text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  .top .contact svg{ width:16px; height:16px; fill:var(--coral); }
+  /* hero */
+  .hero{ background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%); padding:28px clamp(16px,4vw,48px) 30px; border-bottom:1px solid var(--line); }
+  .hero h1{ margin:0; font-family:Georgia,"Times New Roman",serif; font-style:italic; font-weight:700; font-size:clamp(28px,4vw,42px); line-height:1.15; }
+  .hero p{ margin:10px 0 0; color:var(--soft); font-size:17px; max-width:760px; }
+  .hero .addr{ display:inline-flex; align-items:center; gap:10px; margin-top:16px; background:rgba(255,255,255,.07); border:1px solid var(--line); border-left:4px solid var(--coral);
+               padding:10px 14px; border-radius:8px; font-weight:600; color:var(--coral2); font-size:17px; }
+  .hero .addr svg{ width:20px; height:20px; fill:var(--coral); flex:none; }
+  .hero .addr[hidden]{ display:none; }
+  /* layout: full width, guide on the left, form on the right */
+  .wrap{ display:grid; grid-template-columns:minmax(280px,360px) 1fr; gap:clamp(16px,2.5vw,32px); padding:24px clamp(16px,4vw,48px) 48px; align-items:start; }
+  .guide{ position:sticky; top:16px; display:flex; flex-direction:column; gap:16px; }
+  .panel{ background:var(--navy); border:1px solid var(--line); border-radius:14px; padding:18px 18px; }
+  .panel h2{ margin:0 0 12px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--coral2); }
+  .steps{ list-style:none; margin:0; padding:0; counter-reset:s; }
+  .steps li{ position:relative; padding:0 0 14px 44px; color:var(--text); font-size:15px; }
+  .steps li:last-child{ padding-bottom:0; }
+  .steps li::before{ counter-increment:s; content:counter(s); position:absolute; left:0; top:-2px; width:30px; height:30px; border-radius:50%; background:var(--coral); color:#fff;
+                     font-weight:700; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .steps b{ color:#fff; }
+  .rules{ display:flex; flex-direction:column; gap:10px; font-size:14px; color:var(--soft); }
+  .rule{ display:flex; gap:10px; align-items:flex-start; }
+  .rule svg{ width:20px; height:20px; fill:var(--coral); flex:none; margin-top:1px; }
+  .trust{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .trust img{ height:44px; width:auto; }
+  .trust .t{ font-size:13px; color:var(--soft); line-height:1.4; }
+  .trust .t b{ display:block; color:#fff; letter-spacing:.08em; font-size:12px; }
+  /* form */
+  .form{ min-width:0; }
+  .card{ background:var(--card); color:var(--ink); border-radius:14px; padding:20px clamp(16px,2vw,26px); margin-bottom:18px; box-shadow:0 6px 24px rgba(0,0,0,.25); }
+  .card-h{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 6px; }
+  .card-h h2{ margin:0; font-size:19px; color:var(--navy); display:flex; align-items:center; gap:10px; }
+  .card-h h2 .ic{ width:34px; height:34px; border-radius:10px; background:#FCEBE6; display:flex; align-items:center; justify-content:center; }
+  .card-h h2 .ic svg{ width:20px; height:20px; fill:var(--coral); }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:4px 18px; }
+  .grid .wide{ grid-column:1/-1; }
+  label{ display:block; font-size:14px; font-weight:700; margin:14px 0 5px; color:var(--navy); }
+  .help{ display:block; font-size:13px; font-weight:400; color:var(--muted); margin-top:2px; }
+  input[type=text],input[type=email],select,textarea{ width:100%; padding:12px 12px; border:1.5px solid var(--cline); border-radius:10px; font-size:16px; font-family:inherit; background:#fff; color:var(--ink); }
+  input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--coral); box-shadow:0 0 0 3px rgba(232,115,90,.2); }
+  input:disabled{ background:#f1f2f6; }
+  textarea{ min-height:110px; resize:vertical; }
+  .invalid{ border-color:var(--bad) !important; background:var(--badbg) !important; }
+  .check{ display:flex; align-items:center; gap:10px; font-size:15px; margin-top:12px; color:var(--ink); font-weight:600; }
+  .check input{ width:22px; height:22px; accent-color:var(--coral); }
+  .remove{ background:none; border:1.5px solid var(--cline); color:var(--bad); font-size:14px; cursor:pointer; border-radius:8px; padding:6px 10px; font-weight:600; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:10px; border:0; border-radius:12px; padding:14px 18px; font-size:17px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn svg{ width:20px; height:20px; fill:currentColor; }
+  .btn-add{ background:transparent; color:#fff; border:2px dashed var(--coral2); width:100%; }
+  .btn-add:hover{ background:rgba(232,115,90,.1); }
+  .btn-send{ background:var(--coral); color:#fff; width:100%; margin-top:18px; padding:18px; font-size:19px; box-shadow:0 6px 18px rgba(232,115,90,.35); }
+  .btn-send:disabled{ opacity:.6; }
+  .pick{ display:inline-flex; align-items:center; gap:10px; margin-top:12px; padding:12px 16px; border:2px solid var(--navy); border-radius:10px; color:var(--navy); font-size:15px; font-weight:700; cursor:pointer; background:#fff; }
+  .pick svg{ width:20px; height:20px; fill:var(--navy); }
+  .pick input{ display:none; }
+  .photos{ display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .thumb{ position:relative; width:96px; height:96px; border-radius:10px; overflow:hidden; border:1px solid var(--cline); }
+  .thumb img{ width:100%; height:100%; object-fit:cover; }
+  .thumb button{ position:absolute; top:4px; right:4px; width:26px; height:26px; border-radius:50%; border:0; background:rgba(0,0,0,.65); color:#fff; font-size:13px; line-height:26px; padding:0; cursor:pointer; }
+  .err{ color:var(--bad); font-size:14px; margin-top:8px; font-weight:600; }
+  .errbox{ background:var(--badbg); border:1.5px solid var(--bad); color:var(--bad); border-radius:12px; padding:12px 14px; margin-top:16px; font-size:15px; }
+  .status{ margin-top:10px; font-size:14px; color:var(--soft); text-align:center; }
+  .count{ font-size:13px; color:var(--muted); text-align:right; margin-top:3px; }
+  .pcpick{ margin-top:10px; padding:12px; background:var(--badbg); border:2px solid var(--bad); border-radius:10px; }
+  .pcpick[hidden]{ display:none; }
+  .pcpick p{ margin:0 0 10px; font-weight:700; color:var(--bad); }
+  .pcpick button{ font-size:17px; padding:10px 16px; margin:0 8px 8px 0; border:2px solid var(--navy); background:#fff; color:var(--navy); border-radius:8px; font-weight:700; }
+  .sendlock{ position:fixed; inset:0; z-index:9999; background:rgba(20,29,61,.97); color:#fff; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; }
+  .sendlock[hidden]{ display:none; }
+  .sendlock .box{ max-width:440px; }
+  .sendlock img{ height:52px; margin-bottom:22px; }
+  .sendlock .spin{ width:56px; height:56px; margin:0 auto 22px; border:6px solid rgba(255,255,255,.2); border-top-color:var(--coral); border-radius:50%; animation:wpsspin 1s linear infinite; }
+  @keyframes wpsspin{ to{ transform:rotate(360deg); } }
+  .sendlock h2{ margin:0 0 12px; font-size:26px; }
+  .sendlock .warn{ margin:0 0 18px; font-size:19px; font-weight:700; color:var(--coral2); }
+  .sendlock .prog{ margin:0; font-size:17px; opacity:.9; }
+  .done{ text-align:center; padding:40px 20px; }
+  .done .tick{ width:72px; height:72px; border-radius:50%; background:#E6F2EA; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+  .done .tick svg{ width:40px; height:40px; fill:var(--ok); }
+  .done h2{ color:var(--navy); margin:0 0 10px; font-size:26px; }
+  .closeok{ font-weight:700; color:var(--navy); }
+  footer{ border-top:1px solid var(--line); padding:20px clamp(16px,4vw,48px); color:var(--soft); font-size:13px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  @media (max-width:900px){
+    .wrap{ grid-template-columns:1fr; padding-top:16px; gap:16px; }
+    /* phone: the steps first, then the form, then the other panels */
+    .guide{ display:contents; }
+    .guide .p-steps{ order:1; } .form{ order:2; } .guide .p-know{ order:3; } .guide .trust{ order:4; }
+    .top img.logo{ height:38px; }
+    .top .contact .em{ display:none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M12 3 2 11h3v9h6v-6h2v6h6v-9h3z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4.4 0-9 2.2-9 5v3h18v-3c0-2.8-4.6-5-9-5z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M4 3h12l4 4v14H4zm11 1.5V8h3.5zM7 11h10v2H7zm0 4h10v2H7zm0-8h6v2H7z"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5.4l4 2.4-1 1.7-5-3V7z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5zm-1.2 14.2-3.5-3.5 1.4-1.4 2.1 2.1 4.9-4.9 1.4 1.4z"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><path d="M2 5h20v14H2zm2 2v.5l8 5 8-5V7zm0 2.8V17h16V9.8l-8 5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M2 21 23 12 2 3v7l15 2-15 2z"/></symbol>
+  <symbol id="i-tick" viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="M3 5h12a2 2 0 0 1 2 2v2.5l4-3v11l-4-3V17a2 2 0 0 1-2 2H3zM2 3.4 3.4 2 22 20.6 20.6 22z"/></symbol>
+</svg>
+
+<header class="top"><div class="top-in">
+  <img class="logo" src="sig/email/wps-logo-navy.png" alt="Wellington Property Services">
+  <div class="contact">
+    <a href="tel:+447541345053"><svg><use href="#i-phone"/></svg>07541 345053</a>
+    <a class="em" href="mailto:hello@wellington-ps.co.uk"><svg><use href="#i-mail"/></svg>hello@wellington-ps.co.uk</a>
+  </div>
+</div></header>
+
+<section class="hero">
+  <h1>Comments on your report</h1>
+  <p>Found something in the property that isn't in the report, or disagree with something in it? Tell us here, one point at a time, with a photo of each. We check every point against our photos and let you know the outcome.</p>
+  <div class="addr" id="addrLine" hidden><svg><use href="#i-home"/></svg><span id="addrText"></span></div>
+</section>
+
+<div class="wrap" id="formWrap">
+  <aside class="guide">
+    <div class="panel p-steps">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>Have your report open. You'll need the <b>job number</b> (top of the first page, e.g. WPS261001) and the <b>item numbers</b> (the "No" column on the left of each room).</li>
+        <li>Fill in <b>your details</b>.</li>
+        <li>Add <b>one point for each issue</b>, one item per point: the room, the item number, what's wrong, and at least one clear photo.</li>
+        <li>Not in the report at all? Tick <b>"This item is not in the report"</b> and say where it is.</li>
+        <li>Press <b>Add another point</b> for the next issue, then <b>Send comments</b>.</li>
+      </ol>
+    </div>
+    <div class="panel p-know">
+      <h2>Good to know</h2>
+      <div class="rules">
+        <div class="rule"><svg><use href="#i-clock"/></svg><span>Send your comments within <b style="color:#fff">7 days</b> of receiving the report. After 7 days the report is deemed agreed by all parties.</span></div>
+        <div class="rule"><svg><use href="#i-cam"/></svg><span>Up to 5 photos per point, taken in good light so the issue is clear.</span></div>
+        <div class="rule"><svg><use href="#i-video"/></svg><span>Photos only. Videos are not accepted.</span></div>
+        <div class="rule"><svg><use href="#i-shield"/></svg><span>Your details are used only for this report. ICO registration ZC268920.</span></div>
+      </div>
+    </div>
+    <div class="panel trust">
+      <img src="sig/email/aiic-navy.png" alt="AIIC">
+      <div class="t"><b>FULL AIIC MEMBER</b>Association of Independent Inventory Clerks, membership no. 9513</div>
+    </div>
+  </aside>
+
+  <main class="form">
+    <div class="card">
+      <div class="card-h"><h2><span class="ic"><svg><use href="#i-user"/></svg></span>Your details</h2></div>
+      <div id="propFields" class="grid">
+        <div><label for="job">Job number <span class="help">Top of the first page. Starts with WPS, e.g. WPS261001</span></label>
+        <input type="text" id="job" autocomplete="off" autocapitalize="characters" placeholder="WPS261001"></div>
+        <div><label for="postcode">Postcode <span class="help">The property's postcode</span></label>
+        <input type="text" id="postcode" autocomplete="off" autocapitalize="characters" placeholder="E3 2AB"></div>
+        <div class="wide"><label for="street">Property address <span class="help">Flat or house number and street</span></label>
+        <input type="text" id="street" autocomplete="off" placeholder="Flat 12, Example House, 1 Example Road">
+        <div class="pcpick" id="pcPick" hidden>
+          <p>You've typed two different postcodes. Which is the property's postcode?</p>
+          <button type="button" id="pcA"></button><button type="button" id="pcB"></button>
+        </div></div>
+      </div>
+      <div class="grid">
+        <div><label for="name">Your full name</label><input type="text" id="name" autocomplete="name"></div>
+        <div><label for="role">You are the</label>
+          <select id="role"><option value="">Choose one</option><option>Tenant</option><option>Landlord</option><option>Agent</option></select></div>
+        <div><label for="email">Your email</label><input type="email" id="email" autocomplete="email" inputmode="email"></div>
+        <div><label for="email2">Type your email again</label><input type="email" id="email2" autocomplete="off" inputmode="email"></div>
+      </div>
+    </div>
+
+    <div id="points"></div>
+    <button type="button" class="btn btn-add" id="addPoint"><svg><use href="#i-plus"/></svg>Add another point</button>
+
+    <div class="errbox" id="formErr" hidden></div>
+    <button type="button" class="btn btn-send" id="sendBtn"><svg><use href="#i-send"/></svg>Send comments</button>
+    <div class="status" id="status"></div>
+  </main>
+</div>
+
+<div class="sendlock" id="sendLock" hidden role="alertdialog" aria-live="assertive">
+  <div class="box">
+    <img src="sig/email/wps-logo-navy.png" alt="">
+    <div class="spin"></div>
+    <h2>Sending your comments</h2>
+    <p class="warn">Please don't close this page or switch to another app until you see "Sent".</p>
+    <p class="prog" id="sendProg">Getting ready...</p>
+  </div>
+</div>
+
+<div class="wrap" id="doneWrap" style="display:none;grid-template-columns:1fr">
+  <div class="card done">
+    <div class="tick"><svg><use href="#i-tick"/></svg></div>
+    <h2>Sent - thank you</h2>
+    <p class="closeok">You can close this page now.</p>
+    <p id="doneText"></p>
+    <p>We'll check each point against our photo set and let you know the outcome. If your email address is on our records for this property, we've also sent you a copy.</p>
+  </div>
+</div>
+
+<footer>
+  <span>Wellington Property Services · Full AIIC Member · 07541 345053 · hello@wellington-ps.co.uk</span>
+  <span><a href="https://www.wellington-ps.co.uk" target="_blank" rel="noopener">www.wellington-ps.co.uk</a></span>
+</footer>
+
+<script>
+  // The WPS Amendments script (same web app address as before). Only two requests: one photo, or the comments.
+  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAJ7lbajJ81KFwi4G9tIGTUKXhofsFcJ8QM4K_Vu4gdOx_yaCPYpDIL-y7vQvlbPxR/exec';
+  var QS = new URLSearchParams(location.search);
+  var JOB = String(QS.get('job') || '').slice(0, 40);
+  var ADDRESS = String(QS.get('address') || '').slice(0, 200);
+  var MAX_PHOTOS = 5, MAX_POINTS = 40, MAX_EDGE = 1600, MIN_EDGE = 800, MIN_COMMENT = 10;
+  var ROOMS = ['Entrance and Hallway','Living Area / Reception','Kitchen','Bedroom 1','Bedroom 2','Bedroom 3','Bedroom 4',
+    'Bathroom','En-suite','WC','Utility','Stairs and Landing','Garden and External Areas','Keys and Meters','Other (type it below)'];
+  var TYPES = ['Not recorded in the report','Description is wrong','Disagree with condition','Cleanliness','Something else'];
+  var JOB_RE = /^WPS\d{6}$/;
+  var PC_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/;
+  var EMAIL_RE = /^[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+  var points = [];
+  var submissionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  var heicLoaded = null, sent = false;
+
+  function el(id) { return document.getElementById(id); }
+  function clean(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
+  function normJob(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  var PC_IN_TEXT = /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/;
+  function cleanStreet(s, found) { return s.replace(found, '').replace(/[\s,.]+$/, '').replace(/,\s*,/g, ',').trim(); }
+  function showPcPick(a, b) {
+    var box = el('pcPick'); box.hidden = false;
+    [['pcA', a], ['pcB', b]].forEach(function (x) {
+      var bt = el(x[0]); bt.textContent = x[1];
+      bt.onclick = function () {
+        var st = el('street'), m = st.value.toUpperCase().match(PC_IN_TEXT);
+        if (m) st.value = cleanStreet(st.value, st.value.substr(st.value.toUpperCase().indexOf(m[0]), m[0].length));
+        el('postcode').value = x[1]; el('postcode').classList.remove('invalid'); box.hidden = true;
+      };
+    });
+  }
+  function normPc(s) { var t = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t.length > 3 ? t.slice(0, -3) + ' ' + t.slice(-3) : t; }
+
+  if (ADDRESS && JOB) {
+    el('addrText').textContent = JOB + ' - ' + ADDRESS; el('addrLine').hidden = false;
+    el('propFields').style.display = 'none';
+  }
+
+  function opts(list, placeholder) {
+    return '<option value="">' + placeholder + '</option>' + list.map(function (x) { return '<option>' + x + '</option>'; }).join('');
+  }
+
+  function addPoint() {
+    if (points.length >= MAX_POINTS) return;
+    var p = { id: Math.random().toString(36).slice(2), photos: [] };
+    points.push(p);
+    var div = document.createElement('div');
+    div.className = 'card';
+    div.id = 'pt_' + p.id;
+    div.innerHTML =
+      '<div class="card-h"><h2><span class="ic"><svg><use href="#i-note"/></svg></span><span class="ptTitle"></span></h2><button type="button" class="remove">Remove this point</button></div>' +
+      '<div class="grid">' +
+      '<div><label>Room</label><select class="room">' + opts(ROOMS, 'Choose the room') + '</select>' +
+      '<div class="otherWrap" hidden><label>Room name</label><input type="text" class="otherRoom" placeholder="e.g. Study"></div></div>' +
+      '<div><label>Item number <span class="help">From the "No" column. One item only, e.g. 27</span></label>' +
+      '<input type="text" class="item" inputmode="numeric" maxlength="4" placeholder="e.g. 27">' +
+      '<label class="check"><input type="checkbox" class="notIn"> This item is not in the report</label></div>' +
+      '<div><label>What is it about?</label><select class="type">' + opts(TYPES, 'Choose one') + '</select></div>' +
+      '<div class="wide"><label>Your comment <span class="help">Say exactly what is wrong and where, e.g. "Deep scratch on the worktop, left of the sink, about 10cm long"</span></label>' +
+      '<textarea class="comment" maxlength="1000"></textarea><div class="count"></div></div>' +
+      '<div class="wide"><label class="pick"><svg><use href="#i-cam"/></svg>Add photos<input type="file" accept="image/*" multiple class="file"></label>' +
+      '<span class="help">At least 1 photo is required. Up to ' + MAX_PHOTOS + '. No videos.</span>' +
+      '<div class="photos"></div><div class="err ptErr"></div></div>' +
+      '</div>';
+    el('points').appendChild(div);
+    div.querySelector('.remove').onclick = function () {
+      if (points.length === 1) return;
+      points = points.filter(function (x) { return x !== p; });
+      div.remove(); renumber();
+    };
+    div.querySelector('.room').onchange = function (e) {
+      div.querySelector('.otherWrap').hidden = !/^Other/.test(e.target.value);
+    };
+    div.querySelector('.notIn').onchange = function (e) {
+      var item = div.querySelector('.item');
+      item.disabled = e.target.checked; if (e.target.checked) { item.value = ''; item.classList.remove('invalid'); }
+      if (e.target.checked) div.querySelector('.type').value = 'Not recorded in the report';
+    };
+    div.querySelector('.item').oninput = function (e) { e.target.value = e.target.value.replace(/\D/g, ''); };
+    var ta = div.querySelector('.comment'), cnt = div.querySelector('.count');
+    ta.oninput = function () { cnt.textContent = ta.value.length + ' / 1000'; };
+    div.querySelector('.file').onchange = function (e) { handleFiles(p, div, e.target.files); e.target.value = ''; };
+    div.querySelectorAll('input,select,textarea').forEach(function (f) { f.addEventListener('input', function () { f.classList.remove('invalid'); }); f.addEventListener('change', function () { f.classList.remove('invalid'); }); });
+    renumber();
+  }
+
+  function renumber() {
+    points.forEach(function (p, i) {
+      var d = el('pt_' + p.id);
+      d.querySelector('.ptTitle').textContent = 'Point ' + (i + 1);
+      d.querySelector('.remove').style.visibility = points.length > 1 ? 'visible' : 'hidden';
+    });
+    el('addPoint').style.display = points.length >= MAX_POINTS ? 'none' : '';
+  }
+
+  function isHeic(f) { return /heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name); }
+
+  function loadHeicLib() {
+    if (heicLoaded) return heicLoaded;
+    heicLoaded = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
+      s.integrity = 'sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL'; s.crossOrigin = 'anonymous';
+      s.onload = res; s.onerror = rej; document.head.appendChild(s);
+    });
+    return heicLoaded;
+  }
+
+  function decode(blob) {
+    if (window.createImageBitmap) {
+      return createImageBitmap(blob, { imageOrientation: 'from-image' }).catch(function () { return viaImg(blob); });
+    }
+    return viaImg(blob);
+  }
+
+  function viaImg(blob) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(blob), img = new Image();
+      img.onload = function () { res(img); URL.revokeObjectURL(url); };
+      img.onerror = function () { rej(new Error('decode')); URL.revokeObjectURL(url); };
+      img.src = url;
+    });
+  }
+
+  function toJpeg(file) {
+    return decode(file).catch(function () {
+      if (!isHeic(file)) throw new Error('unreadable');
+      return loadHeicLib().then(function () {
+        return window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      }).then(function (out) { return decode(Array.isArray(out) ? out[0] : out); });
+    }).then(function (img) {
+      var w = img.width, h = img.height;
+      if (Math.max(w, h) < MIN_EDGE) throw new Error('small');
+      var k = Math.min(1, MAX_EDGE / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+      var ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.82);
+    });
+  }
+
+  function handleFiles(p, div, files) {
+    var err = div.querySelector('.ptErr'); err.textContent = '';
+    Array.prototype.forEach.call(files, function (f) {
+      if (/^video\//i.test(f.type) || /\.(mov|mp4|m4v|avi|3gp|webm)$/i.test(f.name)) { err.textContent = 'Videos are not accepted. Please add photos instead.'; return; }
+      if (p.photos.length >= MAX_PHOTOS) { err.textContent = 'You can add up to ' + MAX_PHOTOS + ' photos per point. Add another point if you need more.'; return; }
+      var slot = { dataUrl: null };
+      p.photos.push(slot);
+      toJpeg(f).then(function (d) { slot.dataUrl = d; drawThumbs(p, div); })
+        .catch(function (e) {
+          p.photos = p.photos.filter(function (x) { return x !== slot; });
+          err.textContent = e && e.message === 'small'
+            ? 'That photo is too small to see the detail. Please use the original photo from your camera, not a screenshot or a thumbnail.'
+            : 'One photo could not be read. On an iPhone go to Settings > Camera > Formats > Most Compatible, then take the photo again.';
+          drawThumbs(p, div);
+        });
+    });
+  }
+
+  function drawThumbs(p, div) {
+    var box = div.querySelector('.photos'); box.innerHTML = '';
+    p.photos.forEach(function (s) {
+      if (!s.dataUrl) return;
+      var t = document.createElement('div'); t.className = 'thumb';
+      t.innerHTML = '<img alt=""><button type="button" aria-label="Remove photo">x</button>';
+      t.querySelector('img').src = s.dataUrl;
+      t.querySelector('button').onclick = function () { p.photos = p.photos.filter(function (x) { return x !== s; }); drawThumbs(p, div); };
+      box.appendChild(t);
+    });
+  }
+
+  // Sends one request to the WPS script (file AmendPost) instead of Google's page-only route; same two functions.
+  function run(fn) {
+    var a = Array.prototype.slice.call(arguments, 1);
+    var body = fn === 'uploadPhoto'
+      ? { action: 'amendUpload', job: a[0], submissionId: a[1], point: a[2], n: a[3], dataUrl: a[4] }
+      : { action: 'amendSubmit', data: a[0] };
+    return fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); }, function () { throw new Error('We could not reach our server. Check your internet connection and press Send again.'); })
+      .then(function (d) {
+        if (!d || !d.ok) throw new Error((d && d.error) || 'No answer from our server.');
+        return fn === 'uploadPhoto' ? d.url : d;
+      });
+  }
+
+  function validate() {
+    var errors = [], first = null;
+    function bad(field, msg) { if (field) { field.classList.add('invalid'); if (!first) first = field; } errors.push(msg); }
+    document.querySelectorAll('.invalid').forEach(function (f) { f.classList.remove('invalid'); });
+
+    var job, address;
+    if (JOB && ADDRESS) { job = JOB; address = ADDRESS; }
+    else {
+      job = normJob(el('job').value); el('job').value = job;
+      var street = clean(el('street').value), pc = normPc(el('postcode').value);
+      el('postcode').value = pc;
+      if (!JOB_RE.test(job)) bad(el('job'), 'Job number: type it exactly as it appears at the top of your report, e.g. WPS261001.');
+      if (street.length < 5) bad(el('street'), 'Property address: type the flat or house number and street.');
+      if (!PC_RE.test(pc)) bad(el('postcode'), 'Postcode: type a full UK postcode, e.g. E3 2AB.');
+      var inStreet = street.toUpperCase().match(PC_IN_TEXT);
+      if (inStreet) {
+        var sp = normPc(inStreet[0]);
+        if (sp === pc || !PC_RE.test(pc)) {
+          street = cleanStreet(street, street.substr(street.toUpperCase().indexOf(inStreet[0]), inStreet[0].length)); el('street').value = street;
+          if (!PC_RE.test(pc)) { pc = sp; el('postcode').value = pc; errors = errors.filter(function (m) { return m.indexOf('Postcode:') !== 0; }); el('postcode').classList.remove('invalid'); }
+        } else {
+          showPcPick(sp, pc);
+          bad(el('postcode'), 'Postcode: you have typed two different postcodes (' + sp + ' in the address and ' + pc + ' in the postcode box). Tap the right one under the postcode box.');
+        }
+      }
+      address = street + ', ' + pc;
+    }
+    var name = clean(el('name').value), email = clean(el('email').value), email2 = clean(el('email2').value), role = el('role').value;
+    if (name.length < 3 || name.indexOf(' ') === -1) bad(el('name'), 'Your full name: first name and surname.');
+    if (!EMAIL_RE.test(email) || email.indexOf('..') !== -1) bad(el('email'), 'Your email: check it is typed correctly.');
+    else if (email.toLowerCase() !== email2.toLowerCase()) bad(el('email2'), 'The two email addresses do not match.');
+    if (!role) bad(el('role'), 'Choose whether you are the tenant, landlord or agent.');
+
+    var data = [], seen = {};
+    points.forEach(function (pt, i) {
+      var d = el('pt_' + pt.id), n = i + 1;
+      var roomSel = d.querySelector('.room'), room = roomSel.value;
+      var notIn = d.querySelector('.notIn').checked, itemF = d.querySelector('.item'), item = itemF.value.trim();
+      var type = d.querySelector('.type').value, ta = d.querySelector('.comment'), comment = clean(ta.value);
+      if (!room) bad(roomSel, 'Point ' + n + ': choose the room.');
+      if (/^Other/.test(room)) {
+        var o = d.querySelector('.otherRoom'); room = clean(o.value);
+        if (room.length < 2) bad(o, 'Point ' + n + ': type the room name.');
+      }
+      if (!notIn) {
+        if (!/^\d{1,4}$/.test(item) || Number(item) < 1) bad(itemF, 'Point ' + n + ': type the item number from the report, or tick "This item is not in the report".');
+        else if (seen[room + '#' + item]) bad(itemF, 'Point ' + n + ': item ' + item + ' is already in point ' + seen[room + '#' + item] + '. Put everything about one item in one point.');
+        else seen[room + '#' + item] = n;
+      }
+      if (!type) bad(d.querySelector('.type'), 'Point ' + n + ': choose what it is about.');
+      if (comment.length < MIN_COMMENT) bad(ta, 'Point ' + n + ': describe the issue in a full sentence.');
+      if (pt.photos.some(function (s) { return !s.dataUrl; })) bad(null, 'Point ' + n + ': photos are still being prepared. Wait a moment and press Send again.');
+      else if (!pt.photos.length) { var pk = d.querySelector('.pick'); pk.classList.add('invalid'); if (!first) first = pk; errors.push('Point ' + n + ': add at least one photo.'); }
+      data.push({ room: room, item: notIn ? '' : item, type: type, comment: comment, photos: pt.photos.map(function (s) { return s.dataUrl; }) });
+    });
+    return { errors: errors, first: first, job: job, address: address, name: name, email: email, role: role, data: data };
+  }
+
+  function showErrors(v) {
+    var box = el('formErr');
+    box.hidden = false;
+    box.innerHTML = '<b>Please fix ' + (v.errors.length === 1 ? 'this' : 'these ' + v.errors.length + ' things') + ' before sending:</b><ul style="margin:6px 0 0;padding-left:20px">' +
+      v.errors.map(function (e) { return '<li>' + e.replace(/[&<>]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }) + '</li>'; }).join('') + '</ul>';
+    if (v.first && v.first.scrollIntoView) { v.first.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (v.first.focus) v.first.focus({ preventScroll: true }); }
+  }
+
+  var busy = false;
+  function send() {
+    var box = el('formErr'); box.hidden = true; box.innerHTML = '';
+    var v = validate();
+    if (v.errors.length) { showErrors(v); return; }
+    var data = v.data;
+    var total = data.reduce(function (n, p) { return n + p.photos.length; }, 0), done = 0;
+    var btn = el('sendBtn'); btn.disabled = true;
+    busy = true; el('sendProg').textContent = 'Getting ready...'; el('sendLock').hidden = false;
+    var status = el('status');
+    var chain = Promise.resolve();
+    data.forEach(function (p, pi) {
+      var urls = [];
+      p.photos.forEach(function (dataUrl, n) {
+        chain = chain.then(function () {
+          status.textContent = 'Uploading photo ' + (done + 1) + ' of ' + total + '. Please keep this page open.';
+          el('sendProg').textContent = 'Uploading photo ' + (done + 1) + ' of ' + total;
+          return run('uploadPhoto', v.job, submissionId, pi + 1, n + 1, dataUrl);
+        }).then(function (u) { urls.push(u); done++; });
+      });
+      chain = chain.then(function () { p.photos = urls; });
+    });
+    chain.then(function () {
+      status.textContent = 'Sending...';
+      el('sendProg').textContent = 'Saving your comments...';
+      return run('submitAmendments', { job: v.job, address: v.address, name: v.name, email: v.email, role: v.role, submissionId: submissionId, points: data });
+    }).then(function (r) {
+      sent = true; busy = false; el('sendLock').hidden = true;
+      el('formWrap').style.display = 'none';
+      el('doneWrap').style.display = 'block';
+      el('doneText').textContent = 'We have received your ' + r.count + ' comment' + (r.count > 1 ? 's' : '') + ' for ' + v.address + ' (' + v.job + ').';
+      window.scrollTo(0, 0);
+    }).catch(function (e) {
+      btn.disabled = false; status.textContent = ''; busy = false; el('sendLock').hidden = true;
+      box.hidden = false;
+      box.textContent = 'Your comments were not sent: ' + (e && e.message ? e.message : e) + ' Please check and press Send again. Nothing you typed has been lost.';
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  window.addEventListener('beforeunload', function (e) {
+    if (busy) { e.preventDefault(); e.returnValue = ''; return; }
+    if (sent) return;
+    var typed = points.some(function (p) { var d = el('pt_' + p.id); return d && (d.querySelector('.comment').value.trim() || p.photos.length); });
+    if (typed) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  document.getElementById('formWrap').addEventListener('input', function () { var b = el('formErr'); if (!busy && !b.hidden && /^Please fix/.test(b.textContent)) b.hidden = true; });
+  el('addPoint').onclick = addPoint;
+  el('sendBtn').onclick = send;
+  ['job','street','postcode','name','email','email2','role'].forEach(function (id) {
+    var f = el(id); ['input','change'].forEach(function (ev) { f.addEventListener(ev, function () { f.classList.remove('invalid'); }); });
+  });
+  addPoint();
+</script>
+</body>
+</html>
