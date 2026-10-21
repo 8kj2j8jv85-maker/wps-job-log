@@ -69,6 +69,9 @@ h2{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font
 .recclip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
 .recclip .rmeta{flex:1;min-width:120px;color:var(--muted)}
 .recclip audio{width:100%;height:36px}
+.micbanner{margin:4px 0 8px;padding:10px 12px;border-radius:10px;background:#FFF4E5;border:1px solid #F3D3A3;color:#7A4B00;font-size:14px}
+html[data-theme="night"] .micbanner{background:#3A3018;border-color:#5C4C22;color:#E8C26A}
+.drvstat{font-size:12px;color:var(--muted);position:absolute;top:-22px;right:16px}
 .delrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .delrow .mini{padding:8px 11px}
 .delbtn{color:#B3261E;border-color:#E9B4AE}
@@ -149,6 +152,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
   footer{justify-content:flex-end;padding:10px 28px}
   footer .btn{flex:0 0 auto;min-width:190px}
   footer .sum{position:static;flex:1;align-self:center;font-size:13px}
+  footer .drvstat{position:static;align-self:center;margin-right:8px}
   .panel{left:50%;right:auto;bottom:auto;top:6vh;transform:translateX(-50%);width:min(760px,92vw);max-height:86vh;border-radius:18px}
   .toast{left:auto;right:28px;max-width:420px}
 }
@@ -199,6 +203,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
       <div class="status" id="status">Tap to dictate this room</div>
       <div class="hint" style="text-align:center">Pick a room first. Tap another room or <b>Next room</b> while talking and the mic carries on into it. Select a word in the notes to fix it.</div>
     </div>
+    <div class="micbanner" id="micBanner" hidden></div>
     <div class="interim" id="interim"></div>
     <textarea id="roomText" rows="7" placeholder="Your notes for this room appear here. You can type or fix words too, even while the mic is on."></textarea>
     <div class="delrow">
@@ -220,7 +225,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 </main>
 
 <footer>
-  <div class="sum" id="sum"></div>
+  <div class="sum" id="sum"></div><div class="drvstat" id="drvStat"></div>
   <button class="btn ghost" id="driveBtn" style="display:none" title="Saves these notes in Google Drive > WPS Dictation under the job number, so Claude can read them for the report">Save to Drive</button>
   <button class="btn ghost" id="shareBtn" title="Send the notes to another app, e.g. WhatsApp or email">Share</button>
   <button class="btn primary" id="copyBtn" title="Copies every room, ready to paste into the WPS project chat">Copy for Claude</button>
@@ -280,6 +285,16 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 'use strict';
 var KEY = 'wps-dictate-v1';
 var DEFAULT_ROOMS = ['External picture','Exterior','Entrance and Hallway','Lounge','Kitchen','Dining Room','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom','En-suite','WC','Landing','Stairs','Garden','Electricity meter','Gas meter','Heat meter','Keys','General'];
+// Word hints (Lex, 21 Oct): trade words the speech engine is nudged towards, where the browser supports it.
+var TRADE_WORDS = ['skirting board','skirting boards','architrave','architraves','emulsion','magnolia','gloss','silk finish','worktop','splashback','upstand',
+  'extractor fan','extractor hood','cooker hood','hob','oven','grill','fridge freezer','washing machine','washer dryer','tumble dryer','dishwasher','microwave',
+  'consumer unit','smoke alarm','heat alarm','carbon monoxide alarm','thermostat','radiator','towel rail','boiler','immersion','extractor',
+  'laminate','vinyl','carpet','floor tiles','wall tiles','grout','sealant','silicone','limescale','mould','discolouration','tide mark',
+  'scuff','scuffs','scuffing','chip','chipped','scratch','scratches','marks','stain','staining','fair wear and tear','not present at check-in',
+  'blind','blinds','curtain pole','curtain rail','net curtain','coving','ceiling rose','pendant light','downlight','spotlights','light switch','socket',
+  'door handle','hinge','door stop','threshold strip','letterbox','intercom','door entry phone','window restrictor','window handle','sill','reveal',
+  'shower screen','shower tray','bath panel','vanity unit','mixer tap','basin','pedestal','toilet seat','cistern','wardrobe','chest of drawers','bedside table',
+  'mattress','headboard','sofa','armchair','dining table','sideboard','balcony','decking','patio','lawn','hedge','meter reading','electricity meter','gas meter','water meter','heat meter'];
 var DEFAULT_CORR = [
   ['skirting bored','skirting board'],
   ['skirting bords','skirting boards'],
@@ -449,13 +464,38 @@ function delClip(k){ delete memClips[k]; return idb('readwrite', function(s){ re
 /* ---------- recording ---------- */
 var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 var rec=null, want=false, base='', sessFinal='', mediaRec=null, stream=null, chunks=[], startedAt=0, lock=null, recRoom=null;
-var usedFinals=0, pendingRoom=null, clipRoom=null;   // 21 Oct: finals already added this session; room to switch to; room the audio clip belongs to
+var usedFinals=0, pendingRoom=null, clipRoom=null;
+var recStarted=0, fails=[], restartDelay=150, micTimer=null, recStart=0, srBroke=false;   // 21 Oct: mic restarts and timer   // 21 Oct: finals already added this session; room to switch to; room the audio clip belongs to
 
 function setLive(on){
   $('mic').classList.toggle('live', on);
   $('mic').setAttribute('aria-label', on ? 'Stop dictating' : 'Start dictating');
   $('status').textContent = on ? 'Listening… tap to stop' : 'Tap to dictate this room';
   if(!on) $('interim').textContent = '';
+  clearInterval(micTimer); micTimer = null;
+  if(on){ recStart = Date.now(); hideBanner(); micTimer = setInterval(tickStatus, 1000); }
+}
+function tickStatus(){
+  if(!want) return;
+  var t = fmt(Math.round((Date.now() - recStart)/1000));
+  var st = $('status').getAttribute('data-mode') || 'Listening';
+  $('status').textContent = st + '… ' + t + (st === 'Listening' ? ' · tap to stop' : '');
+}
+function setMode(m){ $('status').setAttribute('data-mode', m); tickStatus(); }
+function showBanner(msg){ var b = $('micBanner'); b.textContent = msg; b.hidden = false; try{ if(navigator.vibrate) navigator.vibrate([120,80,120]); }catch(e){} }
+function hideBanner(){ $('micBanner').hidden = true; }
+// Word hints: only where the browser supports them; otherwise nothing changes.
+function addHints(r){
+  try{
+    if(!r || !('phrases' in r) || typeof window.SpeechRecognitionPhrase !== 'function') return;
+    var seen = {}, list = [];
+    var add = function(w, boost){ w = String(w||'').trim(); var k = w.toLowerCase(); if(!w || w.length > 60 || seen[k]) return; seen[k] = 1; list.push(new SpeechRecognitionPhrase(w, boost)); };
+    (state.settings.corrections || []).forEach(function(c){ add(c[1], 4); });
+    var j = job(); if(j) j.rooms.forEach(function(x){ add(x.name, 3); });
+    state.settings.rooms.forEach(function(n){ add(n, 3); });
+    TRADE_WORDS.forEach(function(w){ add(w, 3); });
+    r.phrases = list.slice(0, 200);
+  }catch(e){}
 }
 function start(){
   if(!job()) newJob();
@@ -505,6 +545,7 @@ function addLive(txt){
   base = next;
   var r = room(recRoom, true); if(r){ r.text = base; pushUndo(recRoom, prev, next); save(); }
   renderSum(); renderChips(); updDelBtns();
+  if(!drvTimer || Date.now() - (window.__drvTick||0) > 120000){ window.__drvTick = Date.now(); autoDrive(120000); }
 }
 // Undo last bit (Lex, 21 Oct): remember the room text before each piece the mic added (last 20 per room, this session only).
 var undoStack = {};
@@ -520,6 +561,7 @@ function startSR(){
     rec = new SR();
     rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true;
     usedFinals = 0;
+    addHints(rec);
     rec.onresult = function(e){
       if(rec && rec._ended) return;   // nothing counts between the end of one listening session and the restart
       var fin = '', interim = '';
@@ -531,24 +573,45 @@ function startSR(){
       $('interim').textContent = interim;
     };
     rec.onerror = function(e){
-      if(e.error==='not-allowed' || e.error==='service-not-allowed'){
-        toast('Microphone or speech access is blocked. Check Settings > Safari > Microphone, and Siri & Dictation is on.');
-        want = false;
-      } else if(e.error==='audio-capture' && mediaRec){
-        toast("This phone can't do live text and audio backup together. Turn off audio backup in Settings.");
+      var er = e && e.error;
+      if(er==='not-allowed' || er==='service-not-allowed'){
+        showBanner('Microphone or speech access is blocked. Check Settings > Safari > Microphone, and that Siri & Dictation is on.');
+        want = false; return;
       }
+      if(er==='audio-capture' && mediaRec){
+        // iPhone can't always do live text and the audio backup together: keep the words coming, save the audio so far
+        try{ if(mediaRec.state !== 'inactive') mediaRec.stop(); }catch(_){}
+        if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+        mediaRec = null;
+        showBanner('This phone couldn\'t record audio and show live words together, so the audio backup paused for now. Live words carry on.');
+        return;
+      }
+      if(er==='language-not-supported' || er==='phrases-not-supported'){ if(er==='phrases-not-supported'){ try{ rec.phrases = []; }catch(_){} } return; }
+      // no-speech, network, aborted: onend restarts it
     };
     rec.onend = function(){
       if(rec) rec._ended = true;
       usedFinals = 0; $('interim').textContent = '';
       var r = room(recRoom, true); if(r){ r.text = base; save(); }
       if(pendingRoom){ recRoom = pendingRoom; pendingRoom = null; var nr = room(recRoom, true); base = nr ? nr.text : ''; }
-      if(want){ setTimeout(function(){ if(want){ try{ rec.start(); }catch(_){ startSR(); } } }, 150); }
+      if(want){
+        var now = Date.now(); fails = fails.filter(function(t){ return now - t < 30000; });
+        var quick = recStarted && (now - recStarted < 1500); if(quick) fails.push(now);
+        if(fails.length >= 6){
+          // keeps dying straight away: stop properly and say so, rather than look live and hear nothing
+          fails = []; restartDelay = 150; stop();
+          showBanner('The mic kept dropping out, so it has stopped. Your notes are saved. Tap the mic to carry on.');
+          return;
+        }
+        restartDelay = quick ? Math.min(restartDelay * 2, 2000) : 150;
+        setMode('Reconnecting');
+        setTimeout(function(){ if(!want) return; try{ rec._ended = false; rec.start(); }catch(_){ startSR(); } }, restartDelay);
+      }
       else finishUI();
     };
-    rec.onstart = function(){ usedFinals = 0; if(rec) rec._ended = false; };
+    rec.onstart = function(){ usedFinals = 0; if(rec) rec._ended = false; recStarted = Date.now(); setMode('Listening'); };
     rec.start();
-  }catch(e){ toast('Live text could not start.'); }
+  }catch(e){ showBanner('Live words could not start on this device. Your audio backup (if on) still records.'); }
 }
 function stop(){
   want = false;
@@ -560,7 +623,7 @@ function stop(){
 function finishUI(){
   rec = null; setLive(false);
   var r = room(recRoom, true); if(r){ r.text = $('roomText').value; save(); }
-  render();
+  render(); autoDrive(800);
 }
 function saveClip(m, ch, rname){
   if(!ch || !ch.length || !rname) return;
@@ -587,7 +650,7 @@ function switchRoom(name){
   if(mediaRec && mediaRec.state !== 'inactive'){ try{ mediaRec.stop(); }catch(e){} startClip(name); }
   if(rec){ pendingRoom = name; try{ rec.stop(); }catch(e){} }
   else { recRoom = name; base = room(name, true).text; }
-  hideFix(); render();
+  hideFix(); render(); autoDrive(2500);
   $('roomText').value = room(name, true).text;
   $('status').textContent = 'Listening… now in ' + name;
 }
@@ -834,16 +897,24 @@ $('copyBtn').addEventListener('click', function(){
 });
 /* Drive copy (20 Oct, Keeper): with this device's key, the notes are saved as "<job no> - <type> - dictation.txt" in
    Google Drive > WPS Dictation (replaced each time), so Claude can read them for the report without a paste. */
+var drvTimer = null, drvLastSent = '';
+function autoDrive(delay){
+  if(!window.WPSLink || !WPSLink.key()) return;
+  clearTimeout(drvTimer); drvTimer = setTimeout(function(){ saveToDrive(true); }, delay == null ? 1500 : delay);
+}
+function drvShow(t){ $('drvStat').textContent = t; }
 function saveToDrive(quiet){
   if(!window.WPSLink || !WPSLink.key()) return;
   var j = job(), s = buildOutput();
   if(!j || !s){ if(!quiet) toast('Nothing dictated yet.'); return; }
   if(!/^WPS\d{6,}$/i.test(String(j.jobNo||'').trim())){ if(!quiet) toast('Put the WPS job number on this job first (Jobs).'); return; }
+  if(quiet && s === drvLastSent) return;   // nothing new since the last save
+  drvShow('Saving to Drive…');
   WPSLink.saveDictation(String(j.jobNo).trim().toUpperCase(), j.type, s).then(function(d){
-    if(!d) return;
-    if(d.ok){ j.driveAt = Date.now(); save(); if(!quiet) toast('Saved to Drive: ' + d.name); }
-    else if(!quiet) toast('Not saved to Drive: ' + (d.error || 'no answer'));
-  });
+    if(!d){ drvShow('Not saved to Drive (no answer)'); return; }
+    if(d.ok){ drvLastSent = s; j.driveAt = Date.now(); save(); drvShow('Saved to Drive ' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})); if(!quiet) toast('Saved to Drive: ' + d.name); }
+    else { drvShow('Not saved to Drive: ' + (d.error || 'no answer')); if(!quiet) toast('Not saved to Drive: ' + (d.error || 'no answer')); }
+  }).catch(function(){ drvShow('Not saved to Drive (offline?)'); });
 }
 $('driveBtn').addEventListener('click', function(){ if(want) stop(); setTimeout(function(){ saveToDrive(false); }, want ? 400 : 0); });
 if(window.WPSLink && WPSLink.key()){
@@ -978,7 +1049,11 @@ $('exportBtn').addEventListener('click', function(){
   document.body.appendChild(a); a.click(); a.remove();
 });
 
-document.addEventListener('visibilitychange', function(){ if(document.hidden && want) stop(); });
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden && want){ stopReason = 'hidden'; stop(); }
+  else if(!document.hidden && stopReason === 'hidden'){ stopReason = ''; showBanner('The mic stopped when the screen locked or you left the page. Your notes are saved. Tap the mic to carry on.'); }
+});
+var stopReason = '';
 
 if(!SR){
   var w = $('warn'); w.style.display = 'block';
