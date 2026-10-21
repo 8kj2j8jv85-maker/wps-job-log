@@ -107,6 +107,24 @@ html[data-theme="night"] .warn{background:#3A3018;border-color:#5C4C22;color:#E8
 html[data-theme="night"] .hint,html[data-theme="night"].help-on footer .hint,html[data-theme="night"] .help-on footer .hint{color:#E8C26A}
 html[data-theme="night"] .toast{background:#2B3550;color:#E7EBF3}
 html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
+/* PC layout (Lex, 21 Oct 02:36: use the whole screen). Phones keep the one-column layout above. */
+@media (min-width:900px){
+  main{max-width:none;display:grid;grid-template-columns:minmax(340px,440px) minmax(0,1fr);grid-template-areas:"warn warn" "help help" "job room" "rooms room" "tips room" ". room";grid-template-rows:auto auto auto auto auto 1fr;gap:0 20px;padding:20px 28px;align-items:start}
+  #warn{grid-area:warn} #helpCard{grid-area:help} #jobCard{grid-area:job} #roomsCard{grid-area:rooms} #tipsCard{grid-area:tips} #roomCard{grid-area:room}
+  #roomCard{position:sticky;top:76px;padding:20px 24px}
+  #roomCard .roomhead h2{font-size:32px}
+  #roomCard .micwrap{flex-direction:row;justify-content:flex-start;gap:16px;margin:4px 0 10px}
+  #roomCard .micwrap .status{text-align:left}
+  #roomCard .micwrap .hint{text-align:left!important}
+  .mic{width:84px;height:84px;flex:0 0 auto}
+  #roomText{min-height:calc(100vh - 420px);font-size:17px}
+  .chip{padding:9px 14px;font-size:15px}
+  footer{justify-content:flex-end;padding:10px 28px}
+  footer .btn{flex:0 0 auto;min-width:190px}
+  footer .sum{position:static;flex:1;align-self:center;font-size:13px}
+  .panel{left:50%;right:auto;bottom:auto;top:6vh;transform:translateX(-50%);width:min(760px,92vw);max-height:86vh;border-radius:18px}
+  .toast{left:auto;right:28px;max-width:420px}
+}
 </style>
 </head>
 <body>
@@ -138,7 +156,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
     <div style="margin-top:8px"><label class="f" for="jobAddr">Address</label><input id="jobAddr" placeholder="Flat 9, Test House, 1 Test Road, E3 9ZZ" autocomplete="off"></div>
   </section>
 
-  <section class="card">
+  <section class="card" id="roomsCard">
     <label class="f">Room</label>
     <div class="lastvisit" id="lastVisit" style="display:none"></div>
     <div class="chips" id="chips"></div>
@@ -158,7 +176,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
     <div class="clips" id="clips"></div>
   </section>
 
-  <section class="card tip">
+  <section class="card tip" id="tipsCard">
     Say <b>"full stop"</b>, <b>"comma"</b>, <b>"new line"</b> or <b>"next item"</b> while talking. Tap a new room to move on; your notes are kept. When you're done, tap <b>Copy for Claude</b> and paste into the WPS project chat.
   </section>
 </main>
