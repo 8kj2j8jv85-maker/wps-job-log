@@ -407,6 +407,12 @@
   .perf-top.pq-low .pt-icon{ color:var(--coral-dark, #C4553D); }
   .done-wp{ margin-top:2px; font-size:12px; color:var(--stone); }
   .page-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+  .page-right{ display:flex; flex-direction:column; align-items:flex-end; justify-content:space-between; gap:8px; align-self:stretch; max-width:100%; }
+  .page-head{ position:relative; }
+  .page-head .build-top{ position:absolute; top:14px; right:0; }
+  .page-head-rp .build-top{ top:4px; }
+  .build-top .btn-link{ font-size:12px; font-weight:500; color:var(--stone, var(--ink-soft)); padding:0 2px; white-space:nowrap; }
+  .build-top .btn-link:hover{ color:var(--ink); text-decoration:underline; }
   .btn{ border-radius:8px; font-weight:500; letter-spacing:.01em; }
   .btn-coral{ background:var(--coral); color:var(--brand-dark); font-weight:600; }
   .btn-coral:hover{ background:#E87C62; }
@@ -503,6 +509,8 @@
     .wrap-dash .page-head{ padding-top:12px; }
     .page-title{ font-size:28px; }
     .page-actions{ width:100%; }
+    .page-right{ width:100%; }
+    .page-head .build-top{ top:6px; }
     .page-actions .btn{ flex:1 1 auto; justify-content:center; padding:10px 10px; }
     .d-tiles{ grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
     .d-tile{ padding:7px 8px; }
@@ -4648,18 +4656,18 @@ function renderPageHead(){
     const s = state.cloudStatus || "idle", bad = s === "error" || s === "conflict";
     return `<div class="page-head page-head-rp">
     <div><h1 class="page-title">Reports</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
-    ${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}
+    <div class="page-right">${renderBuildTop()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
   }
   return `<div class="page-head">
     <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : state.view === "reports" ? "Reports" : "Job Log"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div>${state.view === "today" ? renderWxLine() : ""}${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
-    <div class="page-actions">
+    <div class="page-right">${renderBuildTop()}<div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
         ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Checking…" : "Check everything now"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
       <button class="btn btn-coral nj-btn" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
-    </div>
+    </div></div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
 }
 
@@ -4740,15 +4748,13 @@ function renderUtilityRow(){
     </label>
     ${keyMode() ? "" : (state.gcalConnected ? CAL_BTN() : "")}
     ${renderKeyRow()}
-    ${state.newBuild ? "" : renderBuildRow()}
     </details>
-    ${state.newBuild ? renderBuildRow() : ""}
     ${dashKey() && state.dashRefused ? `<button class="btn-link" style="color:var(--coral)" onclick="state.moreTools=true;state.keyEdit=true;render()">Device key refused: paste it again ⚠</button>` : ""}
   </div>`;
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#78)";
+const BUILD = "21 Oct 2026 (#79)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -4766,9 +4772,11 @@ async function checkBuild(manual){
   if (live && live !== BUILD){ state.newBuild = live; const a = document.activeElement; if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) render(); showActionBar("New version of the dashboard is live (" + live + "). Your jobs are kept.", "Load it now", loadLatestBuild); }
   else { state.newBuild = ""; if (manual) showActionBar("You're on the latest version (" + BUILD + ")."); }
 }
+// Version label (Lex, 21 Oct 02:30): top right of the page, above + New job (was at the bottom of the sidebar).
+function renderBuildTop(){ return `<div class="build-top">${renderBuildRow()}</div>`; }
 function renderBuildRow(){
-  if (state.newBuild) return `<button class="btn-link" style="color:var(--coral)" onclick="loadLatestBuild()"${hint("A newer version is live. Your jobs and device key are kept.")}>New version ready: load it ⟳</button>`;
-  return `<button class="btn-link" onclick="checkBuild(true)"${hint("Which version this device is running. Click to check for a newer one.")}>Version ${esc(BUILD)}: check for update</button>`;
+  if (state.newBuild) return `<button class="btn-link" style="color:var(--coral)" onclick="loadLatestBuild()"${tip("A newer version is live. Your jobs and device key are kept.")}>New version ready: load it ⟳</button>`;
+  return `<button class="btn-link" onclick="checkBuild(true)"${tip("Which version this device is running. Click to check for a newer one.")}>Version ${esc(BUILD)}</button>`;
 }
 // Sidebar "More" (Lex, 18 Oct): the calendar button sits in view until it's connected, then moves under More
 function CAL_BTN(){
