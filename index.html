@@ -37,7 +37,7 @@
     color-scheme: light only;
   }
   #app{ background:#F4F7FB; background:var(--paper); min-height:100vh; }
-  .wrap{ max-width:1120px; margin:0 auto; padding:0 36px 60px; background:var(--paper); }
+  .wrap{ max-width:none; margin:0; padding:0 36px 60px; background:var(--paper); }   /* full screen width (Lex, 21 Oct 02:36: use the whole screen) */
   .serif{ font-family:'Cormorant Garamond', Georgia, serif; }
   .mono{ font-family:'IBM Plex Mono','Consolas',monospace; }
   a{ color:inherit; }
@@ -118,7 +118,7 @@
 
 
   /* compact dashboard (one screen) */
-  .wrap-dash{ max-width:1560px; }
+  .wrap-dash{ max-width:none; }
   .wrap-wide{ max-width:none; }   /* Reports page (Lex, 20 Oct): use the whole screen for tiles */
   .wrap-dash .page-head{ padding-top:20px; }
   .d-tiles{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
@@ -4754,7 +4754,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#79)";
+const BUILD = "21 Oct 2026 (#80)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
