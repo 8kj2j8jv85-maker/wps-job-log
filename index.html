@@ -409,7 +409,12 @@
   .page-actions{ display:flex; gap:10px; flex-wrap:wrap; }
   .page-right{ display:flex; flex-direction:column; align-items:flex-end; justify-content:space-between; gap:8px; align-self:stretch; max-width:100%; }
   .page-head{ position:relative; }
-  .page-head .build-top{ position:absolute; top:14px; right:0; }
+  .page-head .build-top{ position:absolute; top:8px; right:0; }
+  .page-head:not(.page-head-rp) .page-right{ padding-top:26px; }   /* clear space under the version label (Lex, 21 Oct 02:40) */
+  /* New job button in the shape of a door, with the WPS door mark (Lex, 21 Oct 02:40) */
+  .nj-btn{ display:inline-flex; align-items:center; gap:8px; align-self:flex-end; background:var(--coral); color:var(--brand-dark, #1f2d5a); border:none; font:inherit; font-weight:600; font-size:14.5px; padding:9px 18px 7px; border-radius:999px 999px 6px 6px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.12); }
+  .nj-btn:hover{ background:#E87C62; }
+  .nj-btn .nj-door{ width:20px; height:17px; flex:0 0 auto; }
   .page-head-rp .build-top{ top:4px; }
   .build-top .btn-link{ font-size:12px; font-weight:500; color:var(--stone, var(--ink-soft)); padding:0 2px; white-space:nowrap; }
   .build-top .btn-link:hover{ color:var(--ink); text-decoration:underline; }
@@ -4666,7 +4671,7 @@ function renderPageHead(){
       ${state.view === "today"
         ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Checking…" : "Check everything now"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
-      <button class="btn btn-coral nj-btn" onclick="openNew()"${hint("Log a job by hand")}>+ New job</button>
+      <button class="nj-btn" onclick="openNew()"${tip("Log a job by hand")}><svg class="nj-door" viewBox="50 515 258 215" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="16"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722"/><line x1="58" y1="722" x2="300" y2="722"/></g><circle cx="223" cy="678" r="13" fill="currentColor"/></svg><span>New job</span></button>
     </div></div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
 }
@@ -4754,7 +4759,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#80)";
+const BUILD = "21 Oct 2026 (#81)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
