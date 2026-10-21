@@ -21,7 +21,7 @@
   /* top bar */
   .top{ background:var(--navy); border-bottom:1px solid var(--line); }
   .top-in{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px clamp(16px,4vw,48px); }
-  .top img.logo{ height:46px; width:auto; display:block; }
+  .top img.logo{ height:clamp(96px,11vw,160px); width:auto; display:block; }   /* 21 Oct: vector logo, big (Lex) */
   .top .contact{ display:flex; gap:18px; flex-wrap:wrap; font-size:14px; color:var(--soft); }
   .top .contact a{ color:var(--text); text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
   .top .contact svg{ width:16px; height:16px; fill:var(--coral); }
@@ -94,7 +94,7 @@
   .sendlock{ position:fixed; inset:0; z-index:9999; background:rgba(20,29,61,.97); color:#fff; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; }
   .sendlock[hidden]{ display:none; }
   .sendlock .box{ max-width:440px; }
-  .sendlock img{ height:52px; margin-bottom:22px; }
+  .sendlock img{ width:min(420px,80vw); height:auto; margin-bottom:26px; }
   .sendlock .spin{ width:56px; height:56px; margin:0 auto 22px; border:6px solid rgba(255,255,255,.2); border-top-color:var(--coral); border-radius:50%; animation:wpsspin 1s linear infinite; }
   @keyframes wpsspin{ to{ transform:rotate(360deg); } }
   .sendlock h2{ margin:0 0 12px; font-size:26px; }
@@ -111,9 +111,10 @@
     /* phone: the steps first, then the form, then the other panels */
     .guide{ display:contents; }
     .guide .p-steps{ order:1; } .form{ order:2; } .guide .p-know{ order:3; } .guide .trust{ order:4; }
-    .top img.logo{ height:38px; }
+    .top img.logo{ height:clamp(96px,16vw,140px); }
     .top .contact .em{ display:none; }
   }
+  @media (max-width:700px){ .top-in{ flex-direction:column; align-items:center; text-align:center; } .top img.logo{ height:auto; width:min(560px,90vw); aspect-ratio:860/240; } .top .contact{ justify-content:center; } }
 </style>
 </head>
 <body>
@@ -133,7 +134,7 @@
 </svg>
 
 <header class="top"><div class="top-in">
-  <img class="logo" src="sig/email/wps-logo-navy.png" alt="Wellington Property Services">
+  <img class="logo" width="860" height="240" src="sig/wps-logo-white.svg" alt="Wellington Property Services">
   <div class="contact">
     <a href="tel:+447541345053"><svg><use href="#i-phone"/></svg>07541 345053</a>
     <a class="em" href="mailto:hello@wellington-ps.co.uk"><svg><use href="#i-mail"/></svg>hello@wellington-ps.co.uk</a>
@@ -208,7 +209,7 @@
 
 <div class="sendlock" id="sendLock" hidden role="alertdialog" aria-live="assertive">
   <div class="box">
-    <img src="sig/email/wps-logo-navy.png" alt="">
+    <img src="sig/wps-logo-white.svg" alt="">
     <div class="spin"></div>
     <h2>Sending your comments</h2>
     <p class="warn">Please don't close this page or switch to another app until you see "Sent".</p>
