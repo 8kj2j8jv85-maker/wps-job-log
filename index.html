@@ -417,7 +417,7 @@
   .nj-btn:hover .door-circle{ background:#d9654c; transform:translateY(-1px); }
   .door-mark{ width:38px; height:38px; display:block; }
   .fab-new .door-mark{ width:42px; height:42px; }
-  .door-mark g{ stroke-width:2.2px; }
+  .door-mark g{ stroke-width:2.4px; }   /* navy door and handle on coral (Lex, 21 Oct 03:06: WPS_mark_navy.svg) */
   .nj-lbl{ font-size:12px; font-weight:600; letter-spacing:.02em; color:var(--ink-soft); }
   .page-head-rp .build-top{ top:4px; }
   .build-top .btn-link{ font-size:12px; font-weight:500; color:var(--stone, var(--ink-soft)); padding:0 2px; white-space:nowrap; }
@@ -3880,7 +3880,7 @@ function renderInner(app){
     </div>
     </main>
     </div>
-    ${state.editing || state.mtBox ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="223" cy="678" r="7" fill="#fff"/></svg></button>`}
+    ${state.editing || state.mtBox ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
     ${renderMtBox()}
     ${renderMsBox()}
   `;
@@ -4675,7 +4675,7 @@ function renderPageHead(){
       ${state.view === "today"
         ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Checking…" : "Check everything now"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
-      <button class="nj-btn" onclick="openNew()"${tip("New job: log a job by hand")} aria-label="New job"><span class="door-circle"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="223" cy="678" r="7" fill="#fff"/></svg></span><span class="nj-lbl">New job</span></button>
+      <button class="nj-btn" onclick="openNew()"${tip("New job: log a job by hand")} aria-label="New job"><span class="door-circle"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></span><span class="nj-lbl">New job</span></button>
     </div></div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
 }
