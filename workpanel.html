@@ -70,6 +70,19 @@
   .mic.on{ background:var(--coral); }
   .hidden{ display:none !important; }
   @media (min-width:700px){ .wrap{ max-width:640px; margin:0 auto; border-left:1px solid var(--soft); border-right:1px solid var(--soft); min-height:100vh; } }
+  /* photo enlarge (Lex, 22 Oct): double-click a photo to see it big; X, Esc or a click outside closes it */
+  .zoom{ position:fixed; inset:0; z-index:50; background:#0C1228; display:flex; flex-direction:column; }
+  .zoom[hidden]{ display:none; }
+  .zoom .zbar{ display:flex; align-items:center; gap:8px; padding:8px 10px; color:#fff; font-size:13px; }
+  .zoom .zbar .grow{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .zoom .zx{ width:44px; height:44px; border-radius:22px; border:1.5px solid var(--coral); background:var(--navy-box); color:#fff; font-size:22px; line-height:1; cursor:pointer; flex:none; }
+  .zoom .zimg{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:0 6px; overflow:auto; }
+  .zoom .zimg img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:4px; cursor:zoom-in; }
+  .zoom.full .zimg{ align-items:flex-start; justify-content:flex-start; }
+  .zoom.full .zimg img{ max-width:none; max-height:none; cursor:zoom-out; }
+  .zoom .zfoot{ display:flex; gap:8px; padding:10px; }
+  .zoom .zfoot .btn{ flex:none; width:52px; font-size:18px; }
+  .zoom .zfoot .btn-main{ flex:1; }
 </style>
 </head>
 <body>
@@ -111,13 +124,18 @@
       <select id="room" disabled><option>Open a photo set first</option></select>
     </div>
     <div class="grid" id="thumbs"></div>
+    <div class="zoom" id="zoom" hidden role="dialog" aria-modal="true" aria-label="Photo">
+      <div class="zbar"><span class="grow" id="zoomLbl"></span><button class="zx" id="zoomX" aria-label="Close">&times;</button></div>
+      <div class="zimg" id="zoomBox"><img id="zoomImg" alt=""></div>
+      <div class="zfoot"><button class="btn" id="zoomPrev" aria-label="Previous photo">&#8249;</button><button class="btn-main" id="zoomPut">Put this photo in at the cursor</button><button class="btn" id="zoomNext" aria-label="Next photo">&#8250;</button></div>
+    </div>
     <div class="sec" style="padding:0;border:0">
       <label for="cap">Caption (goes in the cell under the photo; leave empty to skip)</label>
       <input type="text" id="cap" autocomplete="off">
     </div>
     <button class="btn-main" id="putPhoto" disabled>Put photo in at the cursor</button>
     <div class="msg" id="photoMsg"></div>
-    <div class="note" id="photoHelp">Click in the photo box in the report first, then double-click a photo (or pick it and press the button, or drag it in: on test). It comes out the same size and shape as the other photos in the row, the caption goes in the box below, and the cursor moves on to the next box. Green = already used in this report.</div>
+    <div class="note" id="photoHelp">Click in the photo box in the report first, then drag a photo in (or pick it and press the button). Double-click a photo to see it big. It comes out the same size and shape as the other photos in the row, the caption goes in the box below, and the cursor moves on to the next box. Green = already used in this report.</div>
   </div>
 
   <!-- DICTATION -->
@@ -297,10 +315,39 @@ function markPicked() {
   Array.prototype.forEach.call($("thumbs").querySelectorAll(".ph"), function (el) { el.classList.toggle("picked", +el.dataset.i === S.picked); });
   $("putPhoto").disabled = S.picked < 0;
 }
-// Double-click = straight in (Lex 22 Oct: no button needed). Dragging is off: a drag into Word only carries a link.
+// Double-click = see the photo big (Lex 22 Oct evening; before that it put the photo straight in). Putting a photo
+// in is drag, the Put button, or the Put button on the big view. Click the big photo for full size, X / Esc /
+// a click on the dark area closes it, arrows (or Left/Right) step through this room's photos.
+var zoomAt = -1;
+function zoomList() { var out = []; S.photos.forEach(function (x, i) { if (x.area === S.room) out.push(i); }); return out; }
+function zoomShow(i) {
+  var x = S.photos[i]; if (!x) return;
+  zoomAt = i; S.picked = i; markPicked();
+  var l = zoomList(), k = l.indexOf(i);
+  $("zoomImg").src = x.url;
+  $("zoomLbl").textContent = x.area + " " + x.seq + "  (" + (k + 1) + " of " + l.length + ")" + (usedSet()[x.name] ? " · used" : "");
+  $("zoomPut").textContent = INWORD ? "Put this photo in at the cursor" : "Copy this photo";
+  $("zoomPrev").disabled = k <= 0; $("zoomNext").disabled = k >= l.length - 1;
+  $("zoom").classList.remove("full"); $("zoom").hidden = false; $("zoomX").focus();
+}
+function zoomClose() { if ($("zoom").hidden) return; $("zoom").hidden = true; $("zoomImg").removeAttribute("src"); zoomAt = -1; }
+function zoomStep(d) { var l = zoomList(), k = l.indexOf(zoomAt) + d; if (k >= 0 && k < l.length) zoomShow(l[k]); }
 $("thumbs").addEventListener("dblclick", function (e) {
   var b = e.target.closest(".ph"); if (!b) return;
-  S.picked = +b.dataset.i; markPicked(); $("putPhoto").click();
+  zoomShow(+b.dataset.i);
+});
+$("zoomX").addEventListener("click", zoomClose);
+$("zoomPrev").addEventListener("click", function () { zoomStep(-1); });
+$("zoomNext").addEventListener("click", function () { zoomStep(1); });
+$("zoomPut").addEventListener("click", function () { var i = zoomAt; zoomClose(); S.picked = i; markPicked(); $("putPhoto").click(); });
+$("zoomImg").addEventListener("click", function (e) { e.stopPropagation(); $("zoom").classList.toggle("full"); });
+$("zoomBox").addEventListener("click", function (e) { if (e.target === this) zoomClose(); });
+$("zoom").addEventListener("click", function (e) { if (e.target === this) zoomClose(); });
+document.addEventListener("keydown", function (e) {
+  if ($("zoom").hidden) return;
+  if (e.key === "Escape") { e.preventDefault(); zoomClose(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); zoomStep(-1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); zoomStep(1); }
 });
 // Dragging (on test, Lex 22 Oct): the drag carries the picture itself (cropped to the box shape, as HTML), not a
 // link. The cropped copy is made when the finger/mouse goes down, so it's ready when the drag starts. When the drag
