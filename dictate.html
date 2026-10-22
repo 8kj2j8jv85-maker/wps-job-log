@@ -54,6 +54,36 @@ h2{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font
 .chip.has:after{content:"";position:absolute;top:3px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--coral)}
 .chip.add{border-style:dashed;color:var(--muted)}
 .chip.next:not(.on){border:2px solid var(--coral);padding:7px 11px}
+/* rooms as a grid with ticks and word counts (Lex, 21 Oct) */
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:8px}
+.chips .chip{min-height:46px;border-radius:12px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 11px;line-height:1.2}
+.chips .chip.next:not(.on){padding:7px 10px}
+.chip .cw{font-size:11.5px;color:var(--ok,#2E6B45);white-space:nowrap;font-weight:600}
+.chip.on .cw{color:#CFE9D8}
+.chip.has:after{display:none}
+.nextbtn{color:var(--navy);border-color:var(--navy2,var(--navy));font-weight:600}
+.recroom{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.recroom h4{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px}
+.recroom h4 span{flex:1}
+.recnote{font-size:13px;color:var(--muted);margin:0 0 6px;white-space:pre-wrap;max-height:3.9em;overflow:hidden}
+.recclip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.recclip .rmeta{flex:1;min-width:120px;color:var(--muted)}
+.recclip audio{width:100%;height:36px}
+.micbanner{margin:4px 0 8px;padding:10px 12px;border-radius:10px;background:#FFF4E5;border:1px solid #F3D3A3;color:#7A4B00;font-size:14px}
+html[data-theme="night"] .micbanner{background:#3A3018;border-color:#5C4C22;color:#E8C26A}
+.drvstat{font-size:12px;color:var(--muted);position:absolute;top:-22px;right:16px}
+.delrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.delrow .mini{padding:8px 11px}
+.delbtn{color:#B3261E;border-color:#E9B4AE}
+.mini:disabled{opacity:.45}
+html[data-theme="night"] .delbtn{color:#F2B8B5;border-color:#6B3A36}
+.fixbar{margin-top:8px;padding:10px 12px;border:1px solid var(--coral);border-radius:12px;background:#FFF6F4}
+.fixrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.fixrow span{font-size:14px}
+.fixrow input{flex:1;min-width:140px;padding:7px 9px;font-size:15px}
+.fixalways{background:var(--navy);color:#fff;border-color:var(--navy)}
+html[data-theme="night"] .fixbar{background:#2A2220;border-color:#5A3B33}
+html[data-theme="night"] .nextbtn{color:#B7C6F0}
 .lastvisit{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 10px;padding:8px 10px;background:#FFF6F4;border:1px solid #F6D3CE;border-radius:10px}
 .lastvisit b{color:var(--navy)}
 .lastvisit button{background:none;border:none;padding:0;font:inherit;font-size:13px;color:var(--navy);text-decoration:underline;margin-left:6px}
@@ -122,6 +152,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
   footer{justify-content:flex-end;padding:10px 28px}
   footer .btn{flex:0 0 auto;min-width:190px}
   footer .sum{position:static;flex:1;align-self:center;font-size:13px}
+  footer .drvstat{position:static;align-self:center;margin-right:8px}
   .panel{left:50%;right:auto;bottom:auto;top:6vh;transform:translateX(-50%);width:min(760px,92vw);max-height:86vh;border-radius:18px}
   .toast{left:auto;right:28px;max-width:420px}
 }
@@ -133,6 +164,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
   <h1>Dictation</h1>
   <button id="helpBtn" title="Turns the hint lines on or off">?</button>
   <button id="jobsBtn" title="Your saved dictations. Start a new job here.">Jobs</button>
+  <button id="recsBtn" title="Every audio recording on this device: listen, save or delete">Recordings</button>
   <button id="setBtn" title="Word fixes, room list, audio backup">Settings</button>
   <nav class="dnav" aria-label="WPS pages"><a href="./"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Dashboard</a><a href="./#log"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Job Log</a><a href="photos.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Photo Tool</a><span class="here"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>Dictation</span></nav>
 </header>
@@ -163,16 +195,27 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
   </section>
 
   <section class="card" id="roomCard">
-    <div class="roomhead"><h2 id="roomName">Pick a room</h2><button class="mini" id="clearRoom" title="Clears this room's text (asks first). Audio backups are kept.">Clear</button></div>
+    <div class="roomhead"><h2 id="roomName">Pick a room</h2><button class="mini nextbtn" id="nextRoom" title="Moves to the next room you haven't done, in walk-round order. The mic keeps going.">Next room ›</button></div>
     <div class="micwrap">
       <button class="mic" id="mic" aria-label="Start dictating">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
       </button>
       <div class="status" id="status">Tap to dictate this room</div>
-      <div class="hint" style="text-align:center">Pick a room above first. You can also type or fix words in the box below.</div>
+      <div class="hint" style="text-align:center">Pick a room first. Tap another room or <b>Next room</b> while talking and the mic carries on into it. Select a word in the notes to fix it.</div>
     </div>
+    <div class="micbanner" id="micBanner" hidden></div>
     <div class="interim" id="interim"></div>
-    <textarea id="roomText" rows="7" placeholder="Your notes for this room appear here. You can type or fix words too."></textarea>
+    <textarea id="roomText" rows="7" placeholder="Your notes for this room appear here. You can type or fix words too, even while the mic is on."></textarea>
+    <div class="delrow">
+      <button class="mini" id="undoLast" title="Removes the last thing the mic wrote in this room. Works while the mic is on.">↶ Undo last bit</button>
+      <button class="mini" id="clearRoom" title="Clears this room's notes (asks first). Audio backups are kept.">Clear text</button>
+      <button class="mini delbtn" id="delRoom" title="Deletes this room's notes and its audio backups (asks first)">Delete room</button>
+    </div>
+    <div class="fixbar" id="fixBar" hidden>
+      <div class="fixrow"><span>Change <b id="fixFrom"></b> to</span><input id="fixTo" autocomplete="off" autocapitalize="none"></div>
+      <div class="fixrow"><button class="mini" id="fixOnce" title="Changes just this one">Just here</button><button class="mini fixalways" id="fixAlways" title="Changes it everywhere on this job and remembers it for next time (Settings > word fixes)">Always</button><button class="mini" id="fixCancel">Cancel</button></div>
+      <div class="hint">Select a wrong word in the notes (long-press on the phone) and fix it here. "Always" fixes it in every room of this job and from now on.</div>
+    </div>
     <div class="clips" id="clips"></div>
   </section>
 
@@ -182,7 +225,7 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 </main>
 
 <footer>
-  <div class="sum" id="sum"></div>
+  <div class="sum" id="sum"></div><div class="drvstat" id="drvStat"></div>
   <button class="btn ghost" id="driveBtn" style="display:none" title="Saves these notes in Google Drive > WPS Dictation under the job number, so Claude can read them for the report">Save to Drive</button>
   <button class="btn ghost" id="shareBtn" title="Send the notes to another app, e.g. WhatsApp or email">Share</button>
   <button class="btn primary" id="copyBtn" title="Copies every room, ready to paste into the WPS project chat">Copy for Claude</button>
@@ -193,6 +236,15 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
     <h3><span>Jobs</span><button class="mini" data-close>Close</button></h3>
     <button class="btn coral" id="newJob" style="width:100%;margin-bottom:12px">Start a new job</button>
     <div class="joblist" id="jobList"></div>
+  </div>
+</div>
+
+<div class="sheet" id="recsSheet">
+  <div class="panel">
+    <h3><span>Recordings</span><button class="mini" data-close>Close</button></h3>
+    <div class="hint" style="display:block;margin-bottom:8px">Audio backups kept on this device, room by room. Tap Play to listen (you can drag along the bar), Notes to go to that room, Delete to get rid of one you don't want.</div>
+    <select id="recsJob" style="margin-bottom:12px"></select>
+    <div id="recsList"></div>
   </div>
 </div>
 
@@ -233,6 +285,16 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 'use strict';
 var KEY = 'wps-dictate-v1';
 var DEFAULT_ROOMS = ['External picture','Exterior','Entrance and Hallway','Lounge','Kitchen','Dining Room','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom','En-suite','WC','Landing','Stairs','Garden','Electricity meter','Gas meter','Heat meter','Keys','General'];
+// Word hints (Lex, 21 Oct): trade words the speech engine is nudged towards, where the browser supports it.
+var TRADE_WORDS = ['skirting board','skirting boards','architrave','architraves','emulsion','magnolia','gloss','silk finish','worktop','splashback','upstand',
+  'extractor fan','extractor hood','cooker hood','hob','oven','grill','fridge freezer','washing machine','washer dryer','tumble dryer','dishwasher','microwave',
+  'consumer unit','smoke alarm','heat alarm','carbon monoxide alarm','thermostat','radiator','towel rail','boiler','immersion','extractor',
+  'laminate','vinyl','carpet','floor tiles','wall tiles','grout','sealant','silicone','limescale','mould','discolouration','tide mark',
+  'scuff','scuffs','scuffing','chip','chipped','scratch','scratches','marks','stain','staining','fair wear and tear','not present at check-in',
+  'blind','blinds','curtain pole','curtain rail','net curtain','coving','ceiling rose','pendant light','downlight','spotlights','light switch','socket',
+  'door handle','hinge','door stop','threshold strip','letterbox','intercom','door entry phone','window restrictor','window handle','sill','reveal',
+  'shower screen','shower tray','bath panel','vanity unit','mixer tap','basin','pedestal','toilet seat','cistern','wardrobe','chest of drawers','bedside table',
+  'mattress','headboard','sofa','armchair','dining table','sideboard','balcony','decking','patio','lawn','hedge','meter reading','electricity meter','gas meter','water meter','heat meter'];
 var DEFAULT_CORR = [
   ['skirting bored','skirting board'],
   ['skirting bords','skirting boards'],
@@ -281,7 +343,7 @@ function newJob(){
   state.jobs.unshift(j); state.currentId = j.id; save(); return j;
 }
 function room(name, create){
-  var j = job(); if(!j) return null;
+  var j = job(); if(!j || !name) return null;
   for(var i=0;i<j.rooms.length;i++) if(j.rooms[i].name===name) return j.rooms[i];
   if(!create) return null;
   var r = {name:name, text:'', clips:[]}; j.rooms.push(r); return r;
@@ -348,7 +410,7 @@ function fillFromLog(j){
 }
 
 /* ---------- text processing ---------- */
-function processText(t){
+function processText(t, cont){
   var s = ' ' + t.trim() + ' ';
   var corr = state.settings.corrections || [];
   for(var i=0;i<corr.length;i++){
@@ -365,7 +427,7 @@ function processText(t){
        .replace(/ ([.,?])/g,'$1')
        .replace(/ *\n */g,'\n')
        .trim();
-  s = s.replace(/(^|[.?!]\s+|\n-?\s*)([a-z])/g, function(m,p,c){ return p + c.toUpperCase(); });
+  s = s.replace(/(^|[.?!]\s+|\n-?\s*)([a-z])/g, function(m,p,c){ return (cont && p === '') ? m : p + c.toUpperCase(); });
   return s;
 }
 function joinText(a,b){
@@ -402,13 +464,38 @@ function delClip(k){ delete memClips[k]; return idb('readwrite', function(s){ re
 /* ---------- recording ---------- */
 var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 var rec=null, want=false, base='', sessFinal='', mediaRec=null, stream=null, chunks=[], startedAt=0, lock=null, recRoom=null;
+var usedFinals=0, pendingRoom=null, clipRoom=null;
+var recStarted=0, fails=[], restartDelay=150, micTimer=null, recStart=0, srBroke=false;   // 21 Oct: mic restarts and timer   // 21 Oct: finals already added this session; room to switch to; room the audio clip belongs to
 
 function setLive(on){
   $('mic').classList.toggle('live', on);
   $('mic').setAttribute('aria-label', on ? 'Stop dictating' : 'Start dictating');
-  $('roomText').readOnly = on;
   $('status').textContent = on ? 'Listening… tap to stop' : 'Tap to dictate this room';
   if(!on) $('interim').textContent = '';
+  clearInterval(micTimer); micTimer = null;
+  if(on){ recStart = Date.now(); hideBanner(); micTimer = setInterval(tickStatus, 1000); }
+}
+function tickStatus(){
+  if(!want) return;
+  var t = fmt(Math.round((Date.now() - recStart)/1000));
+  var st = $('status').getAttribute('data-mode') || 'Listening';
+  $('status').textContent = st + '… ' + t + (st === 'Listening' ? ' · tap to stop' : '');
+}
+function setMode(m){ $('status').setAttribute('data-mode', m); tickStatus(); }
+function showBanner(msg){ var b = $('micBanner'); b.textContent = msg; b.hidden = false; try{ if(navigator.vibrate) navigator.vibrate([120,80,120]); }catch(e){} }
+function hideBanner(){ $('micBanner').hidden = true; }
+// Word hints: only where the browser supports them; otherwise nothing changes.
+function addHints(r){
+  try{
+    if(!r || !('phrases' in r) || typeof window.SpeechRecognitionPhrase !== 'function') return;
+    var seen = {}, list = [];
+    var add = function(w, boost){ w = String(w||'').trim(); var k = w.toLowerCase(); if(!w || w.length > 60 || seen[k]) return; seen[k] = 1; list.push(new SpeechRecognitionPhrase(w, boost)); };
+    (state.settings.corrections || []).forEach(function(c){ add(c[1], 4); });
+    var j = job(); if(j) j.rooms.forEach(function(x){ add(x.name, 3); });
+    state.settings.rooms.forEach(function(n){ add(n, 3); });
+    TRADE_WORDS.forEach(function(w){ add(w, 3); });
+    r.phrases = list.slice(0, 200);
+  }catch(e){}
 }
 function start(){
   if(!job()) newJob();
@@ -423,45 +510,108 @@ function start(){
       stream = s;
       var types = ['audio/mp4','audio/webm;codecs=opus','audio/webm'];
       var type = ''; for(var i=0;i<types.length;i++){ if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(types[i])){ type=types[i]; break; } }
-      try{ mediaRec = type ? new MediaRecorder(s,{mimeType:type}) : new MediaRecorder(s); }catch(e){ mediaRec = new MediaRecorder(s); }
-      chunks = []; startedAt = Date.now();
-      mediaRec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
-      mediaRec.onstop = saveClip;
-      mediaRec.start(1000);
+      clipType = type;
+      startClip(recRoom);
       go();
     }).catch(function(){ toast('Audio backup unavailable; live text only.'); go(); });
   } else { go(); }
+}
+var clipType = '';
+function startClip(rname){
+  if(!stream) return;
+  try{ mediaRec = clipType ? new MediaRecorder(stream,{mimeType:clipType}) : new MediaRecorder(stream); }catch(e){ try{ mediaRec = new MediaRecorder(stream); }catch(_){ mediaRec = null; return; } }
+  var mine = mediaRec, myChunks = []; clipRoom = rname; startedAt = Date.now(); chunks = myChunks;
+  mediaRec.ondataavailable = function(e){ if(e.data && e.data.size) myChunks.push(e.data); };
+  mediaRec.onstop = function(){ saveClip(mine, myChunks, clipRoomOf(mine)); };
+  mine._room = rname; mine._at = startedAt;
+  mediaRec.start(1000);
+}
+function clipRoomOf(m){ return m && m._room; }
+// Append what was just said to the room's notes without moving the cursor if Lex is typing in the box.
+function addLive(txt){
+  if(!txt) return;
+  var cont = base && !/[.?!]\s*$|\n\s*$/.test(base);
+  var piece = processText(txt, cont); if(!piece) return;
+  var prev = base, next = joinText(base, piece);
+  if(pendingRoom){   // said just before the room switch: it belongs to the old room, not the box on screen
+    base = next; var old = room(recRoom, true); if(old){ old.text = base; save(); } renderChips(); return;
+  }
+  var el = $('roomText');
+  if(document.activeElement === el && next.indexOf(el.value) === 0 && el.setRangeText){
+    var ss = el.selectionStart, se = el.selectionEnd;
+    el.setRangeText(next.slice(el.value.length), el.value.length, el.value.length, 'preserve');
+    el.selectionStart = ss; el.selectionEnd = se;
+  } else el.value = next;
+  base = next;
+  var r = room(recRoom, true); if(r){ r.text = base; pushUndo(recRoom, prev, next); save(); }
+  renderSum(); renderChips(); updDelBtns();
+  if(!drvTimer || Date.now() - (window.__drvTick||0) > 120000){ window.__drvTick = Date.now(); autoDrive(120000); }
+}
+// Undo last bit (Lex, 21 Oct): remember the room text before each piece the mic added (last 20 per room, this session only).
+var undoStack = {};
+function pushUndo(rname, before, after){ var a = undoStack[rname] || (undoStack[rname] = []); a.push({after:after, before:before || ''}); if(a.length > 20) a.shift(); }
+function updDelBtns(){
+  var r = curRoom(); var a = r && undoStack[r.name];
+  $('undoLast').disabled = !(a && a.length);
+  $('clearRoom').disabled = !(r && r.text.trim());
+  $('delRoom').disabled = !r;
 }
 function startSR(){
   try{
     rec = new SR();
     rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true;
+    usedFinals = 0;
+    addHints(rec);
     rec.onresult = function(e){
+      if(rec && rec._ended) return;   // nothing counts between the end of one listening session and the restart
       var fin = '', interim = '';
-      for(var i=0;i<e.results.length;i++){
+      for(var i=usedFinals;i<e.results.length;i++){
         var res = e.results[i];
-        if(res.isFinal) fin += res[0].transcript + ' '; else interim += res[0].transcript;
+        if(res.isFinal){ fin += res[0].transcript + ' '; usedFinals = i + 1; } else interim += res[0].transcript;
       }
-      sessFinal = fin;
-      $('roomText').value = joinText(base, processText(sessFinal));
+      if(fin.trim()) addLive(fin);
       $('interim').textContent = interim;
     };
     rec.onerror = function(e){
-      if(e.error==='not-allowed' || e.error==='service-not-allowed'){
-        toast('Microphone or speech access is blocked. Check Settings > Safari > Microphone, and Siri & Dictation is on.');
-        want = false;
-      } else if(e.error==='audio-capture' && mediaRec){
-        toast("This phone can't do live text and audio backup together. Turn off audio backup in Settings.");
+      var er = e && e.error;
+      if(er==='not-allowed' || er==='service-not-allowed'){
+        showBanner('Microphone or speech access is blocked. Check Settings > Safari > Microphone, and that Siri & Dictation is on.');
+        want = false; return;
       }
+      if(er==='audio-capture' && mediaRec){
+        // iPhone can't always do live text and the audio backup together: keep the words coming, save the audio so far
+        try{ if(mediaRec.state !== 'inactive') mediaRec.stop(); }catch(_){}
+        if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+        mediaRec = null;
+        showBanner('This phone couldn\'t record audio and show live words together, so the audio backup paused for now. Live words carry on.');
+        return;
+      }
+      if(er==='language-not-supported' || er==='phrases-not-supported'){ if(er==='phrases-not-supported'){ try{ rec.phrases = []; }catch(_){} } return; }
+      // no-speech, network, aborted: onend restarts it
     };
     rec.onend = function(){
-      base = joinText(base, processText(sessFinal)); sessFinal = '';
+      if(rec) rec._ended = true;
+      usedFinals = 0; $('interim').textContent = '';
       var r = room(recRoom, true); if(r){ r.text = base; save(); }
-      if(want){ setTimeout(function(){ if(want){ try{ rec.start(); }catch(_){ startSR(); } } }, 150); }
+      if(pendingRoom){ recRoom = pendingRoom; pendingRoom = null; var nr = room(recRoom, true); base = nr ? nr.text : ''; }
+      if(want){
+        var now = Date.now(); fails = fails.filter(function(t){ return now - t < 30000; });
+        var quick = recStarted && (now - recStarted < 1500); if(quick) fails.push(now);
+        if(fails.length >= 6){
+          // keeps dying straight away: stop properly and say so, rather than look live and hear nothing
+          fails = []; restartDelay = 150; stop();
+          showBanner('The mic kept dropping out, so it has stopped. Your notes are saved. Tap the mic to carry on.');
+          return;
+        }
+        restartDelay = quick ? Math.min(restartDelay * 2, 2000) : 150;
+        setMode('Reconnecting');
+        setTimeout(function(){ if(!want) return; try{ rec._ended = false; rec.start(); }catch(_){ startSR(); } }, restartDelay);
+      }
       else finishUI();
     };
+    rec.onstart = function(){ usedFinals = 0; if(rec) rec._ended = false; recStarted = Date.now(); setMode('Listening'); };
     rec.start();
-  }catch(e){ toast('Live text could not start.'); }
+  }catch(e){ showBanner('Live words could not start on this device. Your audio backup (if on) still records.'); }
 }
 function stop(){
   want = false;
@@ -473,19 +623,53 @@ function stop(){
 function finishUI(){
   rec = null; setLive(false);
   var r = room(recRoom, true); if(r){ r.text = $('roomText').value; save(); }
-  render();
+  render(); autoDrive(800);
 }
-function saveClip(){
-  if(!chunks.length || !recRoom){ mediaRec = null; return; }
-  var type = (mediaRec && mediaRec.mimeType) || chunks[0].type || 'audio/mp4';
-  var blob = new Blob(chunks, {type:type});
-  var j = job(); var r = room(recRoom, true);
-  var k = j.id + '|' + recRoom + '|' + Date.now();
-  r.clips.push({key:k, secs:Math.round((Date.now()-startedAt)/1000), type:type});
-  save(); putClip(k, blob); chunks = []; mediaRec = null; renderClips();
+function saveClip(m, ch, rname){
+  if(!ch || !ch.length || !rname) return;
+  var type = (m && m.mimeType) || ch[0].type || 'audio/mp4';
+  var blob = new Blob(ch, {type:type});
+  var j = job(); var r = room(rname, true); if(!j || !r) return;
+  var k = j.id + '|' + rname + '|' + Date.now();
+  r.clips.push({key:k, secs:Math.round((Date.now()-((m && m._at) || Date.now()))/1000), type:type});
+  save(); putClip(k, blob); if(mediaRec === m) mediaRec = null; renderClips();
 }
 function keepAwake(){
   try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l){ lock = l; }).catch(function(){}); }catch(e){}
+}
+
+// Move to another room. If the mic is on it carries on into the new room (Lex, 21 Oct).
+function switchRoom(name){
+  var j = job() || newJob();
+  if(!want){
+    var cur = curRoom(); if(cur){ cur.text = $('roomText').value; }
+    j.current = name; room(name, true); save(); hideFix(); render(); return;
+  }
+  var old = room(recRoom, true); if(old){ old.text = base; }
+  j.current = name; room(name, true); save();
+  if(mediaRec && mediaRec.state !== 'inactive'){ try{ mediaRec.stop(); }catch(e){} startClip(name); }
+  if(rec){ pendingRoom = name; try{ rec.stop(); }catch(e){} }
+  else { recRoom = name; base = room(name, true).text; }
+  hideFix(); render(); autoDrive(2500);
+  $('roomText').value = room(name, true).text;
+  $('status').textContent = 'Listening… now in ' + name;
+}
+var lastNames = [];
+function nextRoomName(){
+  var j = job(); if(!j) return '';
+  var list = lastNames.length ? lastNames : state.settings.rooms;
+  var at = list.indexOf(j.current);
+  for(var k=1;k<=list.length;k++){
+    var n = list[(at + k + list.length) % list.length]; if(!n || n === j.current) continue;
+    var r = room(n, false); if(!r || !r.text.trim()) return n;
+  }
+  return at >= 0 && at + 1 < list.length ? list[at + 1] : '';
+}
+function words(t){ var m = String(t||'').trim().match(/\S+/g); return m ? m.length : 0; }
+function renderSum(){
+  var j = job(); if(!j) return;
+  var done = j.rooms.filter(function(x){ return x.text.trim(); }).length;
+  $('sum').textContent = done ? done + ' room' + (done>1?'s':'') + ' dictated' : '';
 }
 
 /* ---------- rendering ---------- */
@@ -497,6 +681,8 @@ function render(){
   $('roomName').textContent = r ? r.name : 'Pick a room';
   if(!want) $('roomText').value = r ? r.text : '';
   $('roomText').disabled = !r;
+  $('nextRoom').disabled = !r && !state.settings.rooms.length;
+  updDelBtns();
   renderClips();
   var done = j.rooms.filter(function(x){ return x.text.trim(); }).length;
   $('sum').textContent = done ? done + ' room' + (done>1?'s':'') + ' dictated' : '';
@@ -515,10 +701,12 @@ function renderChips(){
   }
   var next = '';
   if(plan) for(var i=0;i<plan.length;i++){ var pr = room(plan[i], false); if(plan[i] !== j.current && (!pr || !pr.text.trim())){ next = plan[i]; break; } }
+  lastNames = names.slice();
   var html = names.map(function(n){
     var r = room(n, false);
     var has = r && (r.text.trim() || r.clips.length);
-    return '<button class="chip' + (j.current===n?' on':'') + (has?' has':'') + (n===next?' next':'') + '" data-room="' + esc(n) + '">' + esc(n) + '</button>';
+    var wc = r ? words(r.text) : 0;
+    return '<button class="chip' + (j.current===n?' on':'') + (has?' has':'') + (n===next?' next':'') + '" data-room="' + esc(n) + '"><span>' + esc(n) + '</span>' + (wc ? '<span class="cw">✓ ' + wc + '</span>' : '') + '</button>';
   }).join('');
   if(plan && !j.showAll) html += '<button class="chip add" id="allRooms">More rooms</button>';
   html += '<button class="chip add" id="addRoom">+ Other</button>';
@@ -540,7 +728,7 @@ function renderClips(){
   if(!r || !r.clips.length){ el.innerHTML = ''; return; }
   el.innerHTML = r.clips.map(function(c,i){
     return '<div class="clip"><span>Audio ' + (i+1) + ' · ' + fmt(c.secs||0) + '</span>' +
-      '<button data-play="' + i + '">Play</button><button data-dl="' + i + '">Save</button><button data-del="' + i + '">✕</button></div>';
+      '<button data-play="' + i + '">Play</button><button data-dl="' + i + '">Save</button><button data-del="' + i + '" class="delbtn" title="Delete this audio backup">Delete</button></div>';
   }).join('');
 }
 
@@ -580,24 +768,89 @@ function toast(msg){
 $('mic').addEventListener('click', function(){ want ? stop() : start(); });
 $('chips').addEventListener('click', function(e){
   var b = e.target.closest('button'); if(!b) return;
-  if(want) stop();
   var j = job() || newJob();
   if(b.id === 'allRooms'){ j.showAll = true; save(); renderChips(); return; }
   if(b.id === 'addRoom'){
     var n = prompt('Room name (e.g. Bedroom 4, Utility, Balcony)');
     if(!n || !n.trim()) return; n = n.trim();
     if(state.settings.rooms.indexOf(n) < 0) state.settings.rooms.push(n);
-    j.current = n; room(n, true); save(); render(); return;
+    switchRoom(n); return;
   }
-  var cur = curRoom(); if(cur){ cur.text = $('roomText').value; }
-  j.current = b.getAttribute('data-room'); room(j.current, true); save(); render();
-  window.scrollTo({top: $('roomCard').offsetTop - 70, behavior:'smooth'});
+  var name = b.getAttribute('data-room'); if(!name || name === j.current) return;
+  switchRoom(name);
+  if(window.innerWidth < 900) window.scrollTo({top: $('roomCard').offsetTop - 70, behavior:'smooth'});
 });
-$('roomText').addEventListener('input', function(){ var r = curRoom(); if(r && !want){ r.text = this.value; save(); var done = job().rooms.filter(function(x){ return x.text.trim(); }).length; $('sum').textContent = done ? done + ' room' + (done>1?'s':'') + ' dictated' : ''; } });
+$('nextRoom').addEventListener('click', function(){
+  var n = nextRoomName(); if(!n){ toast('All rooms done. Tap Copy for Claude when ready.'); return; }
+  switchRoom(n);
+});
+$('roomText').addEventListener('input', function(){ var r = curRoom(); if(!r) return; r.text = this.value; if(want) base = this.value; save(); renderSum(); renderChips(); });
+/* ---------- fix a word (Lex, 21 Oct): select it, then Just here / Always ---------- */
+var fixSel = null;
+function hideFix(){ fixSel = null; $('fixBar').hidden = true; }
+function checkSel(){
+  var el = $('roomText'); if(document.activeElement !== el && document.activeElement !== $('fixTo')) return;
+  if(document.activeElement === $('fixTo')) return;
+  var a = el.selectionStart, b = el.selectionEnd;
+  var t = el.value.slice(a, b);
+  if(b > a && t.trim() && t.length <= 60 && !/\n/.test(t)){
+    var lead = t.match(/^\s*/)[0].length, trail = t.match(/\s*$/)[0].length;
+    fixSel = {a:a + lead, b:b - trail, word:t.trim()};
+    $('fixFrom').textContent = '"' + fixSel.word + '"';
+    if($('fixBar').hidden || $('fixBar').getAttribute('data-w') !== fixSel.word){ $('fixTo').value = fixSel.word; $('fixBar').setAttribute('data-w', fixSel.word); }
+    $('fixBar').hidden = false;
+  }
+}
+['select','mouseup','keyup','touchend'].forEach(function(ev){ $('roomText').addEventListener(ev, function(){ setTimeout(checkSel, 30); }); });
+document.addEventListener('selectionchange', function(){ if(document.activeElement === $('roomText')) checkSel(); });
+function applyFix(always){
+  if(!fixSel) return hideFix();
+  var to = $('fixTo').value.trim(); var from = fixSel.word;
+  if(!to || to === from) return hideFix();
+  var r = curRoom(); if(!r) return hideFix();
+  var el = $('roomText');
+  if(always){
+    var re = new RegExp('\\b' + reEsc(from) + '\\b', 'gi');
+    var j = job(), n = 0;
+    j.rooms.forEach(function(x){ x.text = x.text.replace(re, function(){ n++; return to; }); });
+    var c = state.settings.corrections.filter(function(p){ return p[0].toLowerCase() !== from.toLowerCase(); });
+    c.push([from.toLowerCase(), to]); state.settings.corrections = c;
+    el.value = r.text; toast('Changed ' + n + ' time' + (n===1?'':'s') + ' on this job. Remembered for next time.');
+  } else {
+    el.value = el.value.slice(0, fixSel.a) + to + el.value.slice(fixSel.b); r.text = el.value;
+  }
+  if(want) base = r.text;
+  save(); hideFix(); renderChips(); el.focus();
+}
+$('fixOnce').addEventListener('click', function(){ applyFix(false); });
+$('fixAlways').addEventListener('click', function(){ applyFix(true); });
+$('fixCancel').addEventListener('click', hideFix);
+$('fixTo').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); applyFix(true); } if(e.key === 'Escape') hideFix(); });
 $('clearRoom').addEventListener('click', function(){
-  var r = curRoom(); if(!r || want) return;
+  var r = curRoom(); if(!r) return;
   if(!confirm('Clear the notes for ' + r.name + '? Audio backups are kept.')) return;
-  r.text = ''; save(); render();
+  r.text = ''; if(want && recRoom === r.name) base = ''; undoStack[r.name] = []; $('roomText').value = ''; save(); render();
+});
+$('undoLast').addEventListener('click', function(){
+  var r = curRoom(); if(!r) return; var a = undoStack[r.name]; if(!a || !a.length) return;
+  var last = a.pop(); var el = $('roomText');
+  if(el.value.slice(-last.after.length) !== last.after && el.value !== last.after){
+    // the box was edited since; take off the same tail if it's still at the end
+    var tail = last.after.slice(last.before.length).trim();
+    if(tail && el.value.replace(/\s+$/,'').slice(-tail.length) === tail) el.value = el.value.replace(/\s+$/,'').slice(0, -tail.length).replace(/[\s]*$/, '');
+    else { toast("Couldn't find the last bit at the end of the notes. Fix it by hand."); updDelBtns(); return; }
+  } else el.value = el.value.slice(0, el.value.length - last.after.length) + last.before;
+  r.text = el.value; if(want && recRoom === r.name) base = r.text;
+  save(); renderSum(); renderChips(); updDelBtns(); toast('Last bit removed.');
+});
+$('delRoom').addEventListener('click', function(){
+  var r = curRoom(); if(!r) return; var j = job();
+  var n = r.clips.length;
+  if(!confirm('Delete ' + r.name + '? Its notes' + (n ? ' and ' + n + ' audio backup' + (n>1?'s':'') : '') + ' will be removed from this device.')) return;
+  if(want){ stop(); recRoom = null; base = ''; pendingRoom = null; }
+  r.clips.forEach(function(c){ delClip(c.key); });
+  j.rooms = j.rooms.filter(function(x){ return x !== r; });
+  undoStack[r.name] = []; j.current = null; save(); hideFix(); render(); toast(r.name + ' deleted.');
 });
 ['jobNo','jobType','jobAddr'].forEach(function(id){
   function upd(j){
@@ -644,16 +897,24 @@ $('copyBtn').addEventListener('click', function(){
 });
 /* Drive copy (20 Oct, Keeper): with this device's key, the notes are saved as "<job no> - <type> - dictation.txt" in
    Google Drive > WPS Dictation (replaced each time), so Claude can read them for the report without a paste. */
+var drvTimer = null, drvLastSent = '';
+function autoDrive(delay){
+  if(!window.WPSLink || !WPSLink.key()) return;
+  clearTimeout(drvTimer); drvTimer = setTimeout(function(){ saveToDrive(true); }, delay == null ? 1500 : delay);
+}
+function drvShow(t){ $('drvStat').textContent = t; }
 function saveToDrive(quiet){
   if(!window.WPSLink || !WPSLink.key()) return;
   var j = job(), s = buildOutput();
   if(!j || !s){ if(!quiet) toast('Nothing dictated yet.'); return; }
   if(!/^WPS\d{6,}$/i.test(String(j.jobNo||'').trim())){ if(!quiet) toast('Put the WPS job number on this job first (Jobs).'); return; }
+  if(quiet && s === drvLastSent) return;   // nothing new since the last save
+  drvShow('Saving to Drive…');
   WPSLink.saveDictation(String(j.jobNo).trim().toUpperCase(), j.type, s).then(function(d){
-    if(!d) return;
-    if(d.ok){ j.driveAt = Date.now(); save(); if(!quiet) toast('Saved to Drive: ' + d.name); }
-    else if(!quiet) toast('Not saved to Drive: ' + (d.error || 'no answer'));
-  });
+    if(!d){ drvShow('Not saved to Drive (no answer)'); return; }
+    if(d.ok){ drvLastSent = s; j.driveAt = Date.now(); save(); drvShow('Saved to Drive ' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})); if(!quiet) toast('Saved to Drive: ' + d.name); }
+    else { drvShow('Not saved to Drive: ' + (d.error || 'no answer')); if(!quiet) toast('Not saved to Drive: ' + (d.error || 'no answer')); }
+  }).catch(function(){ drvShow('Not saved to Drive (offline?)'); });
 }
 $('driveBtn').addEventListener('click', function(){ if(want) stop(); setTimeout(function(){ saveToDrive(false); }, want ? 400 : 0); });
 if(window.WPSLink && WPSLink.key()){
@@ -694,6 +955,58 @@ $('helpBtn').addEventListener('click', function(){
   applyHelp();
 });
 applyHelp();
+function clipWhen(c){ var t = +String(c.key||'').split('|').pop(); return t ? new Date(t).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
+function renderRecs(){
+  var withClips = state.jobs.filter(function(j){ return j.rooms.some(function(r){ return r.clips && r.clips.length; }); });
+  var sel = $('recsJob'), cur = sel.value || state.currentId;
+  if(!withClips.some(function(j){ return j.id === cur; })) cur = withClips.length ? withClips[0].id : '';
+  sel.innerHTML = withClips.map(function(j){
+    var n = j.rooms.reduce(function(a,r){ return a + (r.clips ? r.clips.length : 0); }, 0);
+    return '<option value="' + j.id + '"' + (j.id===cur?' selected':'') + '>' + esc((j.jobNo || 'No job no.') + ' · ' + (j.address || 'no address')) + ' (' + n + ')</option>';
+  }).join('');
+  sel.style.display = withClips.length ? '' : 'none';
+  var j = state.jobs.filter(function(x){ return x.id === cur; })[0];
+  if(!j){ $('recsList').innerHTML = '<p class="tip">No recordings on this device yet. Turn on "Keep audio backup of each room" in Settings to keep one for every room you dictate.</p>'; return; }
+  $('recsList').innerHTML = j.rooms.filter(function(r){ return r.clips && r.clips.length; }).map(function(r){
+    return '<div class="recroom"><h4><span>' + esc(r.name) + '</span><button class="mini" data-recopen="' + esc(r.name) + '">Notes</button></h4>' +
+      (r.text.trim() ? '<p class="recnote">' + esc(r.text.trim()) + '</p>' : '') +
+      r.clips.map(function(c,i){
+        return '<div class="recclip" data-room="' + esc(r.name) + '" data-i="' + i + '"><span class="rmeta">Recording ' + (i+1) + ' · ' + fmt(c.secs||0) + (clipWhen(c) ? ' · ' + clipWhen(c) : '') + '</span>' +
+          '<button class="mini" data-rplay>Play</button><button class="mini" data-rsave>Save</button><button class="mini delbtn" data-rdel>Delete</button></div>';
+      }).join('') + '</div>';
+  }).join('');
+}
+$('recsBtn').addEventListener('click', function(){ if(want) stop(); $('recsJob').value = state.currentId; renderRecs(); openSheet('recsSheet'); });
+$('recsJob').addEventListener('change', renderRecs);
+$('recsList').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  var j = state.jobs.filter(function(x){ return x.id === $('recsJob').value; })[0]; if(!j) return;
+  if(b.hasAttribute('data-recopen')){
+    state.currentId = j.id; j.current = b.getAttribute('data-recopen'); save(); render(); $('recsSheet').classList.remove('open');
+    if(window.innerWidth < 900) window.scrollTo({top: $('roomCard').offsetTop - 70, behavior:'smooth'}); return;
+  }
+  var row = b.closest('.recclip'); if(!row) return;
+  var rname = row.getAttribute('data-room'), i = +row.getAttribute('data-i');
+  var r = j.rooms.filter(function(x){ return x.name === rname; })[0]; if(!r) return; var c = r.clips[i]; if(!c) return;
+  if(b.hasAttribute('data-rplay')){
+    var old = row.querySelector('audio'); if(old){ old.play(); return; }
+    getClip(c.key).then(function(blob){
+      if(!blob){ toast('Audio not found on this device.'); return; }
+      var a = document.createElement('audio'); a.controls = true; a.src = URL.createObjectURL(blob); row.appendChild(a);
+      a.play().catch(function(){});
+    });
+  } else if(b.hasAttribute('data-rsave')){
+    getClip(c.key).then(function(blob){
+      if(!blob){ toast('Audio not found on this device.'); return; }
+      var ext = /mp4|m4a|aac/.test(c.type||'') ? 'm4a' : 'webm';
+      var name = ((j.jobNo||'job') + '_' + r.name + '_' + (i+1)).replace(/[^\w.-]+/g,'_') + '.' + ext;
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    });
+  } else if(b.hasAttribute('data-rdel')){
+    if(!confirm('Delete recording ' + (i+1) + ' of ' + r.name + '? This can\'t be undone.')) return;
+    delClip(c.key); r.clips.splice(i,1); save(); renderRecs(); render();
+  }
+});
 $('jobsBtn').addEventListener('click', function(){ if(want) stop(); renderJobs(); openSheet('jobsSheet'); });
 $('newJob').addEventListener('click', function(){ newJob(); render(); $('jobsSheet').classList.remove('open'); $('jobNo').focus(); });
 $('jobList').addEventListener('click', function(e){
@@ -736,7 +1049,11 @@ $('exportBtn').addEventListener('click', function(){
   document.body.appendChild(a); a.click(); a.remove();
 });
 
-document.addEventListener('visibilitychange', function(){ if(document.hidden && want) stop(); });
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden && want){ stopReason = 'hidden'; stop(); }
+  else if(!document.hidden && stopReason === 'hidden'){ stopReason = ''; showBanner('The mic stopped when the screen locked or you left the page. Your notes are saved. Tap the mic to carry on.'); }
+});
+var stopReason = '';
 
 if(!SR){
   var w = $('warn'); w.style.display = 'block';
