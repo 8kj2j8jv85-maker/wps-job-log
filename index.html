@@ -235,6 +235,8 @@
   .pl-row{ display:flex; gap:6px; align-items:center; }
   .pl-row input{ flex:1; min-width:0; }
   .pl-row .btn{ flex:none; text-decoration:none; }
+  .wf-box{ display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+  .wf-row .wf-name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.9em; }
   .d-acts{ display:inline-flex; gap:6px; flex-wrap:wrap; }
   .rr-box{ margin:4px 0 10px; padding:10px 12px; border:1px solid #E3B5A8; border-radius:8px; background:#FFF8F5; font-size:13px; }
   .rr-box .rr-t{ font-weight:600; color:var(--coral-dark); margin-bottom:6px; }
@@ -5149,7 +5151,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "21 Oct 2026 (#87)";
+const BUILD = "22 Oct 2026 (#98)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6185,6 +6187,41 @@ function renderPhotoLinkField(f){
       <span class="field-hint">${v ? "" : "No photo link yet. Run the Photo Tool, or paste a link here. "}Clear the box and save to remove it.</span>
     </label>`;
 }
+// Word file button (Lex, 22 Oct): finds the job's Word report in Dropbox > Reports > Word Docs through the WPS script
+// (op wordFind, device key, read only) and opens its dropbox.com page; Open there opens it in Word on the PC.
+// The file must be named with the job number first (WPS261013....docx), as all reports are.
+function renderWordFileField(f, isNew){
+  if (isNew || !/^WPS\d{6}$/i.test(String(f.jobNo||"").replace(/\s+/g,""))) return "";
+  const r = state.wordFind && state.wordFind.job === String(f.jobNo).toUpperCase().replace(/\s+/g,"") ? state.wordFind : null;
+  let body = "";
+  if (!keyMode()) body = `<span class="field-hint">Needs this device's key (More > Device key).</span>`;
+  else if (!r) body = `<button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()"${tip("Find this job's Word report in Dropbox > Reports > Word Docs")}>Find Word file</button>`;
+  else if (r.busy) body = `<span class="field-hint">Looking in Dropbox...</span>`;
+  else if (r.error) body = `<span class="field-hint" style="color:var(--coral)">${esc(r.error)}</span> <button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()">Try again</button>`;
+  else if (!r.files.length) body = `<span class="field-hint">No Word file starting ${esc(r.job)} in Dropbox > Reports > Word Docs.</span> <button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()">Look again</button>`;
+  else body = r.files.map((x,i) => `<div class="pl-row wf-row"><a class="btn ${i?"btn-ghost":"btn-coral"} btn-sm" href="${esc(x.url)}" target="_blank" rel="noopener"${tip("Opens the file's page on dropbox.com; click Open there to open it in Word")}>Open in Dropbox</a>
+      <span class="wf-name">${esc(x.name)}</span><span class="field-hint">${esc(wfWhen(x.modified))}</span></div>`).join("") +
+      `<span class="field-hint">On the Dropbox page click Open, then Word (desktop app).</span>`;
+  return `<div class="field wide">Word file<div class="wf-box">${body}</div></div>`;
+}
+function wfWhen(iso){ const d = new Date(iso); return isNaN(d) ? "" : "saved " + d.toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
+async function findWordFile(){
+  const f = state.editing; if (!f || !f.jobNo) return;
+  const job = String(f.jobNo).toUpperCase().replace(/\s+/g,"");
+  state.wordFind = { job, busy:true }; rerenderWordFile();
+  try {
+    const d = await dashCall("wordFind", { job });
+    state.wordFind = d && d.ok ? { job, files: d.files || [] } : { job, error: (d && d.error) || "No answer from the WPS script" };
+    if (d && d.error === "Unknown request.") state.wordFind.error = "The script hasn't got the Word file part yet (new deployment needed).";
+  } catch(e){ state.wordFind = { job, error: String(e && e.message || e) }; }
+  rerenderWordFile();
+}
+// Redraws only the Word file box, so nothing typed in the form is lost.
+function rerenderWordFile(){
+  const box = document.querySelector(".wf-box"); if (!box || !state.editing) return;
+  const tmp = document.createElement("div"); tmp.innerHTML = renderWordFileField(state.editing, false);
+  const nb = tmp.querySelector(".wf-box"); if (nb) box.replaceWith(nb);
+}
 function copyPhotoLink(btn){
   const v = (document.getElementById("f_photoLink")||{}).value || "";
   if (!v.trim()) return;
@@ -6351,6 +6388,7 @@ function renderForm(){
         <input type="text" id="f_parkingExtra" inputmode="decimal" value="${esc(f.parkingExtra||"")}" placeholder="Blank = included in the price" />
       </label>
       ${renderPhotoLinkField(f)}
+      ${renderWordFileField(f, isNew)}
       ${renderPropertyHistory(f)}
       ${!isNew && f.jobNo && keyMode() ? renderMailBox(f) : renderCiLogBox(f)}${renderVrBox(f)}${renderMtFormBox(f, isNew)}
       ${renderHistory(f)}
