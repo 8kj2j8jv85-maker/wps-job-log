@@ -162,6 +162,37 @@
   .ph-box{ border-top:1px solid var(--line); padding-top:10px; }
   .ph-h{ font-weight:600; font-size:13px; margin-bottom:4px; }
   .ph-row{ display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; font-size:13px; padding:3px 0; }
+  /* Emails at a glance (Lex, 22 Oct, option A). In the look of the navy emails the tenants get (WpsMail colours),
+     whatever the dashboard theme. One line per person, whoever needs something first, then their last 3. */
+  .ml-box{ margin-top:6px; background:#141D3D; color:#F3F5FA; border-radius:14px; padding:16px 16px 14px; display:flex; flex-direction:column; gap:10px; border-top:3px solid #E8735A; }
+  .ml-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .ml-head b{ font-family:"Cormorant Garamond", Georgia, serif; font-style:italic; font-weight:700; font-size:22px; color:#FFFFFF; }
+  .ml-head .when{ font-size:12px; color:#C3CBE3; }
+  .ml-head .ml-btn{ margin-left:auto; }
+  .ml-btn{ min-height:36px; border:1.5px solid #E8735A; border-radius:8px; background:#1F2D5A; color:#FFFFFF; padding:0 12px; font:inherit; font-size:13px; cursor:pointer; }
+  .ml-btn:disabled{ opacity:.6; cursor:default; }
+  .ml-dim{ font-size:12px; color:#C3CBE3; }
+  .ml-glance{ display:flex; flex-direction:column; gap:8px; }
+  .ml-g{ display:grid; grid-template-columns:12px minmax(110px,170px) minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px 12px; border-radius:10px; background:#1F2D5A; border:1px solid #33467F; font-size:14px; color:#F3F5FA; }
+  .ml-g .dot{ width:12px; height:12px; border-radius:6px; }
+  .ml-g .nm{ font-weight:600; color:#FFFFFF; }
+  .ml-g .nm small{ display:block; font-weight:400; font-size:12px; color:#C3CBE3; }
+  .ml-g .act{ font-size:13px; font-weight:600; text-align:right; }
+  .ml-g.amber{ border-color:#E8735A; } .ml-g.amber .dot{ background:#E8735A; } .ml-g.amber .act{ color:#F2937D; }
+  .ml-g.green .dot{ background:#6FCF97; } .ml-g.green .act{ color:#8FDCAE; }
+  .ml-g.peri .dot{ background:#9DB0E8; } .ml-g.peri .act{ color:#C3CBE3; }
+  .ml-g.grey .dot{ background:#7D88AE; } .ml-g.grey .act{ color:#C3CBE3; }
+  .ml-p{ display:flex; flex-direction:column; gap:2px; background:#1F2D5A; border-radius:10px; padding:8px 12px; }
+  .ml-p h4{ margin:2px 0 4px; font-size:14px; color:#FFFFFF; } .ml-p h4 span{ font-weight:400; font-size:12px; color:#C3CBE3; }
+  .ml-l{ display:grid; grid-template-columns:96px 70px minmax(0,1fr) auto; gap:8px; align-items:baseline; font-size:13px; padding:4px 0; border-top:1px solid #2B3D74; }
+  .ml-l:first-of-type{ border-top:0; }
+  .ml-l .w{ color:#C3CBE3; } .ml-l .o{ color:#F2937D; font-weight:600; } .ml-l .i{ color:#8FDCAE; font-weight:600; } .ml-l .c{ color:#C3CBE3; font-weight:600; }
+  .ml-l .t{ min-width:0; overflow-wrap:anywhere; color:#F3F5FA; }
+  .ml-box, .ml-box span, .ml-box div{ opacity:1; }
+  .ml-l a, .ml-box a{ color:#F2937D; }
+  .ml-notes{ border:1px dashed #33467F; border-radius:10px; padding:8px 12px; font-size:13px; color:#C3CBE3; display:flex; flex-direction:column; gap:3px; }
+  .ml-notes b{ color:#FFFFFF; }
+  @media (max-width:600px){ .ml-g{ grid-template-columns:12px minmax(0,1fr); } .ml-g .txt, .ml-g .act{ grid-column:2; text-align:left; } .ml-l{ grid-template-columns:80px 64px minmax(0,1fr); } .ml-l a{ grid-column:3; } }
   .ph-d{ min-width:92px; font-variant-numeric:tabular-nums; } .ph-t{ min-width:30px; font-weight:600; }
   .mm-card{ margin-top:14px; padding:12px 14px; border:1px solid var(--line, #e3e6ee); border-radius:10px; font-size:13px; }
   .mm-key{ font-weight:400; margin-left:10px; color:var(--ink-soft); text-transform:none; letter-spacing:0; }
@@ -2254,6 +2285,77 @@ function ciLogLine(r, withJob){
     + (withJob && job ? `<span class="c-dim">${esc(shortAddr(job))}</span>` : "") + `</div>`;
 }
 function shortAddr(j){ return [j.address, j.postcode].filter(Boolean).join(", "); }
+// ---------------------------------------------------------------- Emails at a glance (22 Oct, Lex, option A)
+// Read only, from the WPS script (file MailLog, op mailLog): Gmail plus the script's send logs. One line per person
+// (tenants, then the agent) saying where it stands, whoever needs something first; then each person's last 3 emails.
+const ML_SHOW = 3;
+function mlRel(iso){
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const days = Math.floor((new Date().setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0)) / 864e5);
+  const hm = pad2(d.getHours())+":"+pad2(d.getMinutes());
+  return days <= 0 ? "today "+hm : days === 1 ? "yesterday "+hm : days < 7 ? days+" days ago" : d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+}
+function mlDays(iso){ const d = new Date(iso); return isNaN(d) ? 0 : (Date.now() - d.getTime()) / 864e5; }
+async function mlLoad(no, force){
+  const st = state.mailLog = state.mailLog || {};
+  const cur = st[no];
+  if (cur && cur.busy) return;
+  if (cur && cur.data && !force && Date.now() - cur.at < 10*60000) return;
+  st[no] = Object.assign({}, cur || {}, { busy:true, err:"" }); mlPaint(no);
+  try {
+    const d = await dashCall("mailLog", { job: no });
+    if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
+    st[no] = { data: d, at: Date.now(), busy:false, all: cur && cur.all };
+  } catch(e){ st[no] = Object.assign({}, cur || {}, { busy:false, err: String(e && e.message || e) }); }
+  mlPaint(no);
+}
+function mlPaint(no){ const el = document.getElementById("ml_box"); if (el && el.dataset.job === no) el.outerHTML = renderMailBox({ jobNo: no }); }
+function mlToggleAll(no){ const s = state.mailLog && state.mailLog[no]; if (!s) return; s.all = !s.all; mlPaint(no); }
+// Which emails belong to which person, and where each person stands.
+function mlPeople(d){
+  const items = d.items || [];
+  return (d.people || []).map(p => {
+    const e = p.email, mine = items.filter(x => (x.dir === "in" && x.from === e) || ((x.dir === "out" || x.dir === "note") && ((x.to||[]).includes(e) || (x.cc||[]).includes(e))));
+    const lastOut = mine.find(x => x.dir === "out"), lastIn = mine.find(x => x.dir === "in");
+    const ccOnly = lastOut && !(lastOut.to||[]).includes(e);
+    let tone = "grey", text = "Nothing sent yet", act = "";
+    if (lastIn && (!lastOut || lastIn.at >= lastOut.at)){
+      const said = lastIn.snippet ? '"'+lastIn.snippet.slice(0, 90)+(lastIn.snippet.length > 90 ? "…" : "")+'"' : lastIn.label;
+      if (p.role === "Agent"){ tone = "amber"; text = "Emailed you "+mlRel(lastIn.at)+": "+said; act = "Check if it needs an answer"; }
+      else { tone = "green"; text = (lastIn.label === "Reply" ? "Replied: " : lastIn.label+": ")+said; act = "Sorted"; }
+    } else if (lastOut && p.role === "Agent"){ tone = "peri"; text = (ccOnly ? "Copied in · last " : "Last sent ")+mlRel(lastOut.at)+(lastIn ? " · last from them "+mlRel(lastIn.at) : ""); act = "Nothing needed"; }
+    else if (lastOut){ tone = "amber"; text = "No reply to the "+lastOut.label.toLowerCase()+" · sent "+mlRel(lastOut.at); act = mlDays(lastOut.at) >= 2 ? "Needs chasing or a call" : "Waiting for a reply"; }
+    return { p, mine, tone, text, act };
+  }).sort((a, b) => ["amber","grey","green","peri"].indexOf(a.tone) - ["amber","grey","green","peri"].indexOf(b.tone));
+}
+function mlLine(x, e){
+  const dirTxt = x.dir === "in" ? "↓ Reply" : x.dir === "note" ? "· Note" : ((x.to||[]).includes(e) ? "↑ Sent" : "↑ cc");
+  const cls = x.dir === "in" ? "i" : x.dir === "note" ? "c" : ((x.to||[]).includes(e) ? "o" : "c");
+  const what = x.dir === "in" ? (x.snippet ? '"'+x.snippet+'"' : x.label) : x.label === "Email" ? "Your email"+(x.subject ? ": "+x.subject : "") : x.label;
+  const link = /^https:\/\/mail\.google\.com\//.test(x.link||"") ? `<a href="${esc(x.link)}" target="_blank" rel="noopener">Open</a>` : "<span></span>";
+  return `<div class="ml-l"><span class="w">${esc(mlRel(x.at))}</span><span class="${cls}">${dirTxt}</span><span class="t">${esc(what)}</span>${link}</div>`;
+}
+function renderMailBox(f){
+  const no = normJobNo(f.jobNo||""); if (!no) return "";
+  const s = state.mailLog && state.mailLog[no];
+  if (!s || (!s.data && !s.busy && !s.err)) setTimeout(() => mlLoad(no), 0);
+  const head = `<div class="ml-head"><b>Emails at a glance</b>${s && s.at ? `<span class="when">checked ${esc(mlRel(new Date(s.at).toISOString()))}</span>` : ""}<button type="button" class="ml-btn" onclick="mlLoad('${esc(no)}', true)"${s && s.busy ? " disabled" : ""}>${s && s.busy ? "Checking…" : "Refresh"}</button></div>`;
+  if (!s || !s.data) return `<div class="field wide ml-box" id="ml_box" data-job="${esc(no)}">${head}<div class="ml-dim" style="font-size:13px">${s && s.err ? "Couldn't read the emails: "+esc(s.err) : "Reading Gmail for this job…"}</div></div>`;
+  const people = mlPeople(s.data);
+  const glance = people.length ? people.map(x => `<div class="ml-g ${x.tone}"><span class="dot" aria-hidden="true"></span><span class="nm">${esc(x.p.name)}<small>${esc(x.p.role)}</small></span><span class="txt">${esc(x.text)}</span><span class="act">${esc(x.act)}</span></div>`).join("")
+    : `<div class="ml-dim" style="font-size:13px">No tenant or agent emails on this job yet.</div>`;
+  const n = s.all ? 999 : ML_SHOW;
+  const per = people.filter(x => x.mine.length).map(x => `<div class="ml-p"><h4>${esc(x.p.name)} <span>· ${s.all ? "all "+x.mine.length : "last "+Math.min(ML_SHOW, x.mine.length)}</span></h4>${x.mine.slice(0, n).map(i => mlLine(i, x.p.email)).join("")}</div>`).join("");
+  const emails = new Set((s.data.people||[]).map(p => p.email));
+  const notes = (s.data.items||[]).filter(x => x.dir === "note" || (x.dir === "in" && !emails.has(x.from)));
+  const more = people.some(x => x.mine.length > ML_SHOW) || notes.length;
+  const noteHtml = s.all && notes.length ? `<div class="ml-notes"><b>Not emails, but worth knowing</b>${notes.map(x => `<div>${esc(mlRel(x.at))} · ${esc(x.who ? x.who+": " : "")}${esc(x.label)}${x.snippet ? ": "+esc(x.snippet) : ""}</div>`).join("")}</div>` : "";
+  return `<div class="field wide ml-box" id="ml_box" data-job="${esc(no)}">${head}<div class="ml-glance">${glance}</div>
+    ${people.length ? `<div class="ml-dim">Whoever needs something from you is at the top.</div>` : ""}
+    ${per}${noteHtml}
+    ${more ? `<button type="button" class="ml-btn" style="align-self:flex-start" onclick="mlToggleAll('${esc(no)}')">${s.all ? "Show less" : "Show everything ("+(s.data.items||[]).length+")"}</button>` : ""}
+    ${s.err ? `<div class="ml-dim" style="color:#F2937D">Refresh failed: ${esc(s.err)}</div>` : ""}</div>`;
+}
 function renderCiLogBox(f){
   const rows = ciLogRows(f.jobNo).slice().sort((a,b) => String(b.at).localeCompare(String(a.at)));
   if (!rows.length) return "";
@@ -6058,7 +6160,7 @@ function renderForm(){
       </label>
       ${renderPhotoLinkField(f)}
       ${renderPropertyHistory(f)}
-      ${renderCiLogBox(f)}${renderVrBox(f)}${renderMtFormBox(f, isNew)}
+      ${!isNew && f.jobNo && keyMode() ? renderMailBox(f) : renderCiLogBox(f)}${renderVrBox(f)}${renderMtFormBox(f, isNew)}
       ${renderHistory(f)}
     </div>
 
