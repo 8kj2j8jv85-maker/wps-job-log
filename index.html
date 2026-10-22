@@ -4374,7 +4374,7 @@ function renderInner(app){
     </div>
     </main>
     </div>
-    ${state.editing || state.mtBox ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
+    ${state.editing || state.mtBox || state.view === "processing" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
     ${renderMtBox()}
     ${renderMsBox()}
   `;
@@ -5170,10 +5170,10 @@ function renderPageHead(){
   const n = pendingQueue().length;
   // Reports page (Lex, 20 Oct 19:34): title, date and time only. No reports-completed counts, no Check for new bookings
   // or New job, so the tiles start higher. The phone's save button only shows there if a save failed.
-  if (state.view === "reports"){
+  if (state.view === "reports" || state.view === "processing"){   // Processing (Lex, 22 Oct 19:58): no New job, same plain head
     const s = state.cloudStatus || "idle", bad = s === "error" || s === "conflict";
     return `<div class="page-head page-head-rp">
-    <div><h1 class="page-title">Reports</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
+    <div><h1 class="page-title">${state.view === "processing" ? "Processing" : "Reports"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
     <div class="page-right">${renderBuildTop()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
   }
@@ -5272,7 +5272,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#101)";
+const BUILD = "22 Oct 2026 (#102)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
