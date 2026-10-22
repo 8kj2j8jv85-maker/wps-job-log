@@ -133,6 +133,16 @@
   .pr-sub{ font-size:13px; opacity:.85; margin-top:3px; }
   .pr-btns{ display:flex; gap:8px; flex-wrap:wrap; }
   .pr-btns .btn{ min-height:40px; text-decoration:none; }
+  .page-head.page-head-pr{ flex-wrap:nowrap; align-items:center; gap:20px; padding-top:16px; }
+  .page-head-pr .pr-hl{ flex:0 0 auto; }
+  .page-head-pr .pr-hm{ flex:1 1 auto; min-width:0; }
+  .page-head-pr .pr-hm .perf-top.pt-ticker{ max-width:none; width:100%; margin-top:0; }
+  .page-head-pr .pr-hr{ flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:6px; padding-top:24px; }
+  .page-head-pr .pr-hr .wx-line{ margin-top:0; justify-content:flex-end; }
+  @media (max-width:760px){ .page-head.page-head-pr{ flex-wrap:wrap; } .page-head-pr .pr-hm{ order:3; flex:1 1 100%; } .page-head-pr .pr-hr{ padding-top:0; align-items:flex-start; } }
+  .pr-h2{ font-family:"Cormorant Garamond",serif; font-style:italic; font-size:26px; margin:26px 0 6px; }
+  .pr-up{ padding:12px 16px; }
+  .pr-wf{ font-weight:600; } .pr-wf.ok{ color:var(--green); } .pr-wf.bad{ color:var(--coral); }
   .pr-steps{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
   .pr-steps li{ border:1px solid var(--line,#ccd); border-radius:10px; padding:8px 11px; display:flex; flex-direction:column; gap:2px; }
   .pr-steps li small{ font-size:12px; opacity:.8; }
@@ -4013,11 +4023,17 @@ function procJobs(){
   return state.jobs.filter(j => !j.archived && (j.status === "processing" || j.status === "completed" || (j.status === "booked" && visitTime(j) && visitTime(j) <= now)))
     .sort((a,b) => ((visitTime(a)||0) - (visitTime(b)||0)));
 }
+// Upcoming (Lex, 22 Oct 20:01): booked jobs in the next 14 days, so their Word files can be seen (and made) before the visit.
+function procUpcoming(){
+  const now = new Date(), until = new Date(now.getTime() + 14*86400000);
+  return state.jobs.filter(j => !j.archived && j.status === "booked" && visitTime(j) && visitTime(j) > now && visitTime(j) <= until)
+    .sort((a,b) => visitTime(a) - visitTime(b));
+}
 function procKey(j){ return String(j.jobNo||"").toUpperCase().replace(/\s+/g,""); }
 async function procLoad(force){
   if (!keyMode()) return;
   if (state.procBusy || (!force && state.procAt && Date.now() - state.procAt < 60000)) return;
-  const list = procJobs().filter(j => /^WPS\d{6}$/.test(procKey(j))).map(j => ({ job: procKey(j), type: j.type }));
+  const list = procJobs().concat(procUpcoming()).filter(j => /^WPS\d{6}$/.test(procKey(j))).map(j => ({ job: procKey(j), type: j.type }));
   if (!list.length){ state.proc = {}; state.procAt = Date.now(); return; }
   state.procBusy = true; if (state.view === "processing") render();
   try {
@@ -4035,7 +4051,7 @@ function procSteps(j){
   const out = [];
   out.push(/^https?:\/\//.test(String(j.photoLink||"")) ? step("Photos","ok","Uploaded") : step("Photos","bad","Not uploaded"));
   out.push(!r ? step("Dictation","","…") : r.dictAt ? step("Dictation","ok","Saved "+when(r.dictAt)) : step("Dictation","","None yet"));
-  out.push(!r ? step("Word file","","…") : r.word ? step("Word file","ok","Found") : step("Word file","bad","Not in Word Docs"));
+  out.push(!r ? step("Word file","","…") : r.word ? step("Word file","ok","Found") : (state.procMaking||{})[k] ? step("Word file","","Making…") : step("Word file","bad","Not made yet"));
   out.push(!c ? step("Checks","","Not run") : c.busy ? step("Checks","","Checking…") : c.error ? step("Checks","bad","Couldn't run") : (() => { const n = c.checks.filter(x => x.state !== "ok").length; return n ? step("Checks","bad",n+" to fix") : step("Checks","ok","All clear"); })());
   out.push(sent || (r && r.toPdf) ? step("To PDF","ok", "Waiting in To PDF") : step("To PDF","","Not yet"));
   return out.join("");
@@ -4055,7 +4071,7 @@ function renderProcessing(){
     : state.procErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.procErr)}</p>` : "";
   const head = `<div class="pr-top" style="margin-bottom:8px"><p class="pr-msg" style="margin:0">Every visited job still waiting for its report, oldest first. Open in Word puts the dashboard on the left and Word on the right (PC).</p>
     <button type="button" class="btn btn-ghost btn-sm" onclick="procLoad(true)"${tip("Look again at Word files, dictation and To PDF")}>${state.procBusy ? "Looking…" : "Refresh"}</button></div>`;
-  if (!jobs.length) return head + tiles + note + `<p class="pr-msg">Nothing waiting. Every visited job's report has gone.</p>`;
+  if (!jobs.length) return head + tiles + note + `<p class="pr-msg">Nothing waiting. Every visited job's report has gone.</p>` + renderProcUpcoming();
   return head + tiles + note + jobs.map(j => {
     const k = procKey(j), d = dueInfo(j), c = C[k], ok = /^WPS\d{6}$/.test(k);
     const v = visitTime(j), vis = v ? v.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) : "no date";
@@ -4069,7 +4085,7 @@ function renderProcessing(){
         <div><div class="pr-title"><span class="pr-type">${esc(j.type||"")}</span><a href="#" onclick="openEdit('${esc(j.id)}');return false;"${tip("Open the job")}>${esc(j.jobNo||"(no job no.)")}</a> <span>${esc(fullAddress ? fullAddress(j) : (j.address||""))}</span></div>
           <div class="pr-sub">${esc(j.client||"")} · visited ${esc(vis)}${d ? ` · <span class="${d.cls}">${esc(d.text)}</span>` : ""}</div></div>
         <div class="pr-btns">
-          ${ok ? `<a class="btn btn-coral btn-sm" href="wpsword:${esc(k)}"${tip("Opens the report in Word on the PC: this page left, Word right")}>Open in Word</a>` : ""}
+          ${procWordBtn(j)}
           ${photos}
           <a class="btn btn-ghost btn-sm" href="dictate.html"${tip("Open Dictation (pick this job from the Job Log list)")}>Dictation</a>
           ${ok && keyMode() ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procCheck('${esc(k)}')"${tip("Checks the saved Word file in Dropbox: [CO:] notes, XXX, comments, tracked changes, photo link, file name")}>${c && c.busy ? "Checking…" : "Run checks"}</button>` : ""}
@@ -4077,8 +4093,46 @@ function renderProcessing(){
         </div>
       </div>
       <ol class="pr-steps" aria-label="Steps">${procSteps(j)}</ol>
-      ${checks}${conf ? `<div class="pr-msg">Checks aren't all clear (or not run). Click <b>Send anyway?</b> to send it as it is, or fix it in Word first. PdfMake still holds a report with [CO:], XXX, comments or tracked changes.</div>` : ""}${sentMsg}${errMsg}
+      ${procMadeMsg(k)}${checks}${conf ? `<div class="pr-msg">Checks aren't all clear (or not run). Click <b>Send anyway?</b> to send it as it is, or fix it in Word first. PdfMake still holds a report with [CO:], XXX, comments or tracked changes.</div>` : ""}${sentMsg}${errMsg}
     </section>`;
+  }).join("") + renderProcUpcoming();
+}
+// Open in Word when the job has its Word file (or before the first look); Make Word file when it hasn't.
+function procWordBtn(j){
+  const k = procKey(j), r = (state.proc||{})[k];
+  if (!/^WPS\d{6}$/.test(k)) return "";
+  if (r && !r.word && keyMode()) return (state.procMaking||{})[k] ? `<button type="button" class="btn btn-coral btn-sm" disabled>Making…</button>`
+    : `<button type="button" class="btn btn-coral btn-sm" onclick="procMake('${esc(k)}')"${tip("The WPS script copies the template, fills in the cover, headers, footers and photo link from the Job Log, and saves it into Word Docs")}>Make Word file</button>`;
+  return `<a class="btn btn-coral btn-sm" href="wpsword:${esc(k)}"${tip("Opens the report in Word on the PC: this page left, Word right")}>Open in Word</a>`;
+}
+function procMadeMsg(k){
+  const m = (state.procMade||{})[k];
+  if (!m) return "";
+  if (m.error) return `<div class="pr-msg" style="color:var(--coral)">${esc(m.error)}</div>`;
+  return `<div class="pr-msg">${m.already ? "Already in Word Docs: " : "Made in Word Docs: "}${esc(m.file)}${m.left && m.left.length ? `. Still to fill in by hand: ${esc(m.left.join(", "))}` : ""}.</div>`;
+}
+async function procMake(k){
+  state.procMaking = state.procMaking || {}; state.procMade = state.procMade || {};
+  state.procMaking[k] = true; delete state.procMade[k]; render();
+  try {
+    const d = await dashCall("wordMake", { job:k });
+    if (d && d.ok){ state.procMade[k] = { file:d.file, left:d.left || [], already:!!d.already }; state.proc = state.proc || {}; state.proc[k] = Object.assign({ job:k }, state.proc[k] || {}, { word:{ name:d.file } }); }
+    else state.procMade[k] = { error: (d && d.error === "Unknown request.") ? "The script hasn't got Make Word file yet (new deployment needed)." : ((d && d.error) || "No answer from the WPS script") };
+  } catch(e){ state.procMade[k] = { error: String(e && e.message || e) }; }
+  delete state.procMaking[k]; render();
+}
+function renderProcUpcoming(){
+  const up = procUpcoming();
+  if (!up.length) return "";
+  const P = state.proc || {};
+  return `<h2 class="pr-h2">Upcoming (next 14 days)</h2><p class="pr-msg" style="margin-top:0">The WPS script makes each Word file on its own up to 2 days before the visit. Make Word file does it now.</p>` + up.map(j => {
+    const k = procKey(j), r = P[k], v = visitTime(j);
+    const when = v.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) + (j.time ? " " + esc(j.time) : "");
+    const wf = !/^WPS\d{6}$/.test(k) ? `<span class="pr-wf">No job number</span>` : !r ? `<span class="pr-wf">…</span>` : r.word ? `<span class="pr-wf ok">Word file ready</span>` : (state.procMaking||{})[k] ? `<span class="pr-wf">Making…</span>` : `<span class="pr-wf bad">No Word file yet</span>`;
+    return `<section class="pr-card pr-up" aria-label="${esc(k)}"><div class="pr-top">
+      <div><div class="pr-title"><span class="pr-type">${esc(j.type||"")}</span><a href="#" onclick="openEdit('${esc(j.id)}');return false;"${tip("Open the job")}>${esc(j.jobNo||"(no job no.)")}</a> <span>${esc(fullAddress(j))}</span></div>
+        <div class="pr-sub">${esc(j.client||"")} · ${when} · ${wf}</div></div>
+      <div class="pr-btns">${r ? procWordBtn(j) : ""}</div></div>${procMadeMsg(k)}</section>`;
   }).join("");
 }
 async function procCheck(k){
@@ -4350,8 +4404,8 @@ function render(){
   navAfterRender();
   drawWeekMap();
   drawPlan();
-  if (state.view === "today" && !state.wxBusy && (!state.wx || Date.now() - state.wx.at > 20*60000) && !state.wxTried && !(state.wxErrAt && Date.now() - state.wxErrAt < 5*60000)){ state.wxTried = true; setTimeout(() => { state.wxTried = false; loadWeather(); }, 0); }
-  if (state.view === "today" && !state.newsBusy && (!state.news || Date.now() - state.news.at > 30*60000) && !state.newsTried && !(state.newsErrAt && Date.now() - state.newsErrAt < 5*60000)){ state.newsTried = true; setTimeout(() => { state.newsTried = false; loadNews(); }, 0); }
+  if ((state.view === "today" || state.view === "processing") && !state.wxBusy && (!state.wx || Date.now() - state.wx.at > 20*60000) && !state.wxTried && !(state.wxErrAt && Date.now() - state.wxErrAt < 5*60000)){ state.wxTried = true; setTimeout(() => { state.wxTried = false; loadWeather(); }, 0); }
+  if ((state.view === "today" || state.view === "processing") && !state.newsBusy && (!state.news || Date.now() - state.news.at > 30*60000) && !state.newsTried && !(state.newsErrAt && Date.now() - state.newsErrAt < 5*60000)){ state.newsTried = true; setTimeout(() => { state.newsTried = false; loadNews(); }, 0); }
   if (keepSearch){
     const el = document.getElementById(keepSearch.id);
     if (el){ el.focus(); try { el.setSelectionRange(keepSearch.s, keepSearch.e); } catch(e){} }
@@ -5170,10 +5224,20 @@ function renderPageHead(){
   const n = pendingQueue().length;
   // Reports page (Lex, 20 Oct 19:34): title, date and time only. No reports-completed counts, no Check for new bookings
   // or New job, so the tiles start higher. The phone's save button only shows there if a save failed.
-  if (state.view === "reports" || state.view === "processing"){   // Processing (Lex, 22 Oct 19:58): no New job, same plain head
+  // Processing (Lex, 22 Oct 19:58 / 20:08): no New job; title left, the news ticker in the middle as wide as it can go,
+  // weather far right under the version label.
+  if (state.view === "processing"){
+    const s = state.cloudStatus || "idle", bad = s === "error" || s === "conflict";
+    return `<div class="page-head page-head-rp page-head-pr">
+    <div class="pr-hl"><h1 class="page-title">Processing</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
+    <div class="pr-hm">${renderPerfTop()}</div>
+    <div class="pr-hr">${renderBuildTop()}${renderWxLine()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
+  </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button></div>`}`;
+  }
+  if (state.view === "reports"){
     const s = state.cloudStatus || "idle", bad = s === "error" || s === "conflict";
     return `<div class="page-head page-head-rp">
-    <div><h1 class="page-title">${state.view === "processing" ? "Processing" : "Reports"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
+    <div><h1 class="page-title">Reports</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
     <div class="page-right">${renderBuildTop()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
   }
@@ -5272,7 +5336,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#102)";
+const BUILD = "22 Oct 2026 (#103)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
