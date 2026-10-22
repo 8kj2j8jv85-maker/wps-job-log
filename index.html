@@ -290,6 +290,7 @@
   .extract-box textarea{ margin-bottom:8px; }
   .extract-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .extract-hint{ font-size:12px; color:var(--ink-soft); }
+  .extract-box.ex-over{ background:var(--coral-bg); }
   .field-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:14px; }
   .field{ display:flex; flex-direction:column; gap:5px; font-size:12.5px; font-weight:600; color:var(--ink-soft); }
   .field.wide{ grid-column:1 / -1; }
@@ -1834,49 +1835,182 @@ function openNewOnDate(dateIso){
 }
 
 // ---------------------------------------------------------------- quick extract (offline, regex-based)
-const UK_POSTCODE = /([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})/i;
-
-function quickExtract(raw){
-  const postcodeLineMatch = raw.split("\n").find(l => UK_POSTCODE.test(l));
-  let street = "", town = "", postcode = "";
-  if (postcodeLineMatch){
-    const pcMatch = postcodeLineMatch.match(UK_POSTCODE);
-    postcode = (pcMatch[1] + " " + pcMatch[2]).toUpperCase();
-    const rest = postcodeLineMatch.replace(pcMatch[0], "").split(",").map(s=>s.trim()).filter(Boolean);
-    if (rest.length===1){ street = rest[0]; }
-    else if (rest.length>1){ town = rest[rest.length-1]; street = rest.slice(0,-1).join(", "); }
-  }
-  let dateIso = "";
-  const dmY = raw.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})\b/);
-  if (dmY){
-    let [,d,m,y] = dmY;
-    if (y.length===2) y = "20"+y;
-    dateIso = y+"-"+pad2(m)+"-"+pad2(d);
-  }
-  let type = "ICI";
-  const low = raw.toLowerCase();
-  if (low.includes("mid-term") || low.includes("mid term") || low.includes("interim")) type = "MTI";
-  else if (low.includes("check-out") || low.includes("check out") || low.includes("checkout")) type = "CO";
-  else if (low.includes("schedule of condition")) type = "SOC";
-  else if (low.includes("clean")) type = "CLN";
-  else if (low.includes("check-in") || low.includes("check in") || low.includes("checkin") || low.includes("inventory")) type = "ICI";
-
-  return { type, date: dateIso, address: street, town, postcode };
+// 22 Oct (Lex: "I paste or drop an email in and nothing happens"): it now runs by itself on paste and drop
+// (text, or a dropped .eml / .txt file), reads written dates ("Friday 23rd October"), times, postcodes on their
+// own line, bedrooms, flat/house, the client name and tenant names, emails and phones, and says what it filled.
+const UK_POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i;
+const EX_MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+const EX_NUMS = { one:1, two:2, three:3, four:4, five:5, six:6, studio:0 };
+// Email header lines (From:, Sent:, Date: ...) carry the email's own date and the agent's details, not the job's.
+function exBody(raw){
+  return String(raw||"").replace(/\r/g,"").split("\n")
+    .filter(l => !/^\s*(from|sent|date|to|cc|bcc|subject|reply-to|importance)\s*:/i.test(l))
+    .join("\n");
 }
-
-function runExtract(){
-  const raw = document.getElementById("extractRaw").value;
-  if (!raw.trim()) return;
-  captureFormValues();
-  const found = quickExtract(raw);
-  Object.assign(state.editing, {
-    type: found.type || state.editing.type,
-    date: found.date || state.editing.date,
-    address: found.address || state.editing.address,
-    town: found.town || state.editing.town,
-    postcode: found.postcode || state.editing.postcode,
+function exYearFor(m, d){
+  const now = new Date(); let y = now.getFullYear();
+  const cand = new Date(y, m-1, d);
+  if (cand < new Date(now.getFullYear(), now.getMonth(), now.getDate()-60)) y++;
+  return y;
+}
+function exDate(t){
+  let m = t.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?\s*(\d{4})?\b/i);
+  if (m){ const mo = EX_MONTHS.indexOf(m[2].slice(0,3).toLowerCase())+1, d = +m[1]; const y = m[3] ? +m[3] : exYearFor(mo,d); if (d>=1 && d<=31) return y+"-"+pad2(mo)+"-"+pad2(d); }
+  m = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i);
+  if (m){ const mo = EX_MONTHS.indexOf(m[1].slice(0,3).toLowerCase())+1, d = +m[2]; const y = m[3] ? +m[3] : exYearFor(mo,d); if (d>=1 && d<=31) return y+"-"+pad2(mo)+"-"+pad2(d); }
+  m = t.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})\b/);
+  if (m){ let [,d,mo,y] = m; if (y.length===2) y = "20"+y; if (+mo>=1 && +mo<=12 && +d>=1 && +d<=31) return y+"-"+pad2(mo)+"-"+pad2(d); }
+  return "";
+}
+function exTime(t){
+  let m = t.match(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b/i);
+  if (m){ let h = +m[1] % 12; if (m[3].toLowerCase()==="pm") h += 12; if (h<24) return pad2(h)+":"+(m[2]||"00"); }
+  m = t.match(/\b(?:at|from|time:?)\s*(\d{1,2})[:.](\d{2})\b/i);
+  if (m && +m[1]<24 && +m[2]<60) return pad2(m[1])+":"+m[2];
+  return "";
+}
+function exAddress(lines){
+  const i = lines.findIndex(l => UK_POSTCODE.test(l));
+  if (i === -1) return {};
+  const pc = lines[i].match(UK_POSTCODE);
+  const postcode = (pc[1]+" "+pc[2]).toUpperCase();
+  let before = lines[i].slice(0, pc.index).replace(/^.*?(address|property|premises)\s*:\s*/i, "");
+  // inside a sentence ("can we book a check-out at 22 Test Street, Bow, E3 5AB"): keep from the house number / Flat
+  const cut = before.match(/^.*\b(?:at|of|for|to)\s+(?=(?:flat|apartment|unit|room|\d))/i);
+  if (cut && cut[0].length > 8) before = before.slice(cut[0].length);
+  let parts = before.split(",").map(s=>s.trim()).filter(Boolean);
+  // postcode on its own line (or after the town): take the lines above it
+  for (let k = i-1, n = 0; parts.length < 2 && k >= 0 && n < 3; k--, n++){
+    const l = lines[k].trim().replace(/,$/, "");
+    if (!l) { if (parts.length) break; continue; }
+    if (/[:@]|^(dear|hi|hello|please|thanks|tenant)/i.test(l) || l.length > 60) break;
+    parts = l.replace(/^.*?(address|property|premises)\s*:?\s*/i, "").split(",").map(s=>s.trim()).filter(Boolean).concat(parts);
+  }
+  let street = "", town = "";
+  if (parts.length === 1) street = parts[0];
+  else if (parts.length > 1){ town = parts[parts.length-1]; street = parts.slice(0,-1).join(", "); }
+  if (/\d/.test(town) && !street) { street = town; town = ""; }
+  return { address: street, town, postcode };
+}
+function exType(low){
+  if (/mid[- ]?term|interim|periodic inspection|routine inspection/.test(low)) return "MTI";
+  if (/schedule of condition/.test(low)) return "SOC";
+  if (/check[- ]?out/.test(low) && !/check[- ]?in/.test(low)) return "CO";
+  if (/check[- ]?in|inventory/.test(low)) return "ICI";
+  if (/check[- ]?out/.test(low)) return "CO";
+  if (/\bclean(ing)? check\b/.test(low)) return "CLN";
+  return "";
+}
+function exClient(t){
+  const low = t.toLowerCase();
+  const hits = (state.clients||[]).filter(c => {
+    const words = String(c.name||"").toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3 && !/^(lettings?|estates?|property|properties|london|real|estate|agents?|homes?|limited|ltd)$/.test(w));
+    return words.length && words.every(w => low.includes(w));
   });
+  if (hits.length === 1) return hits[0].name;
+  const exact = hits.filter(c => low.includes(String(c.name).toLowerCase()));
+  return exact.length === 1 ? exact[0].name : "";
+}
+// Tenants: emails and UK phone numbers in the body, with a name taken from the same line ("John Smith - 07...")
+// or a "Tenant: ..." label. Emails of the agency (any saved client/contact email domain) are left out.
+function exTenants(lines, hdrEmails){
+  const agentDomains = new Set();
+  (state.clients||[]).forEach(c => { const d = String(c.contactEmail||"").split("@")[1]; if (d) agentDomains.add(d.toLowerCase()); });
+  (state.contacts||[]).forEach(c => { const d = String(c.email||"").split("@")[1]; if (d) agentDomains.add(d.toLowerCase()); });
+  ["wellington-ps.co.uk","wellingtonparker.com"].forEach(d => agentDomains.add(d));
+  (hdrEmails||[]).forEach(e => { const d = e.split("@")[1].toLowerCase(); if (!/^(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|me|aol|btinternet|sky)\./.test(d)) agentDomains.add(d); });
+  const skip = new Set((hdrEmails||[]).map(e => e.toLowerCase()));
+  const rows = [], seen = {};
+  let inTenants = false, signed = false;
+  lines.forEach(l => {
+    if (/^\s*(kind regards|best regards|regards|many thanks|thanks|thank you|cheers|best wishes|sent from my)\b/i.test(l)) signed = true;
+    if (signed) return;
+    if (/tenant|occupant|resident|contact/i.test(l)) inTenants = true;
+    const emails = (l.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || []).filter(e => !agentDomains.has(e.split("@")[1].toLowerCase()) && !skip.has(e.toLowerCase()));
+    const phones = (l.match(/(?:\+44\s?7|\b07)\d{3}[\s-]?\d{3}[\s-]?\d{3}\b/g) || []).map(p => p.replace(/[\s-]/g,"").replace(/^\+44/,"0"));
+    if (!emails.length && !phones.length) return;
+    if (!inTenants && !emails.length) return;   // a phone outside any tenant mention is likely the agent's signature
+    let name = l.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig, " ").replace(/(?:\+44\s?7|\b07)[\d\s-]{9,13}/g, " ")
+      .replace(/\b(tenants?|occupants?|residents?|contact|name|email|e-mail|mobile|phone|tel|number|details?|is|are|and)\b\s*:?/ig, " ")
+      .replace(/[:;,|()<>\-–]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!/^[A-Za-z][A-Za-z'.]+(\s+[A-Za-z][A-Za-z'.-]+){0,3}$/.test(name) || name.length > 40) name = "";
+    if (!name){ const tm = l.match(/\b(?:[Tt]enants?|[Oo]ccupants?)\s*(?:is|are|:)?\s*([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+){1,2})/); if (tm) name = tm[1]; }
+    const key = (emails[0]||"") + "|" + (phones[0]||"");
+    if (seen[key]) return; seen[key] = 1;
+    rows.push({ name, phone: phones[0] || "", email: emails[0] || "" });
+  });
+  return rows.slice(0, 6);
+}
+function quickExtract(raw){
+  const t = exBody(raw), low = t.toLowerCase(), lines = t.split("\n");
+  const out = Object.assign({ type: exType(low), date: exDate(t), time: exTime(t) }, exAddress(lines));
+  const bm = low.match(/\b(\d|one|two|three|four|five|six)[\s-]*(?:double\s+)?bed(?:room)?s?\b/) || low.match(/\bstudio\b/);
+  if (bm) out.bedrooms = bm[1] ? String(isNaN(+bm[1]) ? EX_NUMS[bm[1]] : +bm[1]) : "";
+  if (/\b(flat|apartment|maisonette|studio)\b/.test(low)) out.propertyType = "Flat";
+  else if (/\b(house|terrace|semi-detached|detached|bungalow|cottage)\b/.test(low)) out.propertyType = "House";
+  out.client = exClient(t);
+  const hdr = String(raw||"").split("\n").filter(l => /^\s*(from|to|cc|reply-to)\s*:/i.test(l)).join(" ");
+  out.tenants = exTenants(lines, hdr.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || []);
+  return out;
+}
+const EX_LABELS = { type:"type", date:"date", time:"time", address:"street", town:"town", postcode:"postcode", bedrooms:"bedrooms", propertyType:"flat/house", client:"client" };
+function runExtract(rawIn){
+  const box = document.getElementById("extractRaw");
+  const raw = rawIn !== undefined ? rawIn : (box ? box.value : "");
+  if (!state.editing) return;
+  state.extractRaw = raw; state.extractFor = state.editing.id;
+  if (!String(raw).trim()){ state.extractFor = state.editing.id; state.extractMsg = "Paste or drop the booking email first."; render(); return; }
+  captureFormValues();
+  const found = quickExtract(raw), f = state.editing, filled = [];
+  Object.keys(EX_LABELS).forEach(k => {
+    if (!found[k]) return;
+    if (k === "client" && !clientByName(found[k])) return;
+    if (String(f[k]||"") !== String(found[k])) { f[k] = found[k]; filled.push(EX_LABELS[k]); }
+  });
+  if (found.tenants && found.tenants.length){
+    ensureFormLists(f);
+    let added = 0;
+    found.tenants.forEach(nt => {
+      const same = f.tenantRows.find(r => (nt.email && r.email && r.email.toLowerCase() === nt.email.toLowerCase()) || (nt.phone && r.phone && r.phone.replace(/\s/g,"") === nt.phone));
+      if (same){ ["name","phone","email"].forEach(k => { if (!same[k] && nt[k]) same[k] = nt[k]; }); return; }
+      const free = f.tenantRows.find(r => !r.name && !r.phone && !r.email);
+      if (free) Object.assign(free, nt); else if (f.tenantRows.length < 6) f.tenantRows.push(Object.assign({}, nt)); else return;
+      added++;
+    });
+    if (added) filled.push(added + " tenant" + (added > 1 ? "s" : ""));
+  }
+  state.extractMsg = filled.length ? "Filled: " + filled.join(", ") + ". Check each one before saving."
+    : "Nothing new found. Fill the fields by hand (or paste more of the email).";
   render();
+}
+// Paste and drop run Extract straight away (no button press needed).
+function exOnPaste(ev){ setTimeout(() => runExtract(), 0); }
+function exOnDragOver(ev){ ev.preventDefault(); ev.currentTarget.classList.add("ex-over"); }
+function exOnDragLeave(ev){ ev.currentTarget.classList.remove("ex-over"); }
+function exOnDrop(ev){
+  ev.preventDefault(); ev.currentTarget.classList.remove("ex-over");
+  const dt = ev.dataTransfer; if (!dt) return;
+  const file = dt.files && dt.files[0];
+  if (file){
+    state.extractFor = state.editing && state.editing.id;
+    if (/\.msg$/i.test(file.name)){ state.extractMsg = "Outlook .msg files can't be read here. Open the email, copy the text (Ctrl+A, Ctrl+C) and paste it in."; render(); return; }
+    if (file.size > 2*1024*1024 || !(/\.(eml|txt|text|html?)$/i.test(file.name) || /^text\//.test(file.type) || /rfc822/.test(file.type))){ state.extractMsg = "That file isn't an email or text file. Drop the email text, or paste it."; render(); return; }
+    const r = new FileReader();
+    r.onload = () => runExtract(exFromEml(String(r.result||"")));
+    r.readAsText(file);
+    return;
+  }
+  const txt = dt.getData("text/plain") || String(dt.getData("text/html")||"").replace(/<br\s*\/?>|<\/p>|<\/div>/gi, "\n").replace(/<[^>]+>/g, " ");
+  runExtract(txt);
+}
+// .eml: keep the headers that matter (Subject) and the text part, undo quoted-printable.
+function exFromEml(s){
+  if (!/^[A-Za-z-]+:/m.test(s.slice(0, 500))) return s;
+  const subj = (s.match(/^Subject:\s*(.*)$/mi) || [,""])[1];
+  let body = s.split(/\r?\n\r?\n/).slice(1).join("\n\n");
+  if (/quoted-printable/i.test(s)) body = body.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/gi, (m,h) => String.fromCharCode(parseInt(h,16)));
+  body = body.replace(/<br\s*\/?>|<\/p>|<\/div>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+  return subj + "\n" + body;
 }
 
 // ---------------------------------------------------------------- capture form (avoid clobbering unsaved fields on re-render)
@@ -6043,13 +6177,13 @@ function renderForm(){
   const isNew = !state.jobs.some(j=>j.id===f.id);
   return `<div class="form-card">
     <h3>${isNew ? "New job" : "Edit job"}</h3>
-    ${helpBox(`Paste the agent's booking email into the box and click <b>Extract job details</b>, or fill the fields by hand. Always check what Extract fills in. The job number fills itself. Add each tenant on their own row; their emails get the 7-day reminder. Tick who the report emails are copied to. Click <b>${isNew ? "Save job" : "Save changes"}</b> at the bottom when done.`)}
+    ${helpBox(`Paste or drop the agent's booking email into the box and it fills the fields straight away, or fill them by hand. Always check what Extract fills in. The job number fills itself. Add each tenant on their own row; their emails get the 7-day reminder. Tick who the report emails are copied to. Click <b>${isNew ? "Save job" : "Save changes"}</b> at the bottom when done.`)}
 
-    <div class="extract-box">
-      <textarea id="extractRaw" placeholder="Paste a works-order email here and click Extract — it'll try to pull the date and address/postcode into the fields below."></textarea>
+    <div class="extract-box" ondragover="exOnDragOver(event)" ondragleave="exOnDragLeave(event)" ondrop="exOnDrop(event)">
+      <textarea id="extractRaw" onpaste="exOnPaste(event)" placeholder="Paste or drop the agent's booking email here. It fills the date, time, address, postcode, type, client and tenants straight away.">${esc(state.extractFor === f.id ? (state.extractRaw||"") : "")}</textarea>
       <div class="extract-row">
-        <span class="extract-hint">Offline pattern-matching — always double-check what it fills in.</span>
-        <button class="btn btn-ghost btn-sm" onclick="runExtract()"${hint("Fills date, address, postcode and type from the pasted email. Check it.")}>Extract job details</button>
+        <span class="extract-hint">${state.extractFor === f.id && state.extractMsg ? esc(state.extractMsg) : "Offline pattern-matching — always double-check what it fills in."}</span>
+        <button class="btn btn-ghost btn-sm" onclick="runExtract()"${hint("Runs again on what's in the box. Paste and drop run it by themselves.")}>Extract job details</button>
       </div>
     </div>
 
