@@ -239,6 +239,10 @@
   html[data-theme="night"] .help-box .hb-t{ color:#E8C26A; }
   html[data-theme="night"] .panel{ box-shadow:0 -6px 24px rgba(0,0,0,.5); }
   html[data-theme="night"] select option{ color:var(--ink); background:var(--card); }
+  /* coral outlines (Lex, 22 Oct): input boxes and cards get a coral edge, all themes */
+  html input[type=text], html input[type=date], html input[type=time], html input[type=email], html input[type=tel],
+  html input[type=number], html input[type=search], html select, html textarea{ border:1.5px solid var(--coral) !important; }
+  html .card, html .drop{ border-color:var(--coral) !important; }
 </style>
 </head>
 <body>

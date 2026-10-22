@@ -889,6 +889,13 @@
   .theme-row{ display:flex; align-items:center; gap:8px; padding:6px 14px; font-size:13px; color:#C9D3EA; }
   .theme-row select{ flex:1; font:inherit; font-size:13px; padding:4px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:#26335F !important; color:#fff !important; }
 
+  /* ---------- coral outlines (Lex, 22 Oct): every input box and every card/panel gets a coral edge, all themes ---------- */
+  html input[type=text], html input[type=date], html input[type=time], html input[type=email], html input[type=tel],
+  html input[type=number], html input[type=search], html select:where(:not(.sel-box)), html textarea{ border:1.5px solid var(--coral) !important; }
+  html input:focus, html select:focus, html textarea:focus{ box-shadow:0 0 0 2px rgba(232,119,92,.35); }
+  html .form-card, html .t-card, html .d-tile, html .status-card, html .extract-box, html .tablewrap,
+  html .perf-box, html .sl-edit, html .agent-contact-box{ border-color:var(--coral) !important; border-style:solid !important; }
+  html .d-tile.on{ border-color:var(--coral-dark) !important; }
 </style>
 </head>
 <body>
