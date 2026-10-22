@@ -275,7 +275,7 @@
     <h1 class="page-title">Photo Tool</h1>
     <div class="page-sub" id="pageSub">Drop a day's photos in. They're split into jobs by the gaps between them and matched to the Job Log by where they were taken.</div>
   </div>
-  <div class="help-box" id="helpBox"><button class="hb-hide" id="hbHide" title="Hide this box. Switch Help hints off and on to bring it back.">Hide</button><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; download zip</b>. The photo link is saved to the job automatically. Your original photos are never changed.</div>
+  <div class="help-box" id="helpBox"><button class="hb-hide" id="hbHide" title="Hide this box. Switch Help hints off and on to bring it back.">Hide</button><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; upload</b> (or <b>Process &amp; download zip</b> on a device without its key). The zip is uploaded and the photo link is saved to the job automatically. Your original photos are never changed.</div>
   <div id="jobsNote" class="notice info hidden"></div>
 
   <div id="dropZone" class="drop">
@@ -323,7 +323,11 @@
         </select></div>
       <div class="field"><label>Watermark size (%)</label><input type="number" id="s_wmsize" min="50" max="250" step="10" /></div>
       <div class="field"><label>Watermark text</label><input type="text" id="s_wmtext" /></div>
-      <div class="field"><label>Photo link starts with</label><input type="text" id="s_base" /></div>
+      <div class="field"><label>Upload zips to WPS storage</label>
+        <select id="s_upload" title="With this device's key, Process uploads the zip to photos.wellington-ps.co.uk and saves the link on the job"><option value="1">Yes (needs the device key)</option><option value="0">No, Downloads only</option></select></div>
+      <div class="field"><label>Also save zip to Downloads</label>
+        <select id="s_keepdl" title="A backup copy of each zip in Downloads when it uploads"><option value="1">Yes</option><option value="0">No</option></select></div>
+      <div class="field"><label>Photo link starts with (when not uploading)</label><input type="text" id="s_base" /></div>
       <div class="field"><label>Location in finished photos</label>
         <select id="s_gps"><option value="1">Remove it (date &amp; time kept)</option><option value="0">Keep it</option></select></div>
       <div class="field"><label>Logo for watermark (PNG, optional)</label>
@@ -353,7 +357,7 @@
 <div id="progress" class="progress hidden"><div class="box"><div id="progTitle" style="font-weight:600">Working&hellip;</div><div id="progText" class="muted small" style="margin-top:4px"></div><div class="bar"><div id="progBar"></div></div></div></div>
 
 <!-- integrity: the browser refuses the file if the CDN copy is ever changed (hash checked 17 Oct 2026 against cdnjs and jsdelivr, identical) -->
-<script src="wpslink.js?v=20261020b"></script>
+<script src="wpslink.js?v=20261022a"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 "use strict";
@@ -376,6 +380,7 @@ const DEFAULT_SETTINGS = {
   gap: 30, size: 1440, quality: 76, sizeVersion: 2, portrait: "canvas", canvas: "#222222",
   wmpos: "br", wmsize: 100, wmtext: "Wellington Property Services", wmVersion: 2, coverSize: 2400,
   base: "http://www.wellingtonparker.com/photos/", stripGps: true, flatFix: true, areasVersion: 4,
+  upload: true, keepDownload: true,   // 22 Oct: zips go to WPS storage (needs this device's key); a copy still goes to Downloads
   areas: DEFAULT_AREAS
 };
 
@@ -474,7 +479,7 @@ function fillSettingsForm(){
   const s = S.settings;
   $("s_gap").value = s.gap; $("s_size").value = s.size; $("s_quality").value = s.quality;
   $("s_portrait").value = s.portrait; $("s_canvas").value = s.canvas; $("s_wmpos").value = s.wmpos;
-  $("s_wmsize").value = s.wmsize; $("s_wmtext").value = s.wmtext; $("s_base").value = s.base; $("s_gps").value = s.stripGps ? "1" : "0"; $("s_flat").value = s.flatFix ? "1" : "0";
+  $("s_wmsize").value = s.wmsize; $("s_wmtext").value = s.wmtext; $("s_base").value = s.base; $("s_upload").value = s.upload === false ? "0" : "1"; $("s_keepdl").value = s.keepDownload === false ? "0" : "1"; $("s_gps").value = s.stripGps ? "1" : "0"; $("s_flat").value = s.flatFix ? "1" : "0";
   $("s_areas").value = s.areas.join("\n");
   updateLogoState();
 }
@@ -485,7 +490,7 @@ function readSettingsForm(){
   s.gap = num("s_gap",5,600,30); s.size = num("s_size",640,4000,1600); s.quality = num("s_quality",50,95,82);
   s.portrait = $("s_portrait").value; s.canvas = $("s_canvas").value; s.wmpos = $("s_wmpos").value;
   s.wmsize = num("s_wmsize",50,250,100); s.wmtext = $("s_wmtext").value || DEFAULT_SETTINGS.wmtext;
-  s.base = $("s_base").value.trim(); s.stripGps = $("s_gps").value === "1"; s.flatFix = $("s_flat").value === "1";
+  s.base = $("s_base").value.trim(); s.upload = $("s_upload").value === "1"; s.keepDownload = $("s_keepdl").value === "1"; s.stripGps = $("s_gps").value === "1"; s.flatFix = $("s_flat").value === "1";
   const areas = $("s_areas").value.split("\n").map(x=>x.trim()).filter(Boolean);
   s.areas = areas.length ? areas : DEFAULT_AREAS.slice();
   saveSettingsLS();
@@ -985,13 +990,15 @@ function render(){
             <div class="field"><label>Postcode</label><input data-act="postcode" data-g="${g.id}" value="${esc(m.postcode)}" placeholder="E3 2UE" size="9" class="${propCode(m.postcode)?"":"bad"}" /></div>
             <div class="field"><label>Date</label><input type="date" data-act="date" data-g="${g.id}" value="${esc(m.date)}" /></div>
           </div>
-          <div class="preview-name">Zip: <span class="mono">${esc(zipName(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, firstArea(g, amap) || "Kitchen", 1))}</span></div>
+          <div class="preview-name">Zip: <span class="mono">${esc(zipLabel(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, firstArea(g, amap) || "Kitchen", 1))}</span></div>
           ${m.link ? `<div class="linkrow"><input readonly value="${esc(m.link)}" id="lnk_${g.id}" /><button class="btn btn-ghost btn-sm" data-act="copy" data-g="${g.id}" title="Copies the photo link to paste into the report">Copy link</button></div>` : ""}
+          ${m.upMsg ? `<div class="small" style="color:${m.upBad ? "var(--coral-dark)" : "inherit"}">${esc(m.upMsg)}</div>` : ""}
           ${m.sheetMsg ? `<div class="small muted">${esc(m.sheetMsg)}</div>` : ""}
           ${m.thumbMsg ? `<div class="small muted">${esc(m.thumbMsg)}</div>` : ""}
         </div>
         <div class="gactions">
-          ${isLaterSibling ? `<span class="small muted">Goes in the zip with the first set</span>` : `<button class="btn btn-coral" data-act="process" data-g="${g.id}" ${ready?"":"disabled"} title="${ready ? "Renames, watermarks and zips this job's photos, then saves the photo link to the job" : "Needs a job number and postcode first"}" data-hint="${ready ? "Saves the zip and the photo link" : "Needs job number + postcode"}">Process &amp; download zip</button>`}
+          ${isLaterSibling ? `<span class="small muted">Goes in the zip with the first set</span>` : `<button class="btn btn-coral" data-act="process" data-g="${g.id}" ${ready?"":"disabled"} title="${ready ? "Renames, watermarks and zips this job's photos, then saves the photo link to the job" : "Needs a job number and postcode first"}" data-hint="${ready ? "Saves the zip and the photo link" : "Needs job number + postcode"}">${uploadOn() ? "Process &amp; upload" : "Process &amp; download zip"}</button>`}
+          ${!isLaterSibling && S.upPending[g.id] ? `<button class="btn btn-ghost btn-sm" data-act="retryup" data-g="${g.id}" title="Tries the upload again with the zip already made">Retry upload</button>` : ""}
           ${gi>0 ? `<button class="btn btn-ghost btn-sm" data-act="merge" data-g="${g.id}" title="Joins this set onto the one above, when one visit got split in two" data-hint="If one visit got split in two">Merge with job above</button>` : ""}
           ${unassigned ? `<span class="pill pill-warn">${unassigned} photo${unassigned===1?"":"s"} with no area</span>` : `<span class="pill pill-ok">All areas set</span>`}
         </div>
@@ -1006,7 +1013,7 @@ function refreshHead(gid){
   const box = document.querySelector(`.group[data-g="${gid}"]`); const m = S.meta[gid]; if (!box || !m) return;
   const g = groups().find(x => x.id === gid); const amap = areaMap();
   const pv = box.querySelector(".preview-name");
-  if (pv) pv.innerHTML = `Zip: <span class="mono">${esc(zipName(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, (g && firstArea(g, amap)) || "Kitchen", 1))}</span>`;
+  if (pv) pv.innerHTML = `Zip: <span class="mono">${esc(zipLabel(m))}</span> &middot; e.g. <span class="mono">${esc(fileName(m, (g && firstArea(g, amap)) || "Kitchen", 1))}</span>`;
   const jn = box.querySelector('input[data-act="jobNo"]'), pc = box.querySelector('input[data-act="postcode"]');
   if (jn) jn.classList.toggle("bad", !m.jobNo);
   if (pc){ pc.classList.toggle("bad", !propCode(m.postcode)); if (document.activeElement !== pc && pc.value.trim().toUpperCase() !== m.postcode) pc.value = m.postcode; }
@@ -1134,6 +1141,7 @@ function setArea(id, area){
 
 // ============================================================ output naming
 function zipName(m){ return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.zip`; }
+function zipLabel(m){ return uploadOn() ? zipName(m).replace(/\.zip$/, ".(code).zip") + " (code added on upload)" : zipName(m); }
 function isCoverArea(a){ return /^external picture/i.test(a || ""); }
 function coverName(m, n, total){
   return `${m.jobNo || "JOB"}.${propCode(m.postcode) || "POSTCODE"}.cover${total > 1 ? "_" + pad2(n) : ""}.jpg`;
@@ -1293,8 +1301,11 @@ async function processGroup(gid, opts){
   }
   $("progText").textContent = "Building zip…";
   const out = await zip.generateAsync({ type:"blob", compression:"STORE" });
-  const name = zipName(m);
-  downloadBlob(out, name);
+  let name = zipName(m);
+  // 22 Oct: with the device key, the zip goes straight to WPS storage and the script saves the link on the job.
+  const up = uploadOn() ? await uploadStartFor(m, out) : null;
+  if (up && up.ok) name = up.key.split("/").pop();   // Downloads copy gets the same name as the uploaded zip
+  if (!up || !up.ok || S.settings.keepDownload !== false) downloadBlob(out, name);
   // 8 Oct: report cover photo — a clean copy (no watermark or date tag), bigger, saved next to the zip.
   // The stamped copy stays in the zip as evidence.
   const covers = keep.filter(p => isCoverArea(amap[p.id]));
@@ -1306,9 +1317,15 @@ async function processGroup(gid, opts){
     downloadBlob(new Blob([cbuf], { type:"image/jpeg" }), coverName(m, cn, covers.length));
     await new Promise(r => setTimeout(r, 400));
   }
-  m.link = (S.settings.base || "") + name;
-  for (const id of sibs) if (S.meta[id]) S.meta[id].link = m.link;
-  saveLinkToJobLog(m);
+  if (up){
+    if (up.ok) await uploadPut(gid, m, out, up, sibs);
+    else { m.upBad = true; m.upMsg = "Not uploaded: " + (up.error || "no answer") + " The zip is in Downloads; no link saved."; S.upPending[gid] = out; }
+  } else {
+    m.upMsg = ""; m.upBad = false;
+    m.link = (S.settings.base || "") + name;
+    for (const id of sibs) if (S.meta[id]) S.meta[id].link = m.link;
+    saveLinkToJobLog(m);
+  }
   // 20 Oct evening: a small clean front photo for the Reports page tile (WPS script file Thumbs, device key only).
   // The "External picture" cover if there is one, else the first "Front exterior" / "Exterior" photo.
   const front = covers[0] || keep.find(p => /^(front exterior|exterior)$/i.test(amap[p.id] || ""));
@@ -1327,6 +1344,67 @@ async function processGroup(gid, opts){
   if (!opts || !opts.inBatch) hideProgress();
   render();
 }
+// ============================================================ upload to WPS storage (22 Oct, WPS script file PhotoUp)
+// Without the device key, or with the setting off, none of this runs and the tool works as before.
+S.upPending = {};   // group id -> zip blob kept for "Retry upload" (this page session only)
+function uploadOn(){ return S.settings.upload !== false && !!(window.WPSLink && WPSLink.key()); }
+function uploadStartFor(m, blob){
+  $("progText").textContent = "Getting an upload link…";
+  return WPSLink.uploadStart(m.jobNo, m.jobId, blob.size).then(d => d || { ok:false, error:"no answer from the WPS script" });
+}
+// Sends the zip to the signed link with a progress bar (XHR, so progress shows), then asks the script to check and save the link.
+function uploadPut(gid, m, blob, up, sibs){
+  return new Promise(resolve => {
+    const bar = !$("progress").classList.contains("hidden");
+    const mb = n => (n / 1048576).toFixed(1);
+    const fail = (why) => {
+      m.upBad = true; m.upMsg = "Upload failed: " + why + " The zip is in Downloads; no link saved yet."; S.upPending[gid] = blob;
+      resolve(false);
+    };
+    let x;
+    try { x = new XMLHttpRequest(); x.open("PUT", up.putUrl, true); x.setRequestHeader("Content-Type", up.contentType || "application/zip"); }
+    catch(e){ fail(String(e && e.message || e)); return; }
+    x.upload.onprogress = ev => {
+      if (!bar || !ev.lengthComputable) return;
+      $("progBar").style.width = Math.round(100 * ev.loaded / ev.total) + "%";
+      $("progText").textContent = `Uploading ${m.jobNo}: ${mb(ev.loaded)} of ${mb(ev.total)} MB`;
+    };
+    x.onerror = () => fail("no connection, or storage refused it.");
+    x.ontimeout = () => fail("it took too long.");
+    x.onload = () => {
+      if (x.status < 200 || x.status > 299){ fail("storage answered " + x.status + "."); return; }
+      if (bar) $("progText").textContent = "Checking the upload…";
+      WPSLink.uploadDone(m.jobNo, m.jobId, up.key, blob.size).then(d => {
+        if (!d || !d.ok){
+          if (d && d.uploaded && d.link) setLink(m, sibs, d.link, false);
+          fail(d && d.error ? d.error : "no answer from the WPS script.");
+          return;
+        }
+        delete S.upPending[gid];
+        setLink(m, sibs, d.link, true);
+        m.upBad = false; m.upMsg = "Uploaded. Photo link saved to the Job Log.";
+        m.sheetMsg = "";
+        resolve(true);
+      });
+    };
+    x.send(blob);
+  });
+}
+function setLink(m, sibs, link, saved){
+  m.link = link;
+  for (const id of sibs) if (S.meta[id]) S.meta[id].link = link;
+  saveLinkLocal(m);   // this browser's Job Log copy (the script already saved it in the Sheet when saved is true)
+}
+async function retryUpload(gid){
+  const m = S.meta[gid], blob = S.upPending[gid]; if (!m || !blob) return;
+  if (!uploadOn()){ alert("Upload needs this device's key (dashboard: More > Device key)."); return; }
+  showProgress(`Uploading ${m.jobNo}`, 0, 1);
+  m.upMsg = ""; m.upBad = false;
+  const up = await uploadStartFor(m, blob);
+  if (up.ok) await uploadPut(gid, m, blob, up, sameJobGroups(gid));
+  else { m.upBad = true; m.upMsg = "Not uploaded: " + (up.error || "no answer"); }
+  hideProgress(); render();
+}
 function downloadBlob(blob, name){
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a"); a.href = url; a.download = name;
@@ -1334,6 +1412,17 @@ function downloadBlob(blob, name){
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 function saveLinkToJobLog(m){
+  saveLinkLocal(m);
+  // 20 Oct (Keeper): with this device's key, the link goes straight into the Job Log Sheet too, no dashboard needed
+  if (window.WPSLink && WPSLink.key()){
+    WPSLink.savePhotoLink(m.jobNo, m.jobId, m.link).then(d => {
+      if (!d) return;
+      m.sheetMsg = d.ok ? "Photo link saved to the Job Log" + (d.jobNo ? " (" + d.jobNo + ")" : "") + "." : "Photo link kept on this device only: " + (d.error || "no answer") + " The dashboard will send it up on its next sync.";
+      try { render(); } catch(e){}
+    });
+  }
+}
+function saveLinkLocal(m){
   if (!m.jobId) return;
   try {
     const raw = localStorage.getItem(LS_JOBS);
@@ -1347,14 +1436,6 @@ function saveLinkToJobLog(m){
       try { const d = JSON.parse(localStorage.getItem("wps_job_log_dirty_v1") || "{}"); d.ids = d.ids || {}; d.seq = (d.seq || 0) + 1; d.ids[j.id] = d.seq; d.any = true; localStorage.setItem("wps_job_log_dirty_v1", JSON.stringify(d)); } catch(e){}
     }
   } catch(e){}
-  // 20 Oct (Keeper): with this device's key, the link goes straight into the Job Log Sheet too, no dashboard needed
-  if (window.WPSLink && WPSLink.key()){
-    WPSLink.savePhotoLink(m.jobNo, m.jobId, m.link).then(d => {
-      if (!d) return;
-      m.sheetMsg = d.ok ? "Photo link saved to the Job Log" + (d.jobNo ? " (" + d.jobNo + ")" : "") + "." : "Photo link kept on this device only: " + (d.error || "no answer") + " The dashboard will send it up on its next sync.";
-      try { render(); } catch(e){}
-    });
-  }
 }
 // 20 Oct (Keeper): with a device key, the job list also comes from the Job Log Sheet (jobs added on another device show here)
 function refreshSheetJobs(){
@@ -1478,6 +1559,7 @@ function wire(){
     const b = e.target.closest("[data-act]"); if (!b) return;
     const gid = b.dataset.g, act = b.dataset.act;
     if (act === "process") processGroup(gid);
+    if (act === "retryup") retryUpload(gid);
     if (act === "merge") mergeUp(gid);
     if (act === "copy"){ const inp = $("lnk_"+gid); inp.select(); navigator.clipboard ? navigator.clipboard.writeText(inp.value) : document.execCommand("copy"); b.textContent = "Copied"; setTimeout(()=>b.textContent="Copy link",1500); }
   });
