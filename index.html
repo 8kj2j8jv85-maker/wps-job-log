@@ -4604,14 +4604,25 @@ function amendJobInfo(g){
   const first = sheetDate(g.first);
   const undecided = (g.items||[]).filter(p => !p.decision).length;
   const waitingH = first ? (Date.now() - first.getTime())/36e5 : 0;
-  return { j, close, first, undecided, overdue: undecided > 0 && waitingH > 48, daysLeft: close ? Math.ceil((close - Date.now())/864e5) : null };
+  // 22 Oct (Lex: take the hourly Claude check off amendments): the three flags it used to give, worked out here.
+  const sentTimes = (g.items||[]).map(p => sheetDate(p.sent)).filter(Boolean);
+  const late = close ? sentTimes.filter(t => t > close).length : 0;
+  const subs = new Set(sentTimes.map(t => Math.floor(t.getTime()/600000))).size;   // submissions = distinct 10-minute slots
+  const pcIn = (String(g.address||"").toUpperCase().match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/) || [""])[0].replace(/\s+/g,"");
+  const pcJob = j ? String(j.postcode||"").toUpperCase().replace(/\s+/g,"") : "";
+  const pcBad = !!(pcIn && pcJob && pcIn !== pcJob);
+  return { j, close, first, undecided, overdue: undecided > 0 && waitingH > 48, daysLeft: close ? Math.ceil((close - Date.now())/864e5) : null, late, subs, pcBad };
 }
 function renderAmendJob(g){
   const open = !!(state.amendOpen && state.amendOpen[g.job]);
   const inf = amendJobInfo(g);
   const status = inf.undecided === 0 ? "Decided" : (g.decided ? "In review" : "New");
   const win = inf.close ? (inf.daysLeft > 0 ? `window closes ${esc(shortDay(inf.close))} (${inf.daysLeft} day${inf.daysLeft===1?"":"s"})` : `window closed ${esc(shortDay(inf.close))}`) : "window: not on the Job Log";
-  const flag = inf.overdue ? `<span class="am-flag">No decision 48h+</span>` : "";
+  const flag = (inf.overdue ? `<span class="am-flag">No decision 48h+</span>` : "")
+    + (inf.late ? `<span class="am-flag">${inf.late} point${inf.late===1?"":"s"} sent after the 7 days</span>` : "")
+    + (inf.subs > 1 ? `<span class="am-flag">${inf.subs} submissions</span>` : "")
+    + (inf.pcBad ? `<span class="am-flag">Postcode doesn't match the job</span>` : "")
+    + (!inf.j ? `<span class="am-flag">Job number not in the Job Log</span>` : "");
   const head = `<button type="button" class="am-head" aria-expanded="${open}" data-amjob="${esc(g.job)}" onclick="toggleAmendJob(this.dataset.amjob)">
       <span class="t-main"><strong>${esc(g.job)}</strong> · ${esc(g.address)} <span class="am-st am-st-${status.replace(/ /g,"").toLowerCase()}">${status}</span>${flag}
       <span class="sub">${g.points} point${g.points===1?"":"s"}${g.decided?" · "+g.decided+" decided":""}${g.names.size ? " · "+esc([...g.names].join(", ")) : ""}</span>
@@ -5374,7 +5385,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#104)";
+const BUILD = "22 Oct 2026 (#105)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
