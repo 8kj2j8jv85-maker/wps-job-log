@@ -21,7 +21,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg)}
-body{font-family:Jost,system-ui,-apple-system,sans-serif;color:var(--ink);font-size:16px;-webkit-tap-highlight-color:transparent;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+body{font-family:Jost,system-ui,-apple-system,sans-serif;color:var(--ink);font-size:16px;-webkit-tap-highlight-color:transparent;padding-bottom:calc(124px + env(safe-area-inset-bottom))}
 header{background:var(--navy);color:#fff;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:10}
 header .door{width:22px;height:30px;border:2.5px solid #fff;border-radius:11px 11px 2px 2px;position:relative;flex:none}
 header .door:after{content:"";position:absolute;right:4px;top:13px;width:4px;height:4px;border-radius:50%;background:var(--coral)}
@@ -71,7 +71,7 @@ h2{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font
 .recclip audio{width:100%;height:36px}
 .micbanner{margin:4px 0 8px;padding:10px 12px;border-radius:10px;background:#FFF4E5;border:1px solid #F3D3A3;color:#7A4B00;font-size:14px}
 html[data-theme="night"] .micbanner{background:#3A3018;border-color:#5C4C22;color:#E8C26A}
-.drvstat{font-size:12px;color:var(--muted);position:absolute;top:-22px;right:16px}
+.drvstat{font-size:12px;color:var(--muted)}
 .delrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .delrow .mini{padding:8px 11px}
 .delbtn{color:#B3261E;border-color:#E9B4AE}
@@ -104,7 +104,13 @@ html[data-theme="night"] .nextbtn{color:#B7C6F0}
 .tip{font-size:13px;color:var(--muted);line-height:1.5}
 .tip b{font-weight:600;color:var(--ink)}
 footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:10}
-footer .sum{font-size:12px;color:var(--muted);position:absolute;top:-22px;left:16px}
+footer{flex-wrap:wrap}
+/* 22 Oct (Lex: "something overlapping"): the job summary and Drive status used to float 22px above the footer,
+   on top of the room buttons. They now sit in their own line inside the footer. */
+.ftinfo{flex:1 0 100%;display:flex;gap:8px;align-items:center;min-width:0}
+.ftinfo:has(.sum:empty):has(.drvstat:empty){display:none}
+footer .sum{font-size:12px;color:var(--muted);flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+footer .drvstat{flex:0 0 auto;margin-left:auto}
 .btn{flex:1;border:none;border-radius:12px;padding:13px 10px;font:inherit;font-weight:600;font-size:15px}
 .btn.primary{background:var(--navy);color:#fff}
 .btn.coral{background:var(--coral);color:#fff}
@@ -141,18 +147,21 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
 @media (min-width:900px){
   main{max-width:none;display:grid;grid-template-columns:minmax(340px,440px) minmax(0,1fr);grid-template-areas:"warn warn" "help help" "job room" "rooms room" "tips room" ". room";grid-template-rows:auto auto auto auto auto 1fr;gap:0 20px;padding:20px 28px;align-items:start}
   #warn{grid-area:warn} #helpCard{grid-area:help} #jobCard{grid-area:job} #roomsCard{grid-area:rooms} #tipsCard{grid-area:tips} #roomCard{grid-area:room}
-  #roomCard{position:sticky;top:76px;padding:20px 24px}
+  #roomCard{position:sticky;top:calc(var(--hdr,100px) + 28px);padding:20px 24px}   /* 22 Oct: was 76px, under the 99px header */
   #roomCard .roomhead h2{font-size:32px}
   #roomCard .micwrap{flex-direction:row;justify-content:flex-start;gap:16px;margin:4px 0 10px}
   #roomCard .micwrap .status{text-align:left}
   #roomCard .micwrap .hint{text-align:left!important}
   .mic{width:84px;height:84px;flex:0 0 auto}
-  #roomText{min-height:calc(100vh - 420px);font-size:17px}
+  #roomText{min-height:240px;height:calc(100vh - var(--hdr,100px) - 420px);font-size:17px}
+  footer{flex-wrap:nowrap}
+  .ftinfo{flex:1 1 auto}
+  footer .sum{white-space:normal}
   .chip{padding:9px 14px;font-size:15px}
   footer{justify-content:flex-end;padding:10px 28px}
   footer .btn{flex:0 0 auto;min-width:190px}
-  footer .sum{position:static;flex:1;align-self:center;font-size:13px}
-  footer .drvstat{position:static;align-self:center;margin-right:8px}
+  footer .sum{align-self:center;font-size:13px}
+  footer .drvstat{align-self:center;margin-right:8px}
   .panel{left:50%;right:auto;bottom:auto;top:6vh;transform:translateX(-50%);width:min(760px,92vw);max-height:86vh;border-radius:18px}
   .toast{left:auto;right:28px;max-width:420px}
 }
@@ -228,7 +237,7 @@ html .card{border-color:var(--coral)!important}
 </main>
 
 <footer>
-  <div class="sum" id="sum"></div><div class="drvstat" id="drvStat"></div>
+  <div class="ftinfo"><div class="sum" id="sum"></div><div class="drvstat" id="drvStat"></div></div>
   <button class="btn ghost" id="driveBtn" style="display:none" title="Saves these notes in Google Drive > WPS Dictation under the job number, so Claude can read them for the report">Save to Drive</button>
   <button class="btn ghost" id="shareBtn" title="Send the notes to another app, e.g. WhatsApp or email">Share</button>
   <button class="btn primary" id="copyBtn" title="Copies every room, ready to paste into the WPS project chat">Copy for Claude</button>
@@ -283,6 +292,7 @@ html .card{border-color:var(--coral)!important}
 <div class="toast" id="toast"></div>
 
 <script src="wpslink.js?v=20261020b"></script>
+<script>(function(){ function hdr(){ var h=document.querySelector("header"); if (h) document.documentElement.style.setProperty("--hdr", h.offsetHeight+"px"); } hdr(); addEventListener("resize", hdr); addEventListener("load", hdr); })();</script>
 <script>
 (function(){
 'use strict';
