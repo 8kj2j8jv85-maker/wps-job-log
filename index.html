@@ -2289,6 +2289,8 @@ function shortAddr(j){ return [j.address, j.postcode].filter(Boolean).join(", ")
 // Read only, from the WPS script (file MailLog, op mailLog): Gmail plus the script's send logs. One line per person
 // (tenants, then the agent) saying where it stands, whoever needs something first; then each person's last 3 emails.
 const ML_SHOW = 3;
+// Emails that don't need an answer: after one of these the person shows as sorted, not "waiting for a reply".
+const ML_NO_REPLY = ["confirm","mt-confirm","mt-details","rearrange-confirm","slot-confirm","reminder","report","visit-reminder"];
 function mlRel(iso){
   const d = new Date(iso); if (isNaN(d)) return "";
   const days = Math.floor((new Date().setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0)) / 864e5);
@@ -2303,7 +2305,11 @@ async function mlLoad(no, force){
   if (cur && cur.data && !force && Date.now() - cur.at < 10*60000) return;
   st[no] = Object.assign({}, cur || {}, { busy:true, err:"" }); mlPaint(no);
   try {
-    const d = await dashCall("mailLog", { job: no });
+    const j = state.jobs.find(x => normJobNo(x.jobNo||"") === no) || {};
+    const c = clientByName(j.client) || {};
+    const agents = Array.from(new Set([].concat(cleanEmails(j.agentEmail||"").split(", "), [c.contactEmail||""],
+      state.contacts.filter(x => j.client && x.client === j.client).map(x => x.email)).map(e => String(e||"").trim().toLowerCase()).filter(e => /@/.test(e)))).slice(0, 10);
+    const d = await dashCall("mailLog", { job: no, agents });
     if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
     st[no] = { data: d, at: Date.now(), busy:false, all: cur && cur.all };
   } catch(e){ st[no] = Object.assign({}, cur || {}, { busy:false, err: String(e && e.message || e) }); }
@@ -2315,22 +2321,26 @@ function mlToggleAll(no){ const s = state.mailLog && state.mailLog[no]; if (!s) 
 function mlPeople(d){
   const items = d.items || [];
   return (d.people || []).map(p => {
-    const e = p.email, mine = items.filter(x => (x.dir === "in" && x.from === e) || ((x.dir === "out" || x.dir === "note") && ((x.to||[]).includes(e) || (x.cc||[]).includes(e))));
+    const es = p.emails && p.emails.length ? p.emails : [p.email];
+    const has = list => (list||[]).some(a => es.includes(a));
+    const mine = items.filter(x => (x.dir === "in" && es.includes(x.from)) || ((x.dir === "out" || x.dir === "note") && (has(x.to) || has(x.cc))));
     const lastOut = mine.find(x => x.dir === "out"), lastIn = mine.find(x => x.dir === "in");
-    const ccOnly = lastOut && !(lastOut.to||[]).includes(e);
+    const ccOnly = lastOut && !has(lastOut.to);
     let tone = "grey", text = "Nothing sent yet", act = "";
     if (lastIn && (!lastOut || lastIn.at >= lastOut.at)){
       const said = lastIn.snippet ? '"'+lastIn.snippet.slice(0, 90)+(lastIn.snippet.length > 90 ? "…" : "")+'"' : lastIn.label;
       if (p.role === "Agent"){ tone = "amber"; text = "Emailed you "+mlRel(lastIn.at)+": "+said; act = "Check if it needs an answer"; }
       else { tone = "green"; text = (lastIn.label === "Reply" ? "Replied: " : lastIn.label+": ")+said; act = "Sorted"; }
     } else if (lastOut && p.role === "Agent"){ tone = "peri"; text = (ccOnly ? "Copied in · last " : "Last sent ")+mlRel(lastOut.at)+(lastIn ? " · last from them "+mlRel(lastIn.at) : ""); act = "Nothing needed"; }
+    else if (lastOut && ML_NO_REPLY.includes(lastOut.kind)){ tone = "green"; text = lastOut.label+" · sent "+mlRel(lastOut.at)+(lastIn ? " · last from them "+mlRel(lastIn.at) : ""); act = "Nothing needed"; }
     else if (lastOut){ tone = "amber"; text = "No reply to the "+lastOut.label.toLowerCase()+" · sent "+mlRel(lastOut.at); act = mlDays(lastOut.at) >= 2 ? "Needs chasing or a call" : "Waiting for a reply"; }
     return { p, mine, tone, text, act };
   }).sort((a, b) => ["amber","grey","green","peri"].indexOf(a.tone) - ["amber","grey","green","peri"].indexOf(b.tone));
 }
-function mlLine(x, e){
-  const dirTxt = x.dir === "in" ? "↓ Reply" : x.dir === "note" ? "· Note" : ((x.to||[]).includes(e) ? "↑ Sent" : "↑ cc");
-  const cls = x.dir === "in" ? "i" : x.dir === "note" ? "c" : ((x.to||[]).includes(e) ? "o" : "c");
+function mlLine(x, es){
+  const to = (x.to||[]).some(a => es.includes(a));
+  const dirTxt = x.dir === "in" ? "↓ Reply" : x.dir === "note" ? "· Note" : (to ? "↑ Sent" : "↑ cc");
+  const cls = x.dir === "in" ? "i" : x.dir === "note" ? "c" : (to ? "o" : "c");
   const what = x.dir === "in" ? (x.snippet ? '"'+x.snippet+'"' : x.label) : x.label === "Email" ? "Your email"+(x.subject ? ": "+x.subject : "") : x.label;
   const link = /^https:\/\/mail\.google\.com\//.test(x.link||"") ? `<a href="${esc(x.link)}" target="_blank" rel="noopener">Open</a>` : "<span></span>";
   return `<div class="ml-l"><span class="w">${esc(mlRel(x.at))}</span><span class="${cls}">${dirTxt}</span><span class="t">${esc(what)}</span>${link}</div>`;
@@ -2345,8 +2355,8 @@ function renderMailBox(f){
   const glance = people.length ? people.map(x => `<div class="ml-g ${x.tone}"><span class="dot" aria-hidden="true"></span><span class="nm">${esc(x.p.name)}<small>${esc(x.p.role)}</small></span><span class="txt">${esc(x.text)}</span><span class="act">${esc(x.act)}</span></div>`).join("")
     : `<div class="ml-dim" style="font-size:13px">No tenant or agent emails on this job yet.</div>`;
   const n = s.all ? 999 : ML_SHOW;
-  const per = people.filter(x => x.mine.length).map(x => `<div class="ml-p"><h4>${esc(x.p.name)} <span>· ${s.all ? "all "+x.mine.length : "last "+Math.min(ML_SHOW, x.mine.length)}</span></h4>${x.mine.slice(0, n).map(i => mlLine(i, x.p.email)).join("")}</div>`).join("");
-  const emails = new Set((s.data.people||[]).map(p => p.email));
+  const per = people.filter(x => x.mine.length).map(x => `<div class="ml-p"><h4>${esc(x.p.name)} <span>· ${s.all ? "all "+x.mine.length : "last "+Math.min(ML_SHOW, x.mine.length)}</span></h4>${x.mine.slice(0, n).map(i => mlLine(i, x.p.emails && x.p.emails.length ? x.p.emails : [x.p.email])).join("")}</div>`).join("");
+  const emails = new Set([].concat(...(s.data.people||[]).map(p => p.emails && p.emails.length ? p.emails : [p.email])));
   const notes = (s.data.items||[]).filter(x => x.dir === "note" || (x.dir === "in" && !emails.has(x.from)));
   const more = people.some(x => x.mine.length > ML_SHOW) || notes.length;
   const noteHtml = s.all && notes.length ? `<div class="ml-notes"><b>Not emails, but worth knowing</b>${notes.map(x => `<div>${esc(mlRel(x.at))} · ${esc(x.who ? x.who+": " : "")}${esc(x.label)}${x.snippet ? ": "+esc(x.snippet) : ""}</div>`).join("")}</div>` : "";
