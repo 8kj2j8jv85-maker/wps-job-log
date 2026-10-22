@@ -197,7 +197,9 @@ function start(info) {
     $("dictHelp").textContent = "Not inside Word here: copy, then paste into the report.";
     $("copyText").classList.add("hidden");
   }
-  if ((window.SpeechRecognition || window.webkitSpeechRecognition)) $("micRow").classList.remove("hidden");
+  // 22 Oct (Lex): the panel's own mic is off. Talking in happens on the Dictation page; in Word use Word's own Dictate.
+  // (Row and code kept; remove the "false &&" to bring it back.)
+  if (false && (window.SpeechRecognition || window.webkitSpeechRecognition)) $("micRow").classList.remove("hidden");
   if (!WPSLink.key()) { $("keyBox").classList.remove("hidden"); $("job").innerHTML = '<option value="">Paste the device key first</option>'; return; }
   loadJobs();
 }

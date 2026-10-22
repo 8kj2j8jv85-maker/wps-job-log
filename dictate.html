@@ -187,6 +187,8 @@ html .card{border-color:var(--coral)!important}
   <section class="card tip hint" style="display:none" id="helpCard"><b>How this works:</b> fill in the job, tap a <b>room</b>, tap the <b>microphone</b> and talk. Tap the mic again to stop. Tap the next room and carry on. At the end tap <b>Copy for Claude</b> and paste into the WPS project chat. <b>Jobs</b> (top) starts a new job or opens an old one. A property you've done before on this phone gets its rooms from the last visit (a check-out uses the check-in); <b>More rooms</b> shows the full list. Tap <b>?</b> to hide these hints.</section>
 
   <section class="card" id="jobCard">
+    <div id="logPickWrap" style="display:none;margin-bottom:8px"><label class="f" for="logPick">Pick the job from the Job Log</label>
+      <select id="logPick"><option value="">Choose a job…</option></select></div>
     <div class="row">
       <div style="flex:1"><label class="f" for="jobNo">Job no.</label><input id="jobNo" placeholder="WPS261005" autocomplete="off" autocapitalize="characters"></div>
       <div style="width:42%"><label class="f" for="jobType">Type</label>
@@ -686,7 +688,7 @@ function renderSum(){
 }
 
 /* ---------- rendering ---------- */
-function render(){
+function render(){ try{ renderLogPick(); }catch(e){}
   var j = job() || newJob();
   $('jobNo').value = j.jobNo; $('jobType').value = j.type; $('jobAddr').value = j.address;
   renderChips();
@@ -930,9 +932,38 @@ function saveToDrive(quiet){
   }).catch(function(){ drvShow('Not saved to Drive (offline?)'); });
 }
 $('driveBtn').addEventListener('click', function(){ if(want) stop(); setTimeout(function(){ saveToDrive(false); }, want ? 400 : 0); });
+// 22 Oct (Lex): pick the job from the same Job Log list the Word panel uses, so the job number always matches and
+// the panel finds these notes. Typing a job number still works.
+function logList(){
+  var list = [];
+  try{ list = JSON.parse(localStorage.getItem('wps_standalone_jobs_v1') || '[]'); if(!Array.isArray(list)) list = []; }catch(e){ list = []; }
+  if(sheetJobs && window.WPSLink) list = WPSLink.merge(list, sheetJobs);
+  var now = Date.now(), DAY = 864e5;
+  return list.filter(function(x){
+    if(!x || !/^WPS\d{6,}$/i.test(String(x.jobNo||'').trim()) || !TYPES[x.type]) return false;
+    var t = Date.parse(x.date || ''); return !isNaN(t) && t > now - 21*DAY && t < now + 14*DAY;
+  }).sort(function(a,b){ return Date.parse(b.date) - Date.parse(a.date); });
+}
+function renderLogPick(){
+  var l = logList(), sel = $('logPick'), cur = (job() && job().jobNo || '').toUpperCase();
+  $('logPickWrap').style.display = l.length ? '' : 'none';
+  sel.innerHTML = '<option value="">Choose a job…</option>' + l.map(function(x){
+    var no = String(x.jobNo).trim().toUpperCase(), d = String(x.date||'').slice(8,10) + '/' + String(x.date||'').slice(5,7);
+    return '<option value="' + esc(no) + '"' + (no === cur ? ' selected' : '') + '>' + esc(d + ' ' + x.type + ' · ' + [x.address, x.postcode].filter(Boolean).join(', ') + ' · ' + no) + '</option>';
+  }).join('');
+}
+$('logPick').addEventListener('change', function(){
+  var no = this.value; if(!no) return;
+  var j = job();
+  if(!j || (j.jobNo && j.jobNo.toUpperCase() !== no && doneRooms(j).length)) j = newJob();
+  $('jobNo').value = no; $('jobAddr').value = ''; j.address = '';
+  $('jobNo').dispatchEvent(new Event('input'));
+  render();
+});
+renderLogPick();
 if(window.WPSLink && WPSLink.key()){
   $('driveBtn').style.display = '';
-  WPSLink.sheetJobs().then(function(sj){ if(sj){ sheetJobs = sj; var j = job(); if(j && fillFromLog(j)){ save(); render(); } } });
+  WPSLink.sheetJobs().then(function(sj){ if(sj){ sheetJobs = sj; var j = job(); if(j && fillFromLog(j)){ save(); render(); } renderLogPick(); } });
 }
 $('shareBtn').addEventListener('click', function(){
   if(want) stop();
