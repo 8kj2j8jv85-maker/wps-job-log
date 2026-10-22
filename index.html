@@ -5151,7 +5151,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#98)";
+const BUILD = "22 Oct 2026 (#99)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6194,14 +6194,19 @@ function renderWordFileField(f, isNew){
   if (isNew || !/^WPS\d{6}$/i.test(String(f.jobNo||"").replace(/\s+/g,""))) return "";
   const r = state.wordFind && state.wordFind.job === String(f.jobNo).toUpperCase().replace(/\s+/g,"") ? state.wordFind : null;
   let body = "";
-  if (!keyMode()) body = `<span class="field-hint">Needs this device's key (More > Device key).</span>`;
-  else if (!r) body = `<button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()"${tip("Find this job's Word report in Dropbox > Reports > Word Docs")}>Find Word file</button>`;
-  else if (r.busy) body = `<span class="field-hint">Looking in Dropbox...</span>`;
-  else if (r.error) body = `<span class="field-hint" style="color:var(--coral)">${esc(r.error)}</span> <button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()">Try again</button>`;
-  else if (!r.files.length) body = `<span class="field-hint">No Word file starting ${esc(r.job)} in Dropbox > Reports > Word Docs.</span> <button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()">Look again</button>`;
-  else body = r.files.map((x,i) => `<div class="pl-row wf-row"><a class="btn ${i?"btn-ghost":"btn-coral"} btn-sm" href="${esc(x.url)}" target="_blank" rel="noopener"${tip("Opens the file's page on dropbox.com; click Open there to open it in Word")}>Open in Dropbox</a>
+  const jn = String(f.jobNo).toUpperCase().replace(/\s+/g,"");
+  // One click into desktop Word on the PC (Lex, 22 Oct): wpsword: is registered on the HP and opens the job's newest
+  // .docx from the synced Dropbox Word Docs folder (C:\WPS Panel\wps-open-word.ps1). Phones and the tablet don't have it.
+  const wordBtn = `<div class="pl-row"><a class="btn btn-coral btn-sm" href="wpsword:${esc(jn)}"${tip("Opens this job's Word report in Word on the PC (needs the Open in Word helper on that PC)")}>Open in Word</a>
+      <span class="field-hint">PC only. If nothing opens, use the Dropbox links below.</span></div>`;
+  if (!keyMode()) body = wordBtn + `<span class="field-hint">Dropbox list needs this device's key (More > Device key).</span>`;
+  else if (!r) body = wordBtn + `<button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()"${tip("List this job's Word report(s) in Dropbox > Reports > Word Docs")}>Show Dropbox files</button>`;
+  else if (r.busy) body = wordBtn + `<span class="field-hint">Looking in Dropbox...</span>`;
+  else if (r.error) body = wordBtn + `<span class="field-hint" style="color:var(--coral)">${esc(r.error)}</span> <button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()">Try again</button>`;
+  else if (!r.files.length) body = wordBtn + `<span class="field-hint">No Word file starting ${esc(r.job)} in Dropbox > Reports > Word Docs.</span> <button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()">Look again</button>`;
+  else body = wordBtn + r.files.map((x,i) => `<div class="pl-row wf-row"><a class="btn btn-ghost btn-sm" href="${esc(x.url)}" target="_blank" rel="noopener"${tip("Opens the file's page on dropbox.com; Open in > Word there")}>Dropbox page</a>
       <span class="wf-name">${esc(x.name)}</span><span class="field-hint">${esc(wfWhen(x.modified))}</span></div>`).join("") +
-      `<span class="field-hint">On the Dropbox page click Open, then Word (desktop app).</span>`;
+      `<span class="field-hint">On the Dropbox page: Open in > Word.</span>`;
   return `<div class="field wide">Word file<div class="wf-box">${body}</div></div>`;
 }
 function wfWhen(iso){ const d = new Date(iso); return isNaN(d) ? "" : "saved " + d.toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
