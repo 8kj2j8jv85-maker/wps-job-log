@@ -1836,6 +1836,7 @@ function openNewOnDate(dateIso){
 
 // ---------------------------------------------------------------- quick extract (offline, regex-based)
 // 22 Oct (Lex: "I paste or drop an email in and nothing happens"): it now runs by itself on paste and drop
+// (later 22 Oct: also keys from/back, parking £, extra areas, congestion zone, notes lines, Copy to = sender if saved)
 // (text, or a dropped .eml / .txt file), reads written dates ("Friday 23rd October"), times, postcodes on their
 // own line, bedrooms, flat/house, the client name and tenant names, emails and phones, and says what it filled.
 const UK_POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i;
@@ -1949,6 +1950,31 @@ function quickExtract(raw){
   if (/\b(flat|apartment|maisonette|studio)\b/.test(low)) out.propertyType = "Flat";
   else if (/\b(house|terrace|semi-detached|detached|bungalow|cottage)\b/.test(low)) out.propertyType = "House";
   out.client = exClient(t);
+  // Keys (Lex, 22 Oct: fill everything it can; he reads it over)
+  const kf = [["office",/(collect|pick(?:ed)? up|get|from)\b[^.\n]{0,30}\b(office|branch)\b|keys? (are |will be )?(at|in) (the |our )?(office|branch)/],["lockbox",/key ?safe|lock ?box|key ?box/],["concierge",/keys?\b[^.\n]{0,25}\bconcierge|concierge (has|holds|will (have|give|let))/],
+    ["landlord",/landlord (will|to) (meet|let|give|hand)/],["tenant",/tenants? (will|to|can) (let|be (home|in|present|there)|meet|give access|provide access)|meet the tenant|tenants? (is|are) (home|in|present)/]];
+  const kb = [["none",/no keys|nothing to return/],["property",/leave (the )?keys? (in|at) the (property|flat|house)/],["tenant",/(hand|give) (the )?keys? to the (new )?tenants?/],
+    ["office",/(return|drop|bring)\b[^.\n]{0,40}\b(office|branch)|keys? back to (the |our )?(office|branch)/],["concierge",/(return|leave)\b[^.\n]{0,20}keys?\b[^.\n]{0,20}concierge/],["lockbox",/(return|put)\b[^.\n]{0,20}keys?\b[^.\n]{0,20}(key ?safe|lock ?box)/]];
+  const hit = (list) => { for (const [k, re] of list) if (re.test(low)) return k; return ""; };
+  out.keysBack = hit(kb);
+  out.keysFrom = hit(kf);
+  if (out.keysFrom === "office" && out.keysBack === "office" && !/(return|drop|bring|back)\b[^.\n]{0,30}(office|branch)/.test(low)) out.keysBack = "";
+  if (out.keysFrom === "tenant" && !out.keysBack) out.keysBack = "none";
+  // Parking: only an amount stated with parking
+  const pk = t.match(/parking[^.\n£]{0,40}£\s?(\d+(?:\.\d{1,2})?)|£\s?(\d+(?:\.\d{1,2})?)[^.\n]{0,20}parking/i);
+  if (pk) out.parkingExtra = pk[1] || pk[2];
+  // Extra areas: count of the extras the email names
+  const extras = ["garden","balcony","terrace","garage","loft","basement","cellar","conservatory","utility room","outbuilding","shed","patio","roof terrace","study"]
+    .filter(w => new RegExp("\\b" + w + "s?\\b").test(low));
+  const ex2 = extras.filter(w => !(w === "terrace" && extras.indexOf("roof terrace") !== -1));
+  if (ex2.length) { out.extraAreas = String(Math.min(ex2.length, 6)); out.extraList = ex2; }
+  // Notes: the email's access / key / parking / landlord / alarm / pet lines, word for word
+  const noteRe = /\b(access|parking|park|permit|keys?|key ?safe|lock ?box|concierge|code|alarm|landlord|pets?|dog|cat|furnished|unfurnished|meter|please note|n\.?b\.?|gate|intercom|buzzer|floor|lift)\b/i;
+  out.noteLines = lines.map(l => l.trim()).filter(l => l && l.length <= 200 && noteRe.test(l) && !/^(kind regards|regards|thanks)/i.test(l) && !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(l)).slice(0, 8);
+  // Sender (From:) for Copy to
+  const fromLine = String(raw||"").split("\n").find(l => /^\s*from\s*:/i.test(l)) || "";
+  const fe = fromLine.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (fe) out.sender = fe[0];
   const hdr = String(raw||"").split("\n").filter(l => /^\s*(from|to|cc|reply-to)\s*:/i.test(l)).join(" ");
   out.tenants = exTenants(lines, hdr.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || []);
   return out;
@@ -1961,12 +1987,27 @@ function runExtract(rawIn){
   state.extractRaw = raw; state.extractFor = state.editing.id;
   if (!String(raw).trim()){ state.extractFor = state.editing.id; state.extractMsg = "Paste or drop the booking email first."; render(); return; }
   captureFormValues();
-  const found = quickExtract(raw), f = state.editing, filled = [];
+  const found = quickExtract(raw), f = state.editing, filled = [], notFound = [];
   Object.keys(EX_LABELS).forEach(k => {
     if (!found[k]) return;
     if (k === "client" && !clientByName(found[k])) return;
     if (String(f[k]||"") !== String(found[k])) { f[k] = found[k]; filled.push(EX_LABELS[k]); }
   });
+  [["keysFrom","keys from"],["keysBack","keys back"],["parkingExtra","parking £"],["extraAreas","extra areas"]].forEach(([k, lab]) => {
+    if (found[k] && String(f[k]||"") !== String(found[k])) { f[k] = found[k]; filled.push(lab + (k === "extraAreas" && found.extraList ? " (" + found.extraList.join(", ") + ")" : "")); }
+  });
+  if (!f.congestion && typeof ccGuess === "function" && f.postcode && ccGuess(f.postcode) === "in") { f.congestion = true; filled.push("congestion zone"); }
+  if (found.noteLines && found.noteLines.length){
+    const have = String(f.notes||""), add = found.noteLines.filter(l => have.indexOf(l) === -1);
+    if (add.length) { f.notes = (have.trim() ? have.trim() + "\n" : "") + add.join("\n"); filled.push("notes (" + add.length + " line" + (add.length > 1 ? "s" : "") + ")"); }
+  }
+  if (found.sender){
+    ensureFormLists(f);
+    const c = typeof contactByEmail === "function" ? contactByEmail(found.sender) : null;
+    const cl = (state.clients||[]).find(x => String(x.contactEmail||"").toLowerCase() === found.sender.toLowerCase());
+    if ((c || cl) && !f.copyTo.some(e => e.toLowerCase() === found.sender.toLowerCase())) { f.copyTo.push(found.sender); filled.push("Copy to " + found.sender); }
+    else if (!c && !cl) notFound.push("sender " + found.sender + " isn't a saved contact, so Copy to wasn't ticked");
+  }
   if (found.tenants && found.tenants.length){
     ensureFormLists(f);
     let added = 0;
@@ -1979,8 +2020,8 @@ function runExtract(rawIn){
     });
     if (added) filled.push(added + " tenant" + (added > 1 ? "s" : ""));
   }
-  state.extractMsg = filled.length ? "Filled: " + filled.join(", ") + ". Check each one before saving."
-    : "Nothing new found. Fill the fields by hand (or paste more of the email).";
+  state.extractMsg = (filled.length ? "Filled: " + filled.join(", ") + ". Check each one before saving."
+    : "Nothing new found. Fill the fields by hand (or paste more of the email).") + (notFound.length ? " Note: " + notFound.join("; ") + "." : "");
   render();
 }
 // Paste and drop run Extract straight away (no button press needed).
@@ -6180,7 +6221,7 @@ function renderForm(){
     ${helpBox(`Paste or drop the agent's booking email into the box and it fills the fields straight away, or fill them by hand. Always check what Extract fills in. The job number fills itself. Add each tenant on their own row; their emails get the 7-day reminder. Tick who the report emails are copied to. Click <b>${isNew ? "Save job" : "Save changes"}</b> at the bottom when done.`)}
 
     <div class="extract-box" ondragover="exOnDragOver(event)" ondragleave="exOnDragLeave(event)" ondrop="exOnDrop(event)">
-      <textarea id="extractRaw" onpaste="exOnPaste(event)" placeholder="Paste or drop the agent's booking email here. It fills the date, time, address, postcode, type, client and tenants straight away.">${esc(state.extractFor === f.id ? (state.extractRaw||"") : "")}</textarea>
+      <textarea id="extractRaw" onpaste="exOnPaste(event)" placeholder="Paste or drop the agent's booking email here. It fills what it can find straight away (date, time, address, type, client, tenants, keys, notes...). Read it over before saving.">${esc(state.extractFor === f.id ? (state.extractRaw||"") : "")}</textarea>
       <div class="extract-row">
         <span class="extract-hint">${state.extractFor === f.id && state.extractMsg ? esc(state.extractMsg) : "Offline pattern-matching — always double-check what it fills in."}</span>
         <button class="btn btn-ghost btn-sm" onclick="runExtract()"${hint("Runs again on what's in the box. Paste and drop run it by themselves.")}>Extract job details</button>
