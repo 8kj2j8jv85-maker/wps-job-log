@@ -4117,7 +4117,7 @@ function renderProcessing(){
           ${procWordBtn(j)}
           ${photos}
           <a class="btn btn-ghost btn-sm" href="dictate.html"${tip("Open Dictation (pick this job from the Job Log list)")}>Dictation</a>
-          ${ok && keyMode() ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procCheck('${esc(k)}')"${tip("Checks the saved Word file in Dropbox: [CO:] notes, XXX, comments, tracked changes, photo link, file name")}>${c && c.busy ? "Checking…" : "Run checks"}</button>` : ""}
+          ${ok && keyMode() ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procCheck('${esc(k)}')"${tip("Checks the saved Word file in Dropbox: [CO:] notes, XXX, comments, tracked changes, photo link, file name, job number, postcode and visit date against the Job Log, template leftovers, the check-out CHECK IN block, item rows kept on one page")}>${c && c.busy ? "Checking…" : "Run checks"}</button>` : ""}
           ${ok && keyMode() ? `<button type="button" class="btn ${conf ? "btn-coral" : "btn-ghost"} btn-sm" onclick="procToPdf('${esc(k)}')"${tip("Copies the saved Word file into Dropbox > Reports > To PDF (the master stays in Word Docs)")}>${conf ? "Send anyway?" : "Send to PDF"}</button>` : ""}
         </div>
       </div>
@@ -4168,7 +4168,7 @@ async function procCheck(k){
   const j = state.jobs.find(x => procKey(x) === k); if (!j) return;
   state.procChecks = state.procChecks || {}; state.procChecks[k] = { busy:true }; render();
   try {
-    const d = await dashCall("wordCheck", { job:k, photoLink: j.photoLink || "" });
+    const d = await dashCall("wordCheck", { job:k, photoLink: j.photoLink || "", postcode: j.postcode || "", date: j.date || "", type: j.type || "", address: [j.address, j.town, j.postcode].filter(Boolean).join(", ") });   // build plan item 3: the script checks these against the file
     state.procChecks[k] = d && d.ok ? { checks: d.checks || [], file: d.file, modified: d.modified || "" } : { error: (d && d.error === "Unknown request.") ? "The script hasn't got the Processing part yet (new deployment needed)." : ((d && d.error) || "No answer") };
   } catch(e){ state.procChecks[k] = { error: String(e && e.message || e) }; }
   render();
@@ -5385,7 +5385,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#105)";
+const BUILD = "22 Oct 2026 (#106)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
