@@ -156,6 +156,9 @@ html[data-theme="night"] select option{color:var(--ink);background:var(--card)}
   .panel{left:50%;right:auto;bottom:auto;top:6vh;transform:translateX(-50%);width:min(760px,92vw);max-height:86vh;border-radius:18px}
   .toast{left:auto;right:28px;max-width:420px}
 }
+/* coral outlines (Lex, 22 Oct): input boxes and cards get a coral edge, all themes */
+html input:not([type=checkbox]):not([type=radio]):not([type=file]),html select,html textarea{border:1.5px solid var(--coral)!important}
+html .card{border-color:var(--coral)!important}
 </style>
 </head>
 <body>
