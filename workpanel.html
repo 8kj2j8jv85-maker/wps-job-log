@@ -15,54 +15,59 @@
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 <!-- integrity: same checked copy as the Photo Tool (17 Oct 2026) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="wpslink.js?v=20261022b"></script>
+<script src="wpslink.js?v=20261022c"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root{ --navy:#1F2D5A; --coral:#E0684B; --coral-dark:#B4472E; --ink:#1F2D5A; --dim:#5A6178; --line:#C9CCD6; --soft:#E3E5EB; --bg:#FFFFFF; --tile:#DADDE5; --ok:#2E7D4F; --warn:#B4472E; --panel:#F3F4F7; }
+  /* Navy panel with coral-outlined boxes (Lex, 22 Oct). */
+  :root{ --navy:#1F2D5A; --navy-deep:#17224A; --navy-box:#24346A; --coral:#E0684B; --coral-dark:#B4472E; --ink:#FFFFFF; --dim:#C9CFE3; --line:#E0684B; --soft:#34437A; --bg:#1F2D5A; --tile:#2C3C72; --ok:#3FA36A; --warn:#F08A6E; --panel:#2A3A70; }
   *{ box-sizing:border-box; }
   html,body{ margin:0; background:var(--bg); color:var(--ink); font-family:Jost, system-ui, sans-serif; font-size:14px; }
   button, input, select, textarea{ font-family:inherit; font-size:14px; color:var(--ink); }
-  .head{ background:var(--navy); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; }
+  .head{ background:var(--navy-deep); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; border-bottom:2px solid var(--coral); }
   .head h1{ margin:0; font-family:"Cormorant Garamond", serif; font-style:italic; font-weight:600; font-size:22px; }
-  .head .where{ margin-left:auto; font-size:11px; opacity:.8; }
+  .head .where{ margin-left:auto; font-size:11px; color:var(--dim); }
   .sec{ padding:12px 16px; border-bottom:1px solid var(--soft); display:flex; flex-direction:column; gap:6px; }
   label, .lab{ font-size:12px; color:var(--dim); }
-  select, input[type=text], input[type=password], textarea{ width:100%; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  select, input[type=text], input[type=password], textarea{ width:100%; border:1.5px solid var(--coral); border-radius:6px; background:var(--navy-box); color:#fff; }
+  select:focus, input:focus, textarea:focus{ outline:2px solid #F3A08C; outline-offset:1px; }
+  select option{ background:var(--navy-box); color:#fff; }
   select, input[type=text], input[type=password]{ height:44px; padding:0 10px; }
+  select:disabled{ opacity:.7; }
   textarea{ padding:10px; line-height:1.5; resize:vertical; min-height:180px; }
-  .tabs{ display:flex; border-bottom:1px solid var(--soft); }
-  .tabs button{ flex:1; height:46px; border:0; background:#fff; color:var(--dim); border-bottom:3px solid transparent; cursor:pointer; }
-  .tabs button[aria-selected=true]{ color:var(--ink); font-weight:600; border-bottom-color:var(--coral); }
+  ::placeholder{ color:#9AA3C4; }
+  .tabs{ display:flex; gap:6px; padding:10px 16px 0; border-bottom:1px solid var(--soft); }
+  .tabs button{ flex:1; height:44px; border:1.5px solid var(--coral); border-bottom:0; border-radius:8px 8px 0 0; background:var(--navy-box); color:var(--dim); cursor:pointer; }
+  .tabs button[aria-selected=true]{ color:#fff; font-weight:600; background:var(--coral); }
   .pane{ padding:12px 16px 24px; display:flex; flex-direction:column; gap:12px; }
   .pane[hidden]{ display:none; }
-  .btn{ min-height:44px; border:1px solid var(--line); border-radius:8px; background:#fff; padding:0 14px; cursor:pointer; }
+  .btn{ min-height:44px; border:1.5px solid var(--coral); border-radius:8px; background:var(--navy-box); color:#fff; padding:0 14px; cursor:pointer; }
   .btn:disabled{ opacity:.45; cursor:default; }
   .btn-main{ min-height:48px; border:0; border-radius:8px; background:var(--coral); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
-  .btn-main:disabled{ background:#E9A595; cursor:default; }
+  .btn-main:disabled{ background:#7A4A4A; color:#E8D2CC; cursor:default; }
   .row{ display:flex; gap:8px; align-items:center; }
   .row > *{ min-width:0; }
   .grow{ flex:1; }
   .note{ font-size:12px; color:var(--dim); line-height:1.5; }
-  .msg{ font-size:13px; line-height:1.5; padding:8px 10px; border-radius:6px; background:var(--panel); }
-  .msg.bad{ background:#FBE9E4; color:var(--warn); }
-  .msg.good{ background:#E6F2EA; color:var(--ok); }
+  .msg{ font-size:13px; line-height:1.5; padding:8px 10px; border-radius:6px; background:var(--panel); color:#fff; border:1px solid var(--soft); }
+  .msg.bad{ background:#4A2A3A; color:#FFC9BB; border-color:var(--coral); }
+  .msg.good{ background:#1F4A3E; color:#BFF0D2; border-color:#3FA36A; }
   .msg:empty{ display:none; }
   .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:8px; }
-  .ph{ position:relative; border:0; padding:0; background:var(--tile); aspect-ratio:4/3; border-radius:4px; overflow:hidden; cursor:pointer; }
-  .ph img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .ph .tag{ position:absolute; left:0; right:0; bottom:0; font-size:11px; padding:2px 4px; background:rgba(31,45,90,.72); color:#fff; text-align:left; }
-  .ph.used .tag{ background:rgba(46,125,79,.85); }
-  .ph.picked{ outline:3px solid var(--coral); outline-offset:-3px; }
+  .ph{ position:relative; border:1.5px solid var(--soft); padding:0; background:var(--tile); aspect-ratio:4/3; border-radius:6px; overflow:hidden; cursor:pointer; }
+  .ph img{ width:100%; height:100%; object-fit:cover; display:block; -webkit-user-drag:none; }
+  .ph .tag{ position:absolute; left:0; right:0; bottom:0; font-size:11px; padding:2px 4px; background:rgba(23,34,74,.8); color:#fff; text-align:left; }
+  .ph.used .tag{ background:rgba(46,125,79,.9); }
+  .ph.picked{ border-color:var(--coral); outline:3px solid var(--coral); outline-offset:-3px; }
   .checks{ display:flex; flex-direction:column; gap:8px; }
   .ck{ display:flex; gap:8px; align-items:flex-start; line-height:1.4; }
   .ck .dot{ flex:none; width:22px; height:22px; border-radius:11px; color:#fff; font-size:12px; display:flex; align-items:center; justify-content:center; }
-  .ck.ok .dot{ background:var(--ok); } .ck.bad .dot{ background:var(--warn); } .ck.na .dot{ background:#8A90A6; }
+  .ck.ok .dot{ background:var(--ok); } .ck.bad .dot{ background:var(--coral); } .ck.na .dot{ background:#6B76A0; }
   .mono{ font-family:ui-monospace, Consolas, monospace; font-size:13px; overflow-wrap:anywhere; }
-  .box{ border:1px solid var(--line); border-radius:6px; padding:10px; }
-  .mic{ width:48px; height:48px; border-radius:24px; border:2px solid var(--navy); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
-  .mic.on{ background:var(--coral); border-color:var(--coral); }
-  .mic.on path, .mic.on rect{ stroke:#fff; }
+  .box{ border:1.5px solid var(--coral); border-radius:6px; padding:10px; background:var(--navy-box); }
+  .mic{ width:48px; height:48px; border-radius:24px; border:2px solid var(--coral); background:var(--navy-box); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+  .mic path, .mic rect{ stroke:#fff; }
+  .mic.on{ background:var(--coral); }
   .hidden{ display:none !important; }
   @media (min-width:700px){ .wrap{ max-width:640px; margin:0 auto; border-left:1px solid var(--soft); border-right:1px solid var(--soft); min-height:100vh; } }
 </style>
@@ -112,7 +117,7 @@
     </div>
     <button class="btn-main" id="putPhoto" disabled>Put photo in at the cursor</button>
     <div class="msg" id="photoMsg"></div>
-    <div class="note" id="photoHelp">Click in the photo cell in the report first. The photo is sized to the cell, the caption goes in the cell below, and the cursor moves on to the next cell. Green = already used in this report.</div>
+    <div class="note" id="photoHelp">Click in the photo box in the report first, then double-click a photo (or pick it and press the button, or drag it in: on test). It comes out the same size and shape as the other photos in the row, the caption goes in the box below, and the cursor moves on to the next box. Green = already used in this report.</div>
   </div>
 
   <!-- DICTATION -->
@@ -279,16 +284,101 @@ function renderThumbs() {
   $("thumbs").innerHTML = S.photos.map(function (x, i) {
     if (x.area !== S.room) return "";
     var used = !!u[x.name];
-    return '<button class="ph' + (used ? " used" : "") + (i === S.picked ? " picked" : "") + '" data-i="' + i + '" aria-label="' + esc(x.area + " " + x.seq) + '"><img src="' + x.url + '" alt="" loading="lazy"><span class="tag">' + x.seq + (used ? " · used" : "") + "</span></button>";
+    return '<button draggable="true" class="ph' + (used ? " used" : "") + (i === S.picked ? " picked" : "") + '" data-i="' + i + '" aria-label="' + esc(x.area + " " + x.seq) + '"><img src="' + x.url + '" alt="" loading="lazy" draggable="false"><span class="tag">' + x.seq + (used ? " · used" : "") + "</span></button>";
   }).join("");
   $("putPhoto").disabled = S.picked < 0;
 }
 $("thumbs").addEventListener("click", function (e) {
   var b = e.target.closest(".ph"); if (!b) return;
-  S.picked = +b.dataset.i; renderThumbs(); msg("photoMsg", "");
+  S.picked = +b.dataset.i; markPicked(); msg("photoMsg", "");
 });
+// Only the outline changes on a click (re-drawing the tiles would swallow a double-click).
+function markPicked() {
+  Array.prototype.forEach.call($("thumbs").querySelectorAll(".ph"), function (el) { el.classList.toggle("picked", +el.dataset.i === S.picked); });
+  $("putPhoto").disabled = S.picked < 0;
+}
+// Double-click = straight in (Lex 22 Oct: no button needed). Dragging is off: a drag into Word only carries a link.
+$("thumbs").addEventListener("dblclick", function (e) {
+  var b = e.target.closest(".ph"); if (!b) return;
+  S.picked = +b.dataset.i; markPicked(); $("putPhoto").click();
+});
+// Dragging (on test, Lex 22 Oct): the drag carries the picture itself (cropped to the box shape, as HTML), not a
+// link. The cropped copy is made when the finger/mouse goes down, so it's ready when the drag starts. When the drag
+// ends inside Word, the panel tidies the box the cursor is in: same size as the row's photos, caption below.
+function aspectNow() { var z = lastSize(); return z ? z.w / z.h : 4 / 3; }
+$("thumbs").addEventListener("pointerdown", function (e) {
+  var b = e.target.closest(".ph"); if (!b) return;
+  var x = S.photos[+b.dataset.i], a = aspectNow();
+  if (x && !(x.dragB64 && x.dragAspect === a)) cropTo(x.blob, a).then(function (b64) { x.dragB64 = b64; x.dragAspect = a; }).catch(function () {});
+});
+var dragging = -1;
+$("thumbs").addEventListener("dragstart", function (e) {
+  var b = e.target.closest(".ph"); if (!b) { e.preventDefault(); return; }
+  var i = +b.dataset.i, x = S.photos[i];
+  if (!x || !x.dragB64) { e.preventDefault(); msg("photoMsg", "Hold the photo a moment, then drag."); return; }
+  var z = lastSize() || { w: 186, h: 139.5 };
+  var html = '<img src="data:image/jpeg;base64,' + x.dragB64 + '" width="' + Math.round(z.w * 4 / 3) + '" height="' + Math.round(z.h * 4 / 3) + '" alt="">';
+  e.dataTransfer.effectAllowed = "copy";
+  e.dataTransfer.setData("text/html", html);
+  dragging = i; S.picked = i;
+});
+$("thumbs").addEventListener("dragend", function (e) {
+  var i = dragging; dragging = -1;
+  if (i < 0 || !INWORD) { renderThumbs(); return; }   // dropEffect isn't trusted across apps, so always tidy (harmless if nothing dropped)
+  var p = S.photos[i], cap = $("cap").value.trim();
+  setTimeout(function () {
+    tidyBox(cap).then(function (r) { markUsed(p.name); $("cap").value = ""; S.picked = -1; renderThumbs(); msg("photoMsg", r, "good"); })
+      .catch(function (err) { renderThumbs(); msg("photoMsg", "Dropped. Couldn't tidy the box: " + (err && err.message || err), "bad"); });
+  }, 700);
+});
+// After a drop: the box the cursor is in gets its photo set to the row's photo size, and the caption below.
+function tidyBox(cap) {
+  return Word.run(function (ctx) {
+    var cell = ctx.document.getSelection().parentTableCellOrNullObject;
+    cell.load("isNullObject,rowIndex,cellIndex");
+    return ctx.sync().then(function () {
+      if (cell.isNullObject) return "Dropped (not in a photo box, so left as it is).";
+      var table = cell.parentTable; table.load("rowCount");
+      var own = cell.body.inlinePictures; own.load("items/width,items/height");
+      var rowCells = cell.parentRow.cells; rowCells.load("items/cellIndex");
+      var sibs = [];
+      return ctx.sync().then(function () {
+        rowCells.items.forEach(function (rc) { if (rc.cellIndex !== cell.cellIndex) { var sp = rc.body.inlinePictures; sp.load("items/width,items/height"); sibs.push(sp); } });
+        return ctx.sync();
+      }).then(function () {
+        if (!own.items.length) return "Dropped, but the cursor isn't in the box it went into, so it wasn't tidied.";
+        var size = null;
+        sibs.forEach(function (sp) { if (!size) { var it = (sp.items || []).filter(function (x) { return x.width > 40 && x.height > 30; })[0]; if (it) size = { w: it.width, h: it.height }; } });
+        size = size || lastSize();
+        var extra = own.items.length - 1;
+        own.items.forEach(function (x, k) { if (k < extra) x.delete(); });
+        var pic = own.items[own.items.length - 1];
+        if (size) { pic.lockAspectRatio = false; pic.width = size.w; pic.height = size.h; pic.lockAspectRatio = true; lsSet(SIZE_KEY, JSON.stringify(size)); }
+        if (cap && cell.rowIndex + 1 < table.rowCount) table.getCell(cell.rowIndex + 1, cell.cellIndex).body.insertText(cap, "Replace");
+        return ctx.sync().then(function () { return "Dropped" + (size ? " and sized to the row" : "") + (extra ? ", old photo replaced" : "") + (cap ? ", caption below" : "") + "."; });
+      });
+    });
+  });
+}
 function blobToB64(blob) {
   return new Promise(function (ok, bad) { var r = new FileReader(); r.onload = function () { ok(String(r.result).split(",")[1]); }; r.onerror = bad; r.readAsDataURL(blob); });
+}
+// Centre-crop a photo to the box's shape (w/h), so it fills the box exactly with nothing stretched.
+function cropTo(blob, aspect) {
+  return new Promise(function (ok, bad) {
+    var url = URL.createObjectURL(blob), img = new Image();
+    img.onload = function () {
+      var w = img.naturalWidth, h = img.naturalHeight, sx = 0, sy = 0, sw = w, sh = h;
+      if (w / h > aspect) { sw = Math.round(h * aspect); sx = Math.round((w - sw) / 2); } else { sh = Math.round(w / aspect); sy = Math.round((h - sh) / 2); }
+      var scale = Math.min(1, 1600 / sw), c = document.createElement("canvas");
+      c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+      c.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL("image/jpeg", 0.9).split(",")[1]);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); bad(new Error("couldn't read the photo")); };
+    img.src = url;
+  });
 }
 $("putPhoto").addEventListener("click", function () {
   var p = S.photos[S.picked]; if (!p) return;
@@ -300,39 +390,63 @@ $("putPhoto").addEventListener("click", function () {
       .catch(function () { done("This browser won't copy photos. Long-press the photo and use Save or Copy image instead.", "bad"); });
     return;
   }
-  blobToB64(p.blob).then(function (b64) { return insertPhoto(b64, cap); })
+  insertPhoto(p.blob, cap)
     .then(function (r) { markUsed(p.name); $("cap").value = ""; S.picked = -1; renderThumbs(); done(r, "good"); })
     .catch(function (e) { done("Didn't go in: " + (e && e.message || e), "bad"); });
 });
-// Word: photo at the cursor. In a table cell: sized to the cell, any photo already there replaced, caption in the
-// cell below (photo strip tables are a photo row with a caption row under it), cursor moves to the next cell.
-function insertPhoto(b64, cap) {
+// Size for a photo box: the photo already in this box (replacing it), else the other photos in the same row,
+// else the last size used, else the cell width at 4:3. Points.
+var SIZE_KEY = "wps_panel_photo_size";
+function lastSize() { try { var o = JSON.parse(lsGet(SIZE_KEY) || "null"); return o && o.w > 40 && o.h > 30 ? o : null; } catch (e) { return null; } }
+// Word: photo at the cursor. In a table cell: the same size and shape as the row's other photos, any photo already
+// there replaced, caption in the cell below (photo strips are a photo row with a caption row under it), cursor moves
+// to the next cell.
+function insertPhoto(blob, cap) {
   return Word.run(function (ctx) {
     var sel = ctx.document.getSelection();
     var cell = sel.parentTableCellOrNullObject;
     cell.load("isNullObject,columnWidth,rowIndex,cellIndex");
     return ctx.sync().then(function () {
       if (cell.isNullObject) {
-        var pic = sel.insertInlinePictureFromBase64(b64, "Replace");
-        pic.lockAspectRatio = true; pic.width = 240;
-        return ctx.sync().then(function () { return "Photo in at the cursor (not in a table cell, so 240 pt wide)."; });
+        return blobToB64(blob).then(function (b64) {
+          var pic = sel.insertInlinePictureFromBase64(b64, "Replace");
+          pic.lockAspectRatio = true; pic.width = 240;
+          return ctx.sync().then(function () { return "Photo in at the cursor (not in a photo box, so 240 pt wide)."; });
+        });
       }
-      var old = cell.body.inlinePictures; old.load("items");
       var table = cell.parentTable; table.load("rowCount");
+      var own = cell.body.inlinePictures; own.load("items/width,items/height");
+      var rowCells = cell.parentRow.cells; rowCells.load("items/cellIndex");
+      var sibs = [];
       return ctx.sync().then(function () {
-        var replaced = old.items.length;
-        old.items.forEach(function (x) { x.delete(); });
-        var pic = cell.body.insertInlinePictureFromBase64(b64, "Start");
-        pic.lockAspectRatio = true; pic.width = Math.max(40, cell.columnWidth - 8);
-        var capNote = "";
-        if (cap) {
-          if (cell.rowIndex + 1 < table.rowCount) { table.getCell(cell.rowIndex + 1, cell.cellIndex).body.insertText(cap, "Replace"); capNote = ", caption below"; }
-          else capNote = " (no row below for the caption)";
+        rowCells.items.forEach(function (rc) { if (rc.cellIndex !== cell.cellIndex) { var sp = rc.body.inlinePictures; sp.load("items/width,items/height"); sibs.push(sp); } });
+        return ctx.sync();
+      }).then(function () {
+        var size = null, how = "";
+        if (own.items.length && own.items[0].width > 40) { size = { w: own.items[0].width, h: own.items[0].height }; how = "same size as the photo it replaced"; }
+        for (var i = 0; !size && i < sibs.length; i++) {
+          var it = (sibs[i].items || []).filter(function (x) { return x.width > 40 && x.height > 30; })[0];
+          if (it) { size = { w: it.width, h: it.height }; how = "same size as the row's other photos"; }
         }
-        var next = table.getCellOrNullObject(cell.rowIndex, cell.cellIndex + 1); next.load("isNullObject");
-        return ctx.sync().then(function () {
-          if (!next.isNullObject) { next.body.getRange("Start").select(); }
-          return ctx.sync().then(function () { return (replaced ? "Photo replaced" : "Photo in") + capNote + (next.isNullObject ? "." : ". Cursor moved to the next cell."); });
+        if (!size && lastSize()) { size = lastSize(); how = "same size as the last photo"; }
+        if (!size && cell.columnWidth > 60) { size = { w: cell.columnWidth - 6, h: (cell.columnWidth - 6) * 0.75 }; how = "sized to the box"; }
+        if (!size) { size = { w: 186, h: 139.5 }; how = "standard photo box size"; }
+        lsSet(SIZE_KEY, JSON.stringify(size));
+        return cropTo(blob, size.w / size.h).then(function (b64) {
+          var replaced = own.items.length;
+          own.items.forEach(function (x) { x.delete(); });
+          var pic = cell.body.insertInlinePictureFromBase64(b64, "Start");
+          pic.lockAspectRatio = false; pic.width = size.w; pic.height = size.h; pic.lockAspectRatio = true;
+          var capNote = "";
+          if (cap) {
+            if (cell.rowIndex + 1 < table.rowCount) { table.getCell(cell.rowIndex + 1, cell.cellIndex).body.insertText(cap, "Replace"); capNote = ", caption below"; }
+            else capNote = " (no row below for the caption)";
+          }
+          var next = table.getCellOrNullObject(cell.rowIndex, cell.cellIndex + 1); next.load("isNullObject");
+          return ctx.sync().then(function () {
+            if (!next.isNullObject) { next.body.getRange("Start").select(); }
+            return ctx.sync().then(function () { return (replaced ? "Photo replaced" : "Photo in") + " (" + how + ")" + capNote + (next.isNullObject ? "." : ". Cursor moved to the next box."); });
+          });
         });
       });
     });
