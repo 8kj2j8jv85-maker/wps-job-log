@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WPS panel</title>
+<!--
+  WPS panel (Lex, 22 Oct 2026): the work page. On the PC it sits inside Word on the right (a Word add-in, file
+  wps-panel.xml); Word is the left side. Three tabs: Photos (open the job's zip, pick a photo, it goes in at the
+  cursor, sized to the cell, caption in the cell below), Dictation (the phone's notes from Drive, room by room, in at
+  the cursor), Finish (PdfMake's checks before saving, the file name, where to save).
+  Opened in a normal browser (e.g. the tablet beside Word) the same page works with Copy instead of "in at the cursor".
+  Nothing here changes a report except what you press; the WPS script is only read (jobs, dictation notes).
+-->
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<!-- integrity: same checked copy as the Photo Tool (17 Oct 2026) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="wpslink.js?v=20261022b"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --navy:#1F2D5A; --coral:#E0684B; --coral-dark:#B4472E; --ink:#1F2D5A; --dim:#5A6178; --line:#C9CCD6; --soft:#E3E5EB; --bg:#FFFFFF; --tile:#DADDE5; --ok:#2E7D4F; --warn:#B4472E; --panel:#F3F4F7; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--bg); color:var(--ink); font-family:Jost, system-ui, sans-serif; font-size:14px; }
+  button, input, select, textarea{ font-family:inherit; font-size:14px; color:var(--ink); }
+  .head{ background:var(--navy); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; }
+  .head h1{ margin:0; font-family:"Cormorant Garamond", serif; font-style:italic; font-weight:600; font-size:22px; }
+  .head .where{ margin-left:auto; font-size:11px; opacity:.8; }
+  .sec{ padding:12px 16px; border-bottom:1px solid var(--soft); display:flex; flex-direction:column; gap:6px; }
+  label, .lab{ font-size:12px; color:var(--dim); }
+  select, input[type=text], input[type=password], textarea{ width:100%; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  select, input[type=text], input[type=password]{ height:44px; padding:0 10px; }
+  textarea{ padding:10px; line-height:1.5; resize:vertical; min-height:180px; }
+  .tabs{ display:flex; border-bottom:1px solid var(--soft); }
+  .tabs button{ flex:1; height:46px; border:0; background:#fff; color:var(--dim); border-bottom:3px solid transparent; cursor:pointer; }
+  .tabs button[aria-selected=true]{ color:var(--ink); font-weight:600; border-bottom-color:var(--coral); }
+  .pane{ padding:12px 16px 24px; display:flex; flex-direction:column; gap:12px; }
+  .pane[hidden]{ display:none; }
+  .btn{ min-height:44px; border:1px solid var(--line); border-radius:8px; background:#fff; padding:0 14px; cursor:pointer; }
+  .btn:disabled{ opacity:.45; cursor:default; }
+  .btn-main{ min-height:48px; border:0; border-radius:8px; background:var(--coral); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+  .btn-main:disabled{ background:#E9A595; cursor:default; }
+  .row{ display:flex; gap:8px; align-items:center; }
+  .row > *{ min-width:0; }
+  .grow{ flex:1; }
+  .note{ font-size:12px; color:var(--dim); line-height:1.5; }
+  .msg{ font-size:13px; line-height:1.5; padding:8px 10px; border-radius:6px; background:var(--panel); }
+  .msg.bad{ background:#FBE9E4; color:var(--warn); }
+  .msg.good{ background:#E6F2EA; color:var(--ok); }
+  .msg:empty{ display:none; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:8px; }
+  .ph{ position:relative; border:0; padding:0; background:var(--tile); aspect-ratio:4/3; border-radius:4px; overflow:hidden; cursor:pointer; }
+  .ph img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .ph .tag{ position:absolute; left:0; right:0; bottom:0; font-size:11px; padding:2px 4px; background:rgba(31,45,90,.72); color:#fff; text-align:left; }
+  .ph.used .tag{ background:rgba(46,125,79,.85); }
+  .ph.picked{ outline:3px solid var(--coral); outline-offset:-3px; }
+  .checks{ display:flex; flex-direction:column; gap:8px; }
+  .ck{ display:flex; gap:8px; align-items:flex-start; line-height:1.4; }
+  .ck .dot{ flex:none; width:22px; height:22px; border-radius:11px; color:#fff; font-size:12px; display:flex; align-items:center; justify-content:center; }
+  .ck.ok .dot{ background:var(--ok); } .ck.bad .dot{ background:var(--warn); } .ck.na .dot{ background:#8A90A6; }
+  .mono{ font-family:ui-monospace, Consolas, monospace; font-size:13px; overflow-wrap:anywhere; }
+  .box{ border:1px solid var(--line); border-radius:6px; padding:10px; }
+  .mic{ width:48px; height:48px; border-radius:24px; border:2px solid var(--navy); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+  .mic.on{ background:var(--coral); border-color:var(--coral); }
+  .mic.on path, .mic.on rect{ stroke:#fff; }
+  .hidden{ display:none !important; }
+  @media (min-width:700px){ .wrap{ max-width:640px; margin:0 auto; border-left:1px solid var(--soft); border-right:1px solid var(--soft); min-height:100vh; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true"><path d="M2 25V11a9 9 0 0 1 18 0v14" fill="none" stroke="#FFFFFF" stroke-width="2"/><path d="M6 25V12a5 5 0 0 1 10 0v13" fill="none" stroke="#E0684B" stroke-width="2"/><circle cx="13.5" cy="18" r="1.3" fill="#FFFFFF"/></svg>
+    <h1>WPS panel</h1>
+    <span class="where" id="where"></span>
+  </div>
+
+  <!-- device key: inside Word the panel has its own storage, so the key is pasted here once (same key as the dashboard) -->
+  <div class="sec hidden" id="keyBox">
+    <label for="keyIn">Device key (the same one as the dashboard: More > Device key). Needed once on this device.</label>
+    <div class="row"><input type="password" id="keyIn" class="grow" autocomplete="off" spellcheck="false"><button class="btn" id="keySave">Save</button></div>
+    <div class="msg" id="keyMsg"></div>
+  </div>
+
+  <div class="sec">
+    <label for="job">Job</label>
+    <select id="job"><option value="">Loading jobs…</option></select>
+    <div class="msg" id="jobMsg"></div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-photos" aria-selected="true" data-tab="photos">Photos</button>
+    <button role="tab" id="t-dict" aria-selected="false" data-tab="dict">Dictation</button>
+    <button role="tab" id="t-finish" aria-selected="false" data-tab="finish">Finish</button>
+  </div>
+
+  <!-- PHOTOS -->
+  <div class="pane" id="p-photos" role="tabpanel" aria-labelledby="t-photos">
+    <div class="row">
+      <span class="note grow" id="zipName">No photo set open. Open the job's zip (the Photo Tool keeps a copy in Downloads).</span>
+      <button class="btn" id="zipOpen">Open photo set</button>
+      <input type="file" id="zipIn" accept=".zip,image/jpeg" multiple class="hidden">
+    </div>
+    <div class="sec" style="padding:0;border:0">
+      <label for="room">Room</label>
+      <select id="room" disabled><option>Open a photo set first</option></select>
+    </div>
+    <div class="grid" id="thumbs"></div>
+    <div class="sec" style="padding:0;border:0">
+      <label for="cap">Caption (goes in the cell under the photo; leave empty to skip)</label>
+      <input type="text" id="cap" autocomplete="off">
+    </div>
+    <button class="btn-main" id="putPhoto" disabled>Put photo in at the cursor</button>
+    <div class="msg" id="photoMsg"></div>
+    <div class="note" id="photoHelp">Click in the photo cell in the report first. The photo is sized to the cell, the caption goes in the cell below, and the cursor moves on to the next cell. Green = already used in this report.</div>
+  </div>
+
+  <!-- DICTATION -->
+  <div class="pane" id="p-dict" role="tabpanel" aria-labelledby="t-dict" hidden>
+    <div class="row"><span class="note grow" id="dictFrom">Pick a job to load its dictation.</span><button class="btn" id="dictReload">Reload</button></div>
+    <div class="sec" style="padding:0;border:0">
+      <label for="dRoom">Room</label>
+      <select id="dRoom" disabled><option>No dictation loaded</option></select>
+    </div>
+    <label for="dText" class="hidden">Room notes</label>
+    <textarea id="dText" placeholder="The room's notes show here. You can edit them before putting them in."></textarea>
+    <div class="note" id="dictHelp">Click in the report where it should go first.</div>
+    <button class="btn-main" id="putText" disabled>Put text in at the cursor</button>
+    <div class="row"><button class="btn grow" id="copyText" disabled>Copy</button><button class="btn grow" id="nextRoom" disabled>Next room</button></div>
+    <div class="msg" id="dictMsg"></div>
+    <div class="row hidden" id="micRow" style="border-top:1px solid var(--soft);padding-top:12px">
+      <button class="mic" id="mic" aria-label="Talk into the panel"><svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><rect x="5" y="1" width="8" height="13" rx="4" fill="none" stroke="#1F2D5A" stroke-width="2"/><path d="M2 10a7 7 0 0 0 14 0M9 17v4" fill="none" stroke="#1F2D5A" stroke-width="2"/></svg></button>
+      <span class="note" id="micNote">Talk straight in (on test). Adds to the box above. If it doesn't work here, use Word's own Dictate button.</span>
+    </div>
+  </div>
+
+  <!-- FINISH -->
+  <div class="pane" id="p-finish" role="tabpanel" aria-labelledby="t-finish" hidden>
+    <div class="row"><strong class="grow">Checks on this report</strong><button class="btn" id="runChecks">Check again</button></div>
+    <div class="checks" id="checks"><div class="note">Open this tab with the report showing in Word to run the checks.</div></div>
+    <div class="note">The same checks PdfMake does, run before you save, so nothing gets bounced from To PDF.</div>
+    <div style="border-top:1px solid var(--soft);padding-top:12px;display:flex;flex-direction:column;gap:8px">
+      <strong>Save into To PDF</strong>
+      <span class="lab">File name</span>
+      <div class="row"><div class="box mono grow" id="fname">Pick a job</div><button class="btn" id="copyName" disabled>Copy</button></div>
+      <div class="note" id="thisFile"></div>
+      <div style="font-size:13px;line-height:1.55">In Word: F12 (Save As), then Dropbox › WELLINGTON PROPERTY SERVICES › Reports › To PDF.</div>
+      <div class="msg">After that it's hands-off: PdfMake turns it into a PDF in Ready to send, and report-send emails it.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var $ = function (id) { return document.getElementById(id); };
+var INWORD = false;            // true when running inside Word (the add-in)
+var S = { jobs: [], job: null, photos: [], rooms: [], room: "", picked: -1, dict: [], dRoom: -1, dictAt: "" };
+var KEY_RE = /^wpsdk_[A-Za-z0-9_-]{43}$/;
+
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+function msg(id, text, kind) { var el = $(id); el.textContent = text || ""; el.className = "msg" + (kind ? " " + kind : ""); }
+function propCode(pc) { return String(pc || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+/* ---------- start ---------- */
+function start(info) {
+  INWORD = !!(info && info.host && window.Office && Office.HostType && info.host === Office.HostType.Word);
+  $("where").textContent = INWORD ? "in Word" : "in the browser";
+  if (!INWORD) {
+    $("putPhoto").textContent = "Copy photo";
+    $("putText").textContent = "Copy text";
+    $("photoHelp").textContent = "Not inside Word here: Copy the photo, then paste it into the report (long-press > Paste on the tablet). Green = already copied for this report.";
+    $("dictHelp").textContent = "Not inside Word here: copy, then paste into the report.";
+    $("copyText").classList.add("hidden");
+  }
+  if ((window.SpeechRecognition || window.webkitSpeechRecognition)) $("micRow").classList.remove("hidden");
+  if (!WPSLink.key()) { $("keyBox").classList.remove("hidden"); $("job").innerHTML = '<option value="">Paste the device key first</option>'; return; }
+  loadJobs();
+}
+$("keySave").addEventListener("click", function () {
+  var k = $("keyIn").value.trim();
+  if (!KEY_RE.test(k)) { msg("keyMsg", "That doesn't look like a device key (it starts wpsdk_).", "bad"); return; }
+  lsSet("wps_dash_key_v1", k); $("keyIn").value = "";
+  if (!WPSLink.key()) { msg("keyMsg", "Couldn't save it on this device.", "bad"); return; }
+  $("keyBox").classList.add("hidden"); loadJobs();
+});
+
+/* ---------- jobs ---------- */
+var STATUS_ORDER = { processing: 0, completed: 1, booked: 2, sent: 3, signed: 4, deemed: 4, archived: 5 };
+var STATUS_WORD = { booked: "Booked", processing: "Processing", completed: "Written", sent: "Sent", signed: "Signed", deemed: "Deemed agreed", archived: "Archived" };
+function jobLabel(j) {
+  var d = j.date ? j.date.split("-").reverse().join("/") : "no date";
+  return [j.jobNo || "(no job no.)", j.address || "", j.type || "", d, STATUS_WORD[j.status] || ""].filter(Boolean).join(" · ");
+}
+function loadJobs() {
+  msg("jobMsg", "");
+  WPSLink.sheetJobs().then(function (jobs) {
+    if (!jobs) { $("job").innerHTML = '<option value="">Couldn\'t read the Job Log</option>'; msg("jobMsg", "Couldn't read the Job Log. Check the device key and the connection, then reload the panel.", "bad"); return; }
+    var cut = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+    S.jobs = jobs.filter(function (j) { return j && j.jobNo && j.status !== "cancelled" && (!j.date || j.date >= cut); })
+      .sort(function (a, b) { var s = (STATUS_ORDER[a.status] == null ? 9 : STATUS_ORDER[a.status]) - (STATUS_ORDER[b.status] == null ? 9 : STATUS_ORDER[b.status]); return s || String(b.date || "").localeCompare(String(a.date || "")); });
+    $("job").innerHTML = '<option value="">Pick a job</option>' + S.jobs.map(function (j, i) { return '<option value="' + i + '">' + esc(jobLabel(j)) + "</option>"; }).join("");
+    var auto = jobFromFile();
+    if (auto != null) { $("job").value = String(auto); pickJob(); }
+  });
+}
+// Inside Word: pick the job whose number is in the open file's name.
+function jobFromFile() {
+  var url = INWORD && Office.context && Office.context.document ? String(Office.context.document.url || "") : "";
+  var m = /WPS\d{6,}/i.exec(url); if (!m) return null;
+  var no = m[0].toUpperCase();
+  for (var i = 0; i < S.jobs.length; i++) if (String(S.jobs[i].jobNo).toUpperCase() === no) return i;
+  return null;
+}
+$("job").addEventListener("change", pickJob);
+function pickJob() {
+  var i = $("job").value; S.job = i === "" ? null : S.jobs[+i];
+  msg("jobMsg", ""); renderThumbs(); loadDict(); renderFinish();
+}
+
+/* ---------- tabs ---------- */
+document.querySelector(".tabs").addEventListener("click", function (e) {
+  var b = e.target.closest("button[data-tab]"); if (!b) return;
+  ["photos", "dict", "finish"].forEach(function (t) {
+    $("t-" + t).setAttribute("aria-selected", t === b.dataset.tab ? "true" : "false");
+    $("p-" + t).hidden = t !== b.dataset.tab;
+  });
+  if (b.dataset.tab === "finish") runChecks();
+});
+
+/* ---------- photos ---------- */
+// Photo Tool names: JOB.POSTCODE.DD.MM.YY.<Area>_NN.jpg ; covers JOB.POSTCODE.cover[_NN].jpg
+function areaOf(name) {
+  var base = name.split("/").pop();
+  var m = /^[^.]+\.[^.]+\.\d\d\.\d\d\.\d\d\.(.+)_(\d+)\.jpe?g$/i.exec(base);
+  if (m) return { area: m[1], seq: +m[2] };
+  if (/\.cover(_\d+)?\.jpe?g$/i.test(base)) return { area: "Cover", seq: +((/_(\d+)\./.exec(base) || [0, 1])[1]) };
+  return { area: "Other", seq: 0 };
+}
+$("zipOpen").addEventListener("click", function () { $("zipIn").click(); });
+$("zipIn").addEventListener("change", function () {
+  var files = Array.prototype.slice.call(this.files || []); this.value = "";
+  if (!files.length) return;
+  msg("photoMsg", "Opening…");
+  var zipF = files.filter(function (f) { return /\.zip$/i.test(f.name); })[0];
+  var p = zipF ? openZip(zipF) : Promise.resolve(files.filter(function (f) { return /\.jpe?g$/i.test(f.name); }).map(function (f) { return { name: f.name, blob: f }; }));
+  p.then(function (list) {
+    S.photos.forEach(function (x) { if (x.url) URL.revokeObjectURL(x.url); });
+    S.photos = list.map(function (x) { var a = areaOf(x.name); return { name: x.name.split("/").pop(), blob: x.blob, area: a.area, seq: a.seq, url: URL.createObjectURL(x.blob) }; })
+      .sort(function (a, b) { return a.area === b.area ? a.seq - b.seq : 0; });
+    var order = []; S.photos.forEach(function (x) { if (order.indexOf(x.area) === -1) order.push(x.area); });
+    S.rooms = order; S.room = order.filter(function (r) { return r !== "Cover"; })[0] || order[0] || ""; S.picked = -1;
+    var label = zipF ? zipF.name : files.length + " photos";
+    $("zipName").textContent = "Photo set: " + label + " (" + S.photos.length + " photos)";
+    var no = S.job && String(S.job.jobNo || "").toUpperCase();
+    msg("photoMsg", no && zipF && zipF.name.toUpperCase().indexOf(no) !== 0 ? "This zip isn't named for " + no + ". Check it's the right job." : (S.photos.length ? "" : "No photos found in that file."), no && zipF && zipF.name.toUpperCase().indexOf(no) !== 0 ? "bad" : (S.photos.length ? "" : "bad"));
+    renderRooms(); renderThumbs();
+  }).catch(function (e) { msg("photoMsg", "Couldn't open that file: " + (e && e.message || e), "bad"); });
+});
+function openZip(f) {
+  return JSZip.loadAsync(f).then(function (zip) {
+    var names = Object.keys(zip.files).filter(function (n) { return !zip.files[n].dir && /\.jpe?g$/i.test(n) && n.indexOf("__MACOSX") !== 0; });
+    return Promise.all(names.map(function (n) { return zip.files[n].async("blob").then(function (b) { return { name: n, blob: new Blob([b], { type: "image/jpeg" }) }; }); }));
+  });
+}
+function usedKey() { return "wps_panel_used_" + (S.job ? S.job.jobNo : "none"); }
+function usedSet() { try { return JSON.parse(lsGet(usedKey()) || "{}"); } catch (e) { return {}; } }
+function markUsed(name) { var u = usedSet(); u[name] = 1; lsSet(usedKey(), JSON.stringify(u)); }
+function renderRooms() {
+  var r = $("room");
+  if (!S.rooms.length) { r.disabled = true; r.innerHTML = "<option>Open a photo set first</option>"; return; }
+  r.disabled = false;
+  r.innerHTML = S.rooms.map(function (a) { var n = S.photos.filter(function (x) { return x.area === a; }).length; return '<option value="' + esc(a) + '"' + (a === S.room ? " selected" : "") + ">" + esc(a) + " (" + n + " photo" + (n === 1 ? "" : "s") + ")</option>"; }).join("");
+}
+$("room").addEventListener("change", function () { S.room = this.value; S.picked = -1; renderThumbs(); });
+function renderThumbs() {
+  var u = usedSet();
+  $("thumbs").innerHTML = S.photos.map(function (x, i) {
+    if (x.area !== S.room) return "";
+    var used = !!u[x.name];
+    return '<button class="ph' + (used ? " used" : "") + (i === S.picked ? " picked" : "") + '" data-i="' + i + '" aria-label="' + esc(x.area + " " + x.seq) + '"><img src="' + x.url + '" alt="" loading="lazy"><span class="tag">' + x.seq + (used ? " · used" : "") + "</span></button>";
+  }).join("");
+  $("putPhoto").disabled = S.picked < 0;
+}
+$("thumbs").addEventListener("click", function (e) {
+  var b = e.target.closest(".ph"); if (!b) return;
+  S.picked = +b.dataset.i; renderThumbs(); msg("photoMsg", "");
+});
+function blobToB64(blob) {
+  return new Promise(function (ok, bad) { var r = new FileReader(); r.onload = function () { ok(String(r.result).split(",")[1]); }; r.onerror = bad; r.readAsDataURL(blob); });
+}
+$("putPhoto").addEventListener("click", function () {
+  var p = S.photos[S.picked]; if (!p) return;
+  var cap = $("cap").value.trim();
+  $("putPhoto").disabled = true;
+  var done = function (t, kind) { msg("photoMsg", t, kind); $("putPhoto").disabled = S.picked < 0; };
+  if (!INWORD) {
+    copyImage(p.blob).then(function () { markUsed(p.name); renderThumbs(); done("Photo copied. Paste it into the report." + (cap ? " Caption copied separately isn't possible; type it under the photo." : ""), "good"); })
+      .catch(function () { done("This browser won't copy photos. Long-press the photo and use Save or Copy image instead.", "bad"); });
+    return;
+  }
+  blobToB64(p.blob).then(function (b64) { return insertPhoto(b64, cap); })
+    .then(function (r) { markUsed(p.name); $("cap").value = ""; S.picked = -1; renderThumbs(); done(r, "good"); })
+    .catch(function (e) { done("Didn't go in: " + (e && e.message || e), "bad"); });
+});
+// Word: photo at the cursor. In a table cell: sized to the cell, any photo already there replaced, caption in the
+// cell below (photo strip tables are a photo row with a caption row under it), cursor moves to the next cell.
+function insertPhoto(b64, cap) {
+  return Word.run(function (ctx) {
+    var sel = ctx.document.getSelection();
+    var cell = sel.parentTableCellOrNullObject;
+    cell.load("isNullObject,columnWidth,rowIndex,cellIndex");
+    return ctx.sync().then(function () {
+      if (cell.isNullObject) {
+        var pic = sel.insertInlinePictureFromBase64(b64, "Replace");
+        pic.lockAspectRatio = true; pic.width = 240;
+        return ctx.sync().then(function () { return "Photo in at the cursor (not in a table cell, so 240 pt wide)."; });
+      }
+      var old = cell.body.inlinePictures; old.load("items");
+      var table = cell.parentTable; table.load("rowCount");
+      return ctx.sync().then(function () {
+        var replaced = old.items.length;
+        old.items.forEach(function (x) { x.delete(); });
+        var pic = cell.body.insertInlinePictureFromBase64(b64, "Start");
+        pic.lockAspectRatio = true; pic.width = Math.max(40, cell.columnWidth - 8);
+        var capNote = "";
+        if (cap) {
+          if (cell.rowIndex + 1 < table.rowCount) { table.getCell(cell.rowIndex + 1, cell.cellIndex).body.insertText(cap, "Replace"); capNote = ", caption below"; }
+          else capNote = " (no row below for the caption)";
+        }
+        var next = table.getCellOrNullObject(cell.rowIndex, cell.cellIndex + 1); next.load("isNullObject");
+        return ctx.sync().then(function () {
+          if (!next.isNullObject) { next.body.getRange("Start").select(); }
+          return ctx.sync().then(function () { return (replaced ? "Photo replaced" : "Photo in") + capNote + (next.isNullObject ? "." : ". Cursor moved to the next cell."); });
+        });
+      });
+    });
+  });
+}
+function copyImage(blob) {
+  if (!navigator.clipboard || !window.ClipboardItem) return Promise.reject(new Error("no clipboard"));
+  return new Promise(function (ok, bad) {
+    var img = new Image(); img.onload = function () {
+      var c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext("2d").drawImage(img, 0, 0); c.toBlob(function (png) { navigator.clipboard.write([new ClipboardItem({ "image/png": png })]).then(ok, bad); }, "image/png");
+    }; img.onerror = bad; img.src = URL.createObjectURL(blob);
+  });
+}
+
+/* ---------- dictation ---------- */
+// The phone's Dictation saves "<job> - <type> - dictation.txt" in Drive > WPS Dictation: a header, then "## Room" blocks.
+function parseDict(text) {
+  var out = [], cur = null;
+  String(text || "").split(/\r?\n/).forEach(function (line) {
+    var m = /^##\s+(.+)$/.exec(line);
+    if (m) { cur = { room: m[1].trim(), text: "" }; out.push(cur); return; }
+    if (cur) cur.text += (cur.text ? "\n" : "") + line;
+  });
+  out.forEach(function (r) { r.text = r.text.trim(); });
+  return out.filter(function (r) { return r.text; });
+}
+function dictDoneKey() { return "wps_panel_dict_" + (S.job ? S.job.jobNo : "none"); }
+function dictDone() { try { return JSON.parse(lsGet(dictDoneKey()) || "{}"); } catch (e) { return {}; } }
+function loadDict() {
+  S.dict = []; S.dRoom = -1; renderDict();
+  if (!S.job) { $("dictFrom").textContent = "Pick a job to load its dictation."; return; }
+  $("dictFrom").textContent = "Loading the dictation…";
+  var want = S.job;
+  WPSLink.call("dictRead", { job: String(S.job.jobNo).toUpperCase(), type: S.job.type }).then(function (d) {
+    if (S.job !== want) return;
+    if (!d || !d.ok) { $("dictFrom").textContent = (d && d.error) || "Couldn't read the dictation."; return; }
+    S.dict = parseDict(d.text); S.dictAt = d.at || "";
+    var when = S.dictAt ? new Date(S.dictAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+    $("dictFrom").textContent = S.dict.length ? "From the phone's Dictation, saved to Drive " + when : "The dictation file has no rooms in it yet.";
+    var done = dictDone(); S.dRoom = S.dict.length ? 0 : -1;
+    for (var i = 0; i < S.dict.length; i++) if (!done[S.dict[i].room]) { S.dRoom = i; break; }
+    renderDict();
+  });
+}
+function renderDict() {
+  var r = $("dRoom"), done = dictDone();
+  if (!S.dict.length) { r.disabled = true; r.innerHTML = "<option>No dictation loaded</option>"; $("dText").value = ""; }
+  else {
+    r.disabled = false;
+    r.innerHTML = S.dict.map(function (x, i) { var w = x.text.split(/\s+/).filter(Boolean).length; return '<option value="' + i + '"' + (i === S.dRoom ? " selected" : "") + ">" + esc(x.room) + " (" + w + " words)" + (done[x.room] ? " · put in" : "") + "</option>"; }).join("");
+    $("dText").value = S.dRoom >= 0 ? S.dict[S.dRoom].text : "";
+  }
+  var has = S.dRoom >= 0; $("putText").disabled = !has; $("copyText").disabled = !has; $("nextRoom").disabled = !has || S.dRoom >= S.dict.length - 1;
+}
+$("dRoom").addEventListener("change", function () { saveEdit(); S.dRoom = +this.value; renderDict(); msg("dictMsg", ""); });
+$("dText").addEventListener("input", saveEdit);
+function saveEdit() { if (S.dRoom >= 0 && S.dict[S.dRoom]) S.dict[S.dRoom].text = $("dText").value; }
+$("dictReload").addEventListener("click", loadDict);
+$("nextRoom").addEventListener("click", function () { saveEdit(); if (S.dRoom < S.dict.length - 1) { S.dRoom++; renderDict(); msg("dictMsg", ""); } });
+function markDictDone() { var d = dictDone(); d[S.dict[S.dRoom].room] = 1; lsSet(dictDoneKey(), JSON.stringify(d)); }
+$("putText").addEventListener("click", function () {
+  saveEdit(); var t = $("dText").value.trim(); if (!t) return;
+  if (!INWORD) { copyPlain(t).then(function (ok) { if (ok) markDictDone(); renderDict(); msg("dictMsg", ok ? "Copied. Paste it into the report." : "Couldn't copy. Select the text in the box and copy it.", ok ? "good" : "bad"); }); return; }
+  Word.run(function (ctx) { ctx.document.getSelection().insertText(t, "Replace"); return ctx.sync(); })
+    .then(function () { markDictDone(); renderDict(); msg("dictMsg", "In at the cursor.", "good"); })
+    .catch(function (e) { msg("dictMsg", "Didn't go in: " + (e && e.message || e), "bad"); });
+});
+$("copyText").addEventListener("click", function () { saveEdit(); copyPlain($("dText").value.trim()).then(function (ok) { msg("dictMsg", ok ? "Copied." : "Couldn't copy. Select the text and copy it.", ok ? "good" : "bad"); }); });
+function copyPlain(t) {
+  var fallback = function () { var ta = $("dText"); ta.focus(); ta.select(); var ok = false; try { ok = document.execCommand("copy"); } catch (e) {} return ok; };
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(function () { return true; }, function () { return fallback(); });
+  return Promise.resolve(fallback());
+}
+// Talking straight in: only shown where the browser has speech recognition. Inside Word it's on test (22 Oct).
+var rec = null;
+$("mic").addEventListener("click", function () {
+  if (rec) { rec.stop(); return; }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return;
+  try { rec = new SR(); } catch (e) { $("micNote").textContent = "Speech isn't available here. Use Word's own Dictate button."; return; }
+  rec.lang = "en-GB"; rec.continuous = true; rec.interimResults = false;
+  var base = $("dText").value;
+  rec.onresult = function (ev) {
+    var add = ""; for (var i = ev.resultIndex; i < ev.results.length; i++) if (ev.results[i].isFinal) add += ev.results[i][0].transcript;
+    if (add) { base = (base ? base.replace(/\s*$/, " ") : "") + add.trim(); $("dText").value = base; saveEdit(); }
+  };
+  rec.onerror = function (ev) { $("micNote").textContent = "The mic stopped (" + (ev.error || "error") + "). If it keeps failing here, use Word's own Dictate button."; };
+  rec.onend = function () { rec = null; $("mic").classList.remove("on"); };
+  try { rec.start(); $("mic").classList.add("on"); $("micNote").textContent = "Listening… tap to stop."; } catch (e) { rec = null; $("micNote").textContent = "Couldn't start the mic here. Use Word's own Dictate button."; }
+});
+
+/* ---------- finish ---------- */
+function fileName(j) {
+  if (!j) return "";
+  var d = j.date ? j.date.split("-") : null;
+  return [j.jobNo, propCode(j.postcode) || "POSTCODE", d ? d[2] + "." + d[1] + "." + d[0] : "DD.MM.YYYY", j.type || "TYPE"].join(".") + ".docx";
+}
+function renderFinish() {
+  $("fname").textContent = S.job ? fileName(S.job) : "Pick a job"; $("copyName").disabled = !S.job;
+  var url = INWORD && Office.context && Office.context.document ? String(Office.context.document.url || "") : "";
+  $("thisFile").textContent = url ? "This report is saved at: " + url + (/[\\\/]To PDF[\\\/]/i.test(url) ? " (already in To PDF)" : "") : (INWORD ? "This report hasn't been saved yet." : "");
+}
+$("copyName").addEventListener("click", function () {
+  var t = fileName(S.job);
+  (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t).then(function () { return true; }, function () { return false; }) : Promise.resolve(false))
+    .then(function (ok) { if (!ok) { var r = document.createRange(); r.selectNodeContents($("fname")); var s = getSelection(); s.removeAllRanges(); s.addRange(r); try { ok = document.execCommand("copy"); } catch (e) {} } $("copyName").textContent = ok ? "Copied" : "Select it"; setTimeout(function () { $("copyName").textContent = "Copy"; }, 1500); });
+});
+$("runChecks").addEventListener("click", runChecks);
+function ckHtml(state, text) { return '<div class="ck ' + state + '"><span class="dot" aria-hidden="true">' + (state === "ok" ? "✓" : state === "bad" ? "!" : "–") + "</span><span>" + esc(text) + "</span></div>"; }
+function runChecks() {
+  renderFinish();
+  if (!INWORD) { $("checks").innerHTML = ckHtml("na", "Checks run only inside Word on the PC."); return; }
+  $("checks").innerHTML = '<div class="note">Checking…</div>';
+  Word.run(function (ctx) {
+    var body = ctx.document.body; body.load("text");
+    var canComments = Office.context.requirements.isSetSupported("WordApi", "1.4");
+    var comments = canComments ? body.getComments() : null; if (comments) comments.load("items");
+    var links = body.getRange("Whole").getHyperlinkRanges(); links.load("items/hyperlink");
+    return ctx.sync().then(function () {
+      var text = body.text || "", out = [];
+      out.push(text.indexOf("[CO:") === -1 ? ckHtml("ok", "No [CO: ...] notes left") : ckHtml("bad", "A [CO: ...] note is still in the report"));
+      out.push(/\bXXX\b/.test(text) ? ckHtml("bad", "An XXX placeholder is still in the report") : ckHtml("ok", "No XXX placeholders"));
+      if (comments) out.push(comments.items.length ? ckHtml("bad", comments.items.length + " Word comment" + (comments.items.length === 1 ? "" : "s") + " still in (Review > Delete All Comments)") : ckHtml("ok", "No Word comments"));
+      else out.push(ckHtml("na", "Word comments: can't check in this Word version"));
+      if (S.job) {
+        var no = String(S.job.jobNo).toUpperCase();
+        var photoLinks = links.items.map(function (r) { return String(r.hyperlink || ""); }).filter(function (h) { return /\/photos\//i.test(h); });
+        var mine = photoLinks.filter(function (h) { return h.toUpperCase().indexOf("/" + no + ".") !== -1; });
+        if (!mine.length) out.push(ckHtml("bad", "No photo link for " + no + " in the report"));
+        else if (S.job.photoLink && mine.indexOf(S.job.photoLink) === -1) out.push(ckHtml("bad", "The photo link isn't the one in the Job Log (" + S.job.photoLink + ")"));
+        else out.push(ckHtml("ok", "Photo link matches the job"));
+      } else out.push(ckHtml("na", "Pick the job to check the photo link"));
+      $("checks").innerHTML = out.join("");
+    });
+  }).catch(function (e) { $("checks").innerHTML = ckHtml("bad", "Couldn't run the checks: " + (e && e.message || e)); });
+}
+
+/* ---------- go ---------- */
+if (window.Office && Office.onReady) Office.onReady(start); else start(null);
+</script>
+</body>
+</html>
