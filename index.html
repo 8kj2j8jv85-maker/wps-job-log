@@ -119,7 +119,30 @@
 
   /* compact dashboard (one screen) */
   .wrap-dash{ max-width:none; }
-  .wrap-wide{ max-width:none; }   /* Reports page (Lex, 20 Oct): use the whole screen for tiles */
+  .wrap-wide{ max-width:none; }
+  /* Processing page (Lex, 22 Oct) */
+  .side-count{ background:var(--coral); color:#141d3d; border-radius:10px; padding:0 7px; font-size:12px; margin-left:6px; font-weight:600; }
+  .pr-tiles{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:6px 0 16px; }
+  .pr-tile{ background:var(--card,#fff); border:1px solid var(--coral); border-radius:12px; padding:12px 14px; }
+  .pr-tile b{ display:block; font-size:26px; }
+  .pr-tile span{ font-size:13px; opacity:.85; }
+  .pr-card{ background:var(--card,#fff); border:1px solid var(--coral); border-radius:14px; padding:16px 18px; margin-bottom:14px; display:flex; flex-direction:column; gap:12px; }
+  .pr-top{ display:flex; flex-wrap:wrap; gap:10px 18px; justify-content:space-between; align-items:center; }
+  .pr-title{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-weight:600; }
+  .pr-type{ border:1px solid var(--coral); border-radius:6px; padding:1px 7px; font-size:12px; }
+  .pr-sub{ font-size:13px; opacity:.85; margin-top:3px; }
+  .pr-btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  .pr-btns .btn{ min-height:40px; text-decoration:none; }
+  .pr-steps{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+  .pr-steps li{ border:1px solid var(--line,#ccd); border-radius:10px; padding:8px 11px; display:flex; flex-direction:column; gap:2px; }
+  .pr-steps li small{ font-size:12px; opacity:.8; }
+  .pr-steps li b{ font-size:14px; }
+  .pr-steps li.ok{ border-color:#3f8f6b; } .pr-steps li.ok b{ color:var(--green); }
+  .pr-steps li.bad{ border-color:var(--coral); } .pr-steps li.bad b{ color:var(--coral-dark); }
+  .pr-checks{ display:flex; flex-direction:column; gap:4px; font-size:14px; }
+  .pr-checks .ok::before{ content:"✓ "; color:var(--green); font-weight:700; } .pr-checks .bad::before{ content:"! "; color:var(--coral); font-weight:700; }
+  .pr-msg{ font-size:14px; }
+  @media (max-width:760px){ .pr-tiles{ grid-template-columns:repeat(2,minmax(0,1fr)); } .pr-steps{ grid-template-columns:repeat(2,minmax(0,1fr)); } }   /* Reports page (Lex, 20 Oct): use the whole screen for tiles */
   .wrap-dash .page-head{ padding-top:20px; }
   .d-tiles{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
   .d-tile{ text-align:left; background:var(--card); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; min-width:0; }
@@ -1816,7 +1839,7 @@ function setView(v){
   if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); }   // 17 Oct: don't leave a half-edited form open behind another page
   navSetView(v); state.menuOpen = false; render();
 }
-function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : v === "reports" ? "WPS Reports" : "Wellington Property Services — Job Log"; }
+function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : v === "reports" ? "WPS Reports" : v === "processing" ? "WPS Processing" : "Wellington Property Services — Job Log"; if (v === "processing") procLoad(); }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -3601,6 +3624,7 @@ function renderQueueTray(){
 // Seven statuses (Lex, 20 Oct night), one per tile, in workflow order: Time to agree, Upcoming, Today, Report due,
 // Out for signing, Amendments, Completed. Where two could apply: Amendments beats Out for signing; signed or deemed
 // agreed is Completed even if a comment row is still open. "agent" is the wording for agents and landlords (portal, later). j.thumb is filled later by the script (Photo Tool exterior photo / PDF cover).
+const ICON_DOC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>';
 const ICON_GRID = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
 const RP_ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
 const RP_ICON_DOC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
@@ -3981,6 +4005,102 @@ function renderRpResults(){
   if (keyMode() && !rpArchBusy && !(state.archiveAt && Date.now() - state.archiveAt < 30*60000) && !state.archiveTried){ state.archiveTried = true; setTimeout(() => { state.archiveTried = false; rpLoadArchive(); }, 0); }
   return head + body + key;
 }
+// ---- Processing page (Lex, 22 Oct): every visited job still waiting for its report, oldest first.
+// Open in Word (PC helper, wpsword:), Photos, Dictation, Run checks and Send to PDF (script ops procRead, wordCheck,
+// wordToPdf in the WordFind file: read only, except Send to PDF, which copies the Word file into Dropbox > Reports > To PDF).
+function procJobs(){
+  const now = new Date();
+  return state.jobs.filter(j => !j.archived && (j.status === "processing" || j.status === "completed" || (j.status === "booked" && visitTime(j) && visitTime(j) <= now)))
+    .sort((a,b) => ((visitTime(a)||0) - (visitTime(b)||0)));
+}
+function procKey(j){ return String(j.jobNo||"").toUpperCase().replace(/\s+/g,""); }
+async function procLoad(force){
+  if (!keyMode()) return;
+  if (state.procBusy || (!force && state.procAt && Date.now() - state.procAt < 60000)) return;
+  const list = procJobs().filter(j => /^WPS\d{6}$/.test(procKey(j))).map(j => ({ job: procKey(j), type: j.type }));
+  if (!list.length){ state.proc = {}; state.procAt = Date.now(); return; }
+  state.procBusy = true; if (state.view === "processing") render();
+  try {
+    const d = await dashCall("procRead", { jobs: list });
+    if (d && d.ok){ state.proc = {}; (d.rows||[]).forEach(r => { state.proc[r.job] = r; }); state.procErr = ""; }
+    else state.procErr = (d && d.error === "Unknown request.") ? "The script hasn't got the Processing part yet (new deployment needed)." : ((d && d.error) || "No answer from the WPS script");
+  } catch(e){ state.procErr = String(e && e.message || e); }
+  state.procAt = Date.now(); state.procBusy = false;
+  if (state.view === "processing") render();
+}
+function procSteps(j){
+  const k = procKey(j), r = (state.proc||{})[k] || null, c = (state.procChecks||{})[k] || null, sent = (state.procSent||{})[k];
+  const step = (label, cls, text) => `<li class="${cls}"><small>${label}</small><b>${esc(text)}</b></li>`;
+  const when = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}); };
+  const out = [];
+  out.push(/^https?:\/\//.test(String(j.photoLink||"")) ? step("Photos","ok","Uploaded") : step("Photos","bad","Not uploaded"));
+  out.push(!r ? step("Dictation","","…") : r.dictAt ? step("Dictation","ok","Saved "+when(r.dictAt)) : step("Dictation","","None yet"));
+  out.push(!r ? step("Word file","","…") : r.word ? step("Word file","ok","Found") : step("Word file","bad","Not in Word Docs"));
+  out.push(!c ? step("Checks","","Not run") : c.busy ? step("Checks","","Checking…") : c.error ? step("Checks","bad","Couldn't run") : (() => { const n = c.checks.filter(x => x.state !== "ok").length; return n ? step("Checks","bad",n+" to fix") : step("Checks","ok","All clear"); })());
+  out.push(sent || (r && r.toPdf) ? step("To PDF","ok", "Waiting in To PDF") : step("To PDF","","Not yet"));
+  return out.join("");
+}
+function renderProcessing(){
+  if (keyMode() && !state.procAt && !state.procBusy) setTimeout(() => procLoad(), 0);   // first visit (also when opened straight at #processing)
+  const jobs = procJobs(), P = state.proc || {}, C = state.procChecks || {};
+  const late = jobs.filter(j => { const d = dueInfo(j); return d && d.late; }).length;
+  const inPdf = jobs.filter(j => (state.procSent||{})[procKey(j)] || (P[procKey(j)] && P[procKey(j)].toPdf)).length;
+  const noPhotos = jobs.filter(j => !/^https?:\/\//.test(String(j.photoLink||""))).length;
+  const tiles = `<div class="pr-tiles">
+    <div class="pr-tile"><b>${jobs.length}</b><span>Reports to write</span></div>
+    <div class="pr-tile"><b style="${late?'color:var(--coral)':''}">${late}</b><span>Over the turnaround target</span></div>
+    <div class="pr-tile"><b>${inPdf}</b><span>Waiting in To PDF</span></div>
+    <div class="pr-tile"><b>${noPhotos}</b><span>Photos not uploaded</span></div></div>`;
+  const note = !keyMode() ? `<p class="pr-msg">This device has no key yet (More > Device key): Word file, dictation, checks and Send to PDF need it.</p>`
+    : state.procErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.procErr)}</p>` : "";
+  const head = `<div class="pr-top" style="margin-bottom:8px"><p class="pr-msg" style="margin:0">Every visited job still waiting for its report, oldest first. Open in Word puts the dashboard on the left and Word on the right (PC).</p>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="procLoad(true)"${tip("Look again at Word files, dictation and To PDF")}>${state.procBusy ? "Looking…" : "Refresh"}</button></div>`;
+  if (!jobs.length) return head + tiles + note + `<p class="pr-msg">Nothing waiting. Every visited job's report has gone.</p>`;
+  return head + tiles + note + jobs.map(j => {
+    const k = procKey(j), d = dueInfo(j), c = C[k], ok = /^WPS\d{6}$/.test(k);
+    const v = visitTime(j), vis = v ? v.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) : "no date";
+    const photos = /^https?:\/\//.test(String(j.photoLink||"")) ? `<a class="btn btn-ghost btn-sm" href="${esc(j.photoLink)}" target="_blank" rel="noopener"${tip("Download the photo zip")}>Photos</a>` : `<a class="btn btn-ghost btn-sm" href="photos.html"${tip("No photo link yet: open the Photo Tool")}>Photos</a>`;
+    const conf = (state.procConfirm||"") === k;
+    const checks = c && !c.busy ? (c.error ? `<div class="pr-checks"><span class="bad">${esc(c.error)}</span></div>` : `<div class="pr-checks">${c.checks.map(x => `<span class="${x.state === "ok" ? "ok" : "bad"}">${esc(x.text)}</span>`).join("")}<small style="opacity:.75">Checked ${esc(c.file||"")}</small></div>`) : "";
+    const sentMsg = (state.procSent||{})[k] ? `<div class="pr-msg">Copied into To PDF: ${esc(state.procSent[k])}. The PDF arrives in Ready to send in about 10 minutes, then the send scripts take over.</div>` : "";
+    const errMsg = (state.procErrs||{})[k] ? `<div class="pr-msg" style="color:var(--coral)">${esc(state.procErrs[k])}</div>` : "";
+    return `<section class="pr-card" aria-label="${esc(k)}">
+      <div class="pr-top">
+        <div><div class="pr-title"><span class="pr-type">${esc(j.type||"")}</span><a href="#" onclick="openEdit('${esc(j.id)}');return false;"${tip("Open the job")}>${esc(j.jobNo||"(no job no.)")}</a> <span>${esc(fullAddress ? fullAddress(j) : (j.address||""))}</span></div>
+          <div class="pr-sub">${esc(j.client||"")} · visited ${esc(vis)}${d ? ` · <span class="${d.cls}">${esc(d.text)}</span>` : ""}</div></div>
+        <div class="pr-btns">
+          ${ok ? `<a class="btn btn-coral btn-sm" href="wpsword:${esc(k)}"${tip("Opens the report in Word on the PC: this page left, Word right")}>Open in Word</a>` : ""}
+          ${photos}
+          <a class="btn btn-ghost btn-sm" href="dictate.html"${tip("Open Dictation (pick this job from the Job Log list)")}>Dictation</a>
+          ${ok && keyMode() ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procCheck('${esc(k)}')"${tip("Checks the saved Word file in Dropbox: [CO:] notes, XXX, comments, tracked changes, photo link, file name")}>${c && c.busy ? "Checking…" : "Run checks"}</button>` : ""}
+          ${ok && keyMode() ? `<button type="button" class="btn ${conf ? "btn-coral" : "btn-ghost"} btn-sm" onclick="procToPdf('${esc(k)}')"${tip("Copies the saved Word file into Dropbox > Reports > To PDF (the master stays in Word Docs)")}>${conf ? "Send anyway?" : "Send to PDF"}</button>` : ""}
+        </div>
+      </div>
+      <ol class="pr-steps" aria-label="Steps">${procSteps(j)}</ol>
+      ${checks}${conf ? `<div class="pr-msg">Checks aren't all clear (or not run). Click <b>Send anyway?</b> to send it as it is, or fix it in Word first. PdfMake still holds a report with [CO:], XXX, comments or tracked changes.</div>` : ""}${sentMsg}${errMsg}
+    </section>`;
+  }).join("");
+}
+async function procCheck(k){
+  const j = state.jobs.find(x => procKey(x) === k); if (!j) return;
+  state.procChecks = state.procChecks || {}; state.procChecks[k] = { busy:true }; render();
+  try {
+    const d = await dashCall("wordCheck", { job:k, photoLink: j.photoLink || "" });
+    state.procChecks[k] = d && d.ok ? { checks: d.checks || [], file: d.file } : { error: (d && d.error === "Unknown request.") ? "The script hasn't got the Processing part yet (new deployment needed)." : ((d && d.error) || "No answer") };
+  } catch(e){ state.procChecks[k] = { error: String(e && e.message || e) }; }
+  render();
+}
+async function procToPdf(k){
+  const c = (state.procChecks||{})[k], clear = c && !c.busy && !c.error && c.checks.every(x => x.state === "ok");
+  if (!clear && state.procConfirm !== k){ state.procConfirm = k; render(); return; }
+  state.procConfirm = ""; state.procErrs = state.procErrs || {}; delete state.procErrs[k]; render();
+  try {
+    const d = await dashCall("wordToPdf", { job:k });
+    if (d && d.ok){ state.procSent = state.procSent || {}; state.procSent[k] = d.file; }
+    else state.procErrs[k] = (d && d.error === "Unknown request.") ? "The script hasn't got the Processing part yet (new deployment needed)." : ((d && d.error) || "No answer");
+  } catch(e){ state.procErrs[k] = String(e && e.message || e); }
+  render();
+}
 function renderReports(){
   const f = rpF(), nf = f.type.length + f.client.length + f.status.length + f.date.length;
   const isPhone = typeof window !== "undefined" && window.innerWidth <= 860;
@@ -4243,13 +4363,13 @@ function renderInner(app){
     <div class="shell">
     ${renderSidebar()}
     <main class="main">
-    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" ? " wrap-wide" : ""}">
+    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" ? " wrap-wide" : ""}">
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "today" || state.view === "processing" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
       ${renderQueueTray()}
       ${state.editing ? renderForm() : ""}
-      ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
+      ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : state.view === "processing" ? renderProcessing() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
       ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; pick a job's stage or invoice state from its box &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
@@ -5029,7 +5149,8 @@ function renderSidebar(){
     ${WPS_LOGO}
     <nav class="side-nav">
       <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;"${tip("Today's overview: what needs doing")}>${ICON_HOME} Dashboard</a>
-      <a href="#" class="${state.view!=='today'&&state.view!=='reports'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
+      <a href="#" class="${state.view!=='today'&&state.view!=='reports'&&state.view!=='processing'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
+      <a href="#" class="${state.view==='processing'?'active':''}" onclick="setView('processing');return false;"${tip("Reports to write: open in Word, photos, dictation, checks, send to PDF")}>${ICON_DOC} Processing${(() => { const n = procJobs().length; return n ? ` <span class="side-count">${n}</span>` : ""; })()}</a>
       <a href="#" class="${state.view==='reports'?'active':''}" onclick="setView('reports');return false;"${tip("Every report as a photo tile, with filters")}>${ICON_GRID} Reports</a>
       <a href="photos.html"${tip("Turn a day's photos into named, watermarked zips")}>${ICON_CAM} Photo Tool</a>
       <a href="dictate.html"${tip("Phone notes by voice, room by room")}>${ICON_MIC} Dictation</a>
@@ -5057,7 +5178,7 @@ function renderPageHead(){
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
   }
   return `<div class="page-head">
-    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : state.view === "reports" ? "Reports" : "Job Log"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div>${state.view === "today" ? renderWxLine() : ""}${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
+    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : state.view === "reports" ? "Reports" : state.view === "processing" ? "Processing" : "Job Log"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div>${state.view === "today" ? renderWxLine() : ""}${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
     <div class="page-right">${renderBuildTop()}<div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
@@ -5151,7 +5272,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#99)";
+const BUILD = "22 Oct 2026 (#100)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6815,7 +6936,7 @@ function navHashFor(){
     const unique = no && state.jobs.filter(j => (j.jobNo || "").trim() === no).length === 1;
     return "#job=" + encodeURIComponent(unique ? no : saved.id);
   }
-  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : state.view === "reports" ? "#reports" : "";
+  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : state.view === "reports" ? "#reports" : state.view === "processing" ? "#processing" : "";
 }
 function navSame(a, b){ const n = h => (!h || h === "#" || h === "#today") ? "" : h; return n(a) === n(b); }
 function navParse(hash){
@@ -6826,6 +6947,7 @@ function navParse(hash){
   if (h === "calendar") return { view: "calendar" };
   if (h === "board") return { view: "board" };
   if (h === "reports") return { view: "reports" };
+  if (h === "processing") return { view: "processing" };
   if (h === "new") return { view: (st && st.view) || "table", isNew: true };
   if (h.indexOf("job=") === 0) return { view: (st && st.view) || "table", jobKey: h.slice(4) };
   return null;   // not ours: leave the page as it is
