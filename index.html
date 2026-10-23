@@ -5662,7 +5662,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#116)";
+const BUILD = "23 Oct 2026 (#117)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
