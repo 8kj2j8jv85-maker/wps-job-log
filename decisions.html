@@ -113,7 +113,7 @@
   <div id="area"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div id="recent"></div>
-  <div style="text-align:center"><a href="./" style="color:var(--text3);font-size:14px">Open the dashboard</a></div>
+  <div style="text-align:center"><a href="./?from=decisions" style="color:var(--text3);font-size:14px">Open the dashboard</a></div>
 </div>
 
 <div class="sheet" id="detail" hidden><div class="wrap" id="detailIn"></div></div>
@@ -192,7 +192,7 @@ function render(){
   $("count").className = "count" + (n ? "" : " zero");
   $("mode").textContent = S.err ? "Not connected" : S.mode === "claude" ? "Claude autopilot · phase " + S.phase : S.loaded ? "Manual (switch is off)" : "Loading…";
   let h = "";
-  if (S.err === "nokey") h = `<div class="msg">This phone isn't linked to the WPS script yet. Open the <a href="./">dashboard</a>, go to More &gt; Device key and paste this device's key, then come back.</div>`;
+  if (S.err === "nokey") h = `<div class="msg">This phone isn't linked to the WPS script yet. Open the <a href="./?from=decisions">dashboard</a>, go to More &gt; Device key and paste this device's key, then come back.</div>`;
   else if (S.err) h = `<div class="msg">${esc(S.err)}. <button class="ghost" onclick="load()">Try again</button></div>`;
   else if (!S.loaded) h = `<div class="msg">Loading…</div>`;
   else if (!n) h = `<div class="empty"><div class="ok"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><h2>All done</h2><p>${S.mode === "claude" ? "Nothing waiting. You'll get one email when something needs you." : "Nothing waiting. The switch on the dashboard is on Manual, so no new cards come in."}</p></div>`;

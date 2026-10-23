@@ -131,6 +131,9 @@
   .wrap-dash{ max-width:none; }
   .wrap-wide{ max-width:none; }
   /* Processing page (Lex, 22 Oct) */
+  .back-dec{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:#e8735a; border-radius:10px; padding:10px 14px; margin:0 0 12px; }
+  .back-dec a{ color:#141d3d; font-weight:600; font-size:15px; text-decoration:none; flex:1; }
+  .back-dec button{ background:none; border:none; color:#141d3d; font-size:16px; cursor:pointer; padding:2px 6px; }
   .side-count{ background:var(--coral); color:#141d3d; border-radius:10px; padding:0 7px; font-size:12px; margin-left:6px; font-weight:600; }
   .pr-tiles{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:6px 0 16px; }
   .pr-tile{ background:var(--card,#fff); border:1px solid var(--coral); border-radius:12px; padding:12px 14px; }
@@ -781,6 +784,7 @@
     .side-nav a{ padding:7px 6px; font-size:13px; gap:5px; }
   }
   @media (max-width:420px){ .side-nav a svg{ display:none; } .side-nav a{ padding:7px 8px; } }
+  @media (max-width:600px){ .side-nav{ flex-wrap:wrap; justify-content:flex-start; row-gap:4px; } }   /* 23 Oct: phone menu went off the side; buttons now wrap onto a second line */
 
   /* Encouraging message ticker (Lex, 18 Oct): scrolls and glows in the house-icon coral */
   .perf-top.pt-ticker{ position:relative; overflow:hidden; max-width:680px; margin-top:8px; padding:5px 0; font-size:14.5px; white-space:nowrap;
@@ -3679,6 +3683,7 @@ function renderQueueTray(){
 // Out for signing, Amendments, Completed. Where two could apply: Amendments beats Out for signing; signed or deemed
 // agreed is Completed even if a comment row is still open. "agent" is the wording for agents and landlords (portal, later). j.thumb is filled later by the script (Photo Tool exterior photo / PDF cover).
 const ICON_DOC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>';
+const ICON_CHECK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12.5l3 3 5-6"/></svg>';
 const ICON_GRID = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
 const RP_ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
 const RP_ICON_DOC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
@@ -4492,6 +4497,7 @@ function renderInner(app){
     ${renderSidebar()}
     <main class="main">
     <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" ? " wrap-wide" : ""}">
+      ${renderBackToDecisions()}
       ${renderPageHead()}
       ${renderUrlAction()}
       ${state.view === "today" || state.view === "processing" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
@@ -5294,6 +5300,7 @@ function renderSidebar(){
       <a href="#" class="${state.view==='reports'?'active':''}" onclick="setView('reports');return false;"${tip("Every report as a photo tile, with filters")}>${ICON_GRID} Reports</a>
       <a href="photos.html"${tip("Turn a day's photos into named, watermarked zips")}>${ICON_CAM} Photo Tool</a>
       <a href="dictate.html"${tip("Phone notes by voice, room by room")}>${ICON_MIC} Dictation</a>
+      <a href="decisions.html" class="side-dec"${tip("Your decisions: swipe right yes, left no, up later")}>${ICON_CHECK} Decisions${state.auWaiting ? ` <span class="side-count">${state.auWaiting}</span>` : ""}</a>
     </nav>
     <button class="side-menu-btn" onclick="toggleMenu()">${state.menuOpen ? "Close ✕" : "Menu ☰"}</button>
     <div class="side-more${state.menuOpen ? " open" : ""}">
@@ -5304,6 +5311,19 @@ function renderSidebar(){
     </div>
     </div>
   </aside>`;
+}
+// Back to Decisions (Lex, 23 Oct): the Decisions page opens the dashboard with ?from=decisions. On the iPhone home-screen
+// app there is no back button, so a bar at the top leads back. Kept for this visit only (sessionStorage); ✕ hides it.
+const SS_FROM_DEC = "wps_from_decisions_v1";
+(function(){ try {
+  const u = new URL(location.href);
+  if (u.searchParams.get("from") === "decisions"){ sessionStorage.setItem(SS_FROM_DEC, "1"); u.searchParams.delete("from"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+} catch(e){} })();
+function fromDecisions(){ try { return sessionStorage.getItem(SS_FROM_DEC) === "1"; } catch(e){ return false; } }
+function hideBackToDecisions(){ try { sessionStorage.removeItem(SS_FROM_DEC); } catch(e){} render(); }
+function renderBackToDecisions(){
+  if (!fromDecisions()) return "";
+  return `<div class="back-dec"><a href="decisions.html">← Back to Decisions</a><button type="button" onclick="hideBackToDecisions()" aria-label="Hide">✕</button></div>`;
 }
 function renderPageHead(){
   const today = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
@@ -5422,7 +5442,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#110)";
+const BUILD = "23 Oct 2026 (#111)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6089,7 +6109,7 @@ function autopilotGet(){ return autopilotParse(lsGet(LS_AUTOPILOT) || "") || { m
 function autopilotOn(){ return autopilotGet().mode === "claude"; }
 // Waiting cards for the panel's Decisions link (device key only; quiet if the script file isn't pasted yet).
 async function loadDecisionCount(){
-  if (!dashKey() || !autopilotOn()){ if (state.auWaiting){ state.auWaiting = 0; render(); } return; }
+  if (!dashKey()){ if (state.auWaiting){ state.auWaiting = 0; render(); } return; }   // 23 Oct: count shows whatever the switch says (Decisions link in the menu)
   try { const d = await dashCall("auList"); const n = d && d.ok && Array.isArray(d.cards) ? d.cards.filter(c => c.status === "waiting").length : 0;
         if (n !== (state.auWaiting || 0)){ state.auWaiting = n; render(); } } catch(e){}
 }
@@ -6804,6 +6824,7 @@ function autoRefresh(){
 }
 setInterval(autoRefresh, 3*60*1000);
 setTimeout(loadDecisionCount, 4000);                                   // Decisions count on the Who's driving panel (23 Oct)
+setInterval(loadDecisionCount, 5*60000);                               // and on the Decisions menu link, every 5 min (23 Oct)
 setInterval(() => { if (document.visibilityState === "visible") loadDecisionCount(); }, 5*60*1000);
 document.addEventListener("visibilitychange", function(){ if (!document.hidden){ autoRefresh(); checkBuild(false); } });
 window.addEventListener("pageshow", function(e){ if (e.persisted){ autoRefresh(); checkBuild(false); } });   // iPhone: back to the open tab
