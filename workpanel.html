@@ -78,8 +78,12 @@
   .zoom .zx{ width:44px; height:44px; border-radius:22px; border:1.5px solid var(--coral); background:var(--navy-box); color:#fff; font-size:22px; line-height:1; cursor:pointer; flex:none; }
   .zoom .zimg{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:0 6px; overflow:auto; }
   .zoom .zimg img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:4px; cursor:zoom-in; }
-  .zoom.full .zimg{ align-items:flex-start; justify-content:flex-start; }
-  .zoom.full .zimg img{ max-width:none; max-height:none; cursor:zoom-out; }
+  .zoom.full .zimg{ align-items:flex-start; justify-content:flex-start; overflow:hidden; cursor:grab; touch-action:none; }
+  .zoom.full .zimg.dragging{ cursor:grabbing; }
+  .zoom.full .zimg img{ max-width:none; max-height:none; cursor:inherit; user-select:none; -webkit-user-drag:none; }
+  /* 23 Oct (Lex): opened from the dashboard's Processing page (?embed=1), use the whole width */
+  body.embed .wrap{ max-width:none; border:0; }
+  body.embed .grid{ grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
   .zoom .zfoot{ display:flex; gap:8px; padding:10px; }
   .zoom .zfoot .btn{ flex:none; width:52px; font-size:18px; }
   .zoom .zfoot .btn-main{ flex:1; }
@@ -135,7 +139,7 @@
     </div>
     <button class="btn-main" id="putPhoto" disabled>Put photo in at the cursor</button>
     <div class="msg" id="photoMsg"></div>
-    <div class="note" id="photoHelp">Click in the photo box in the report first, then drag a photo in (or pick it and press the button). Double-click a photo to see it big. It comes out the same size and shape as the other photos in the row, the caption goes in the box below, and the cursor moves on to the next box. Green = already used in this report.</div>
+    <div class="note" id="photoHelp">Click in the photo box in the report first, then drag a photo in (or pick it and press the button). Double-click a photo to see it big; click it for full size and drag it with the mouse to look around. The job's uploaded photos load by themselves. It comes out the same size and shape as the other photos in the row, the caption goes in the box below, and the cursor moves on to the next box. Green = already used in this report.</div>
   </div>
 
   <!-- DICTATION -->
@@ -188,12 +192,13 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
 /* ---------- start ---------- */
 function start(info) {
+  if (/[?&]embed=1/.test(location.search)) document.body.classList.add("embed");
   INWORD = !!(info && info.host && window.Office && Office.HostType && info.host === Office.HostType.Word);
   $("where").textContent = INWORD ? "in Word" : "in the browser";
   if (!INWORD) {
     $("putPhoto").textContent = "Copy photo";
     $("putText").textContent = "Copy text";
-    $("photoHelp").textContent = "Not inside Word here: Copy the photo, then paste it into the report (long-press > Paste on the tablet). Green = already copied for this report.";
+    $("photoHelp").textContent = "Not inside Word here: drag a photo into Word, or Copy it and paste it into the report (long-press > Paste on the tablet). Double-click a photo to see it big; click it for full size and drag to look around. Green = already copied for this report.";
     $("dictHelp").textContent = "Not inside Word here: copy, then paste into the report.";
     $("copyText").classList.add("hidden");
   }
@@ -227,6 +232,7 @@ function loadJobs() {
       .sort(function (a, b) { var s = (STATUS_ORDER[a.status] == null ? 9 : STATUS_ORDER[a.status]) - (STATUS_ORDER[b.status] == null ? 9 : STATUS_ORDER[b.status]); return s || String(b.date || "").localeCompare(String(a.date || "")); });
     $("job").innerHTML = '<option value="">Pick a job</option>' + S.jobs.map(function (j, i) { return '<option value="' + i + '">' + esc(jobLabel(j)) + "</option>"; }).join("");
     var auto = jobFromFile();
+    if (auto == null) auto = jobFromUrl();
     if (auto != null) { $("job").value = String(auto); pickJob(); }
   });
 }
@@ -238,10 +244,17 @@ function jobFromFile() {
   for (var i = 0; i < S.jobs.length; i++) if (String(S.jobs[i].jobNo).toUpperCase() === no) return i;
   return null;
 }
+// Opened from the dashboard (23 Oct): workpanel.html?job=WPS261016 picks that job.
+function jobFromUrl() {
+  var m = /[?&]job=(WPS\d{6,})/i.exec(location.search); if (!m) return null;
+  var no = m[1].toUpperCase();
+  for (var i = 0; i < S.jobs.length; i++) if (String(S.jobs[i].jobNo).toUpperCase() === no) return i;
+  return null;
+}
 $("job").addEventListener("change", pickJob);
 function pickJob() {
   var i = $("job").value; S.job = i === "" ? null : S.jobs[+i];
-  msg("jobMsg", ""); renderThumbs(); loadDict(); renderFinish();
+  msg("jobMsg", ""); renderThumbs(); loadDict(); renderFinish(); loadJobPhotos();
 }
 
 /* ---------- tabs ---------- */
@@ -270,19 +283,40 @@ $("zipIn").addEventListener("change", function () {
   msg("photoMsg", "Opening…");
   var zipF = files.filter(function (f) { return /\.zip$/i.test(f.name); })[0];
   var p = zipF ? openZip(zipF) : Promise.resolve(files.filter(function (f) { return /\.jpe?g$/i.test(f.name); }).map(function (f) { return { name: f.name, blob: f }; }));
-  p.then(function (list) {
+  p.then(function (list) { showPhotos(list, zipF ? zipF.name : files.length + " photos", !!zipF); })
+   .catch(function (e) { msg("photoMsg", "Couldn't open that file: " + (e && e.message || e), "bad"); });
+});
+function showPhotos(list, label, isZip) {
     S.photos.forEach(function (x) { if (x.url) URL.revokeObjectURL(x.url); });
     S.photos = list.map(function (x) { var a = areaOf(x.name); return { name: x.name.split("/").pop(), blob: x.blob, area: a.area, seq: a.seq, url: URL.createObjectURL(x.blob) }; })
       .sort(function (a, b) { return a.area === b.area ? a.seq - b.seq : 0; });
     var order = []; S.photos.forEach(function (x) { if (order.indexOf(x.area) === -1) order.push(x.area); });
     S.rooms = order; S.room = order.filter(function (r) { return r !== "Cover"; })[0] || order[0] || ""; S.picked = -1;
-    var label = zipF ? zipF.name : files.length + " photos";
     $("zipName").textContent = "Photo set: " + label + " (" + S.photos.length + " photos)";
     var no = S.job && String(S.job.jobNo || "").toUpperCase();
-    msg("photoMsg", no && zipF && zipF.name.toUpperCase().indexOf(no) !== 0 ? "This zip isn't named for " + no + ". Check it's the right job." : (S.photos.length ? "" : "No photos found in that file."), no && zipF && zipF.name.toUpperCase().indexOf(no) !== 0 ? "bad" : (S.photos.length ? "" : "bad"));
+    var wrong = no && isZip && label.toUpperCase().indexOf(no) !== 0;
+    msg("photoMsg", wrong ? "This zip isn't named for " + no + ". Check it's the right job." : (S.photos.length ? "" : "No photos found in that file."), wrong || !S.photos.length ? "bad" : "");
     renderRooms(); renderThumbs();
-  }).catch(function (e) { msg("photoMsg", "Couldn't open that file: " + (e && e.message || e), "bad"); });
-});
+}
+// 23 Oct (Lex): the job's uploaded zip (its photo link) loads by itself when the job is picked, so nothing
+// has to be downloaded and opened by hand. Open photo set stays for anything else.
+var photoLoadFor = "";
+function loadJobPhotos() {
+  var j = S.job, url = j && String(j.photoLink || "");
+  if (!j || !/^https:\/\//i.test(url) || photoLoadFor === url) return;
+  photoLoadFor = url;
+  $("zipName").textContent = "Loading the job's photos…";
+  msg("photoMsg", "");
+  fetch(url, { mode: "cors" }).then(function (r) { if (!r.ok) throw new Error("the photo store said " + r.status); return r.blob(); })
+    .then(openZip)
+    .then(function (list) { if (photoLoadFor === url) showPhotos(list, url.split("/").pop(), true); })
+    .catch(function (e) {
+      if (photoLoadFor !== url) return;
+      photoLoadFor = "";
+      $("zipName").textContent = "No photo set open.";
+      msg("photoMsg", "Couldn't load the job's photos from its photo link (" + (e && e.message || e) + "). Use Open photo set with the zip instead.", "bad");
+    });
+}
 function openZip(f) {
   return JSZip.loadAsync(f).then(function (zip) {
     var names = Object.keys(zip.files).filter(function (n) { return !zip.files[n].dir && /\.jpe?g$/i.test(n) && n.indexOf("__MACOSX") !== 0; });
@@ -342,8 +376,39 @@ $("zoomX").addEventListener("click", zoomClose);
 $("zoomPrev").addEventListener("click", function () { zoomStep(-1); });
 $("zoomNext").addEventListener("click", function () { zoomStep(1); });
 $("zoomPut").addEventListener("click", function () { var i = zoomAt; zoomClose(); S.picked = i; markPicked(); $("putPhoto").click(); });
-$("zoomImg").addEventListener("click", function (e) { e.stopPropagation(); $("zoom").classList.toggle("full"); });
-$("zoomBox").addEventListener("click", function (e) { if (e.target === this) zoomClose(); });
+// Big view (23 Oct, Lex): click the photo for full size; at full size, hold the mouse (or a finger) down and drag
+// to look around, no scroll bars. A click without dragging goes back to the fitted view. Full size opens on the
+// spot that was clicked.
+var pan = null;
+$("zoomImg").addEventListener("click", function (e) {
+  e.stopPropagation();
+  if (pan && pan.moved) return;            // that was a drag, not a click
+  var z = $("zoom"), box = $("zoomBox"), img = this;
+  if (z.classList.contains("full")) { z.classList.remove("full"); return; }
+  var r = img.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+  z.classList.add("full");
+  box.scrollLeft = fx * img.naturalWidth - box.clientWidth / 2;
+  box.scrollTop = fy * img.naturalHeight - box.clientHeight / 2;
+});
+$("zoomBox").addEventListener("pointerdown", function (e) {
+  if (!$("zoom").classList.contains("full") || e.button > 0) return;
+  pan = { x: e.clientX, y: e.clientY, l: this.scrollLeft, t: this.scrollTop, moved: false, id: e.pointerId };
+  e.preventDefault();
+});
+document.addEventListener("pointermove", function (e) {
+  if (!pan || e.pointerId !== pan.id) return;
+  var dx = e.clientX - pan.x, dy = e.clientY - pan.y, box = $("zoomBox");
+  if (!pan.moved && Math.abs(dx) + Math.abs(dy) > 4) { pan.moved = true; box.classList.add("dragging"); }
+  if (pan.moved) { box.scrollLeft = pan.l - dx; box.scrollTop = pan.t - dy; }
+});
+function panEnd(e) {
+  if (!pan || (e && e.pointerId !== pan.id)) return;
+  $("zoomBox").classList.remove("dragging");
+  var p = pan; setTimeout(function () { if (pan === p) pan = null; }, 0);   // the click that follows a drag is ignored
+}
+document.addEventListener("pointerup", panEnd);
+document.addEventListener("pointercancel", panEnd);
+$("zoomBox").addEventListener("click", function (e) { if (e.target === this && !(pan && pan.moved)) zoomClose(); });
 $("zoom").addEventListener("click", function (e) { if (e.target === this) zoomClose(); });
 document.addEventListener("keydown", function (e) {
   if ($("zoom").hidden) return;
