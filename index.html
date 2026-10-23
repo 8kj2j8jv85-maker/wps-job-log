@@ -4163,6 +4163,7 @@ function renderProcessing(){
     const conf = (state.procConfirm||"") === k;
     const checks = c && !c.busy ? (c.error ? `<div class="pr-checks"><span class="bad">${esc(c.error)}</span></div>` : `<div class="pr-checks">${c.checks.map(x => `<span class="${x.state === "ok" ? "ok" : "bad"}">${esc(x.text)}</span>`).join("")}<small class="pr-ver">Checked the version Dropbox received at <b>${esc(procWhen(c.modified))}</b> (${esc(c.file||"")}). Saved in Word since then? Wait for Dropbox's green tick and Run checks again. Send to PDF only sends this version.</small></div>`) : "";
     const sentMsg = (state.procSent||{})[k] ? `<div class="pr-msg">Copied into To PDF: ${esc(state.procSent[k])}. The PDF arrives in Ready to send in about 10 minutes, then the send scripts take over.</div>` : "";
+    const pv = (state.procView||{})[k], pvMsg = pv && pv !== "busy" && pv.error ? `<div class="pr-msg" style="color:var(--coral)">${esc(pv.error)}</div>` : "";
     const errMsg = (state.procErrs||{})[k] ? `<div class="pr-msg" style="color:var(--coral)">${esc(state.procErrs[k])}</div>` : "";
     return `<section class="pr-card" aria-label="${esc(k)}">
       <div class="pr-top">
@@ -4171,13 +4172,14 @@ function renderProcessing(){
         <div class="pr-btns">
           ${procWordBtn(j)}
           ${photos}
+          ${ok && keyMode() && P[k] && P[k].word ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procView('${esc(k)}')"${tip("Read the saved report here before Send to PDF (Dropbox's preview of the Word file)")}>${(state.procView||{})[k] === "busy" ? "Opening…" : "View report"}</button>` : ""}
           <a class="btn btn-ghost btn-sm" href="dictate.html"${tip("Open Dictation (pick this job from the Job Log list)")}>Dictation</a>
           ${ok && keyMode() ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procCheck('${esc(k)}')"${tip("Checks the saved Word file in Dropbox: [CO:] notes, XXX, comments, tracked changes, photo link, file name, job number, postcode and visit date against the Job Log, template leftovers, the check-out CHECK IN block, item rows kept on one page")}>${c && c.busy ? "Checking…" : "Run checks"}</button>` : ""}
           ${ok && keyMode() ? `<button type="button" class="btn ${conf ? "btn-coral" : "btn-ghost"} btn-sm" onclick="procToPdf('${esc(k)}')"${tip("Copies the saved Word file into Dropbox > Reports > To PDF (the master stays in Word Docs)")}>${conf ? "Send anyway?" : "Send to PDF"}</button>` : ""}
         </div>
       </div>
       <ol class="pr-steps" aria-label="Steps">${procSteps(j)}</ol>
-      ${procMadeMsg(k)}${checks}${conf ? `<div class="pr-msg">Checks aren't all clear. Click <b>Send anyway?</b> to send the checked version as it is, or fix it in Word first. PdfMake still holds a report with [CO:], XXX, comments or tracked changes.</div>` : ""}${sentMsg}${errMsg}
+      ${procMadeMsg(k)}${checks}${conf ? `<div class="pr-msg">Checks aren't all clear. Click <b>Send anyway?</b> to send the checked version as it is, or fix it in Word first. PdfMake still holds a report with [CO:], XXX, comments or tracked changes.</div>` : ""}${sentMsg}${errMsg}${pvMsg}
     </section>`;
   }).join("") + renderProcUpcoming();
 }
@@ -4194,6 +4196,31 @@ function procPhotos(id){
     <iframe src="workpanel.html?embed=1&job=${encodeURIComponent(j.jobNo||"")}" title="Photos" allow="clipboard-write"></iframe></div>`;
   ov.addEventListener("click", e => { if (e.target === ov) procPhotosClose(); });
   document.body.appendChild(ov);
+}
+// View report (23 Oct, Lex): read the saved Word report on this page before Send to PDF. The WPS script (file
+// WordPreview, op wordPreview) has Dropbox make a PDF preview of the job's newest Word file and keeps it in Drive;
+// it opens here in the same Drive viewer as the Reports page. Made again only after a new save.
+async function procView(k){
+  state.procView = state.procView || {};
+  if (state.procView[k] === "busy") return;
+  state.procView[k] = "busy"; render();
+  let d;
+  try { d = await dashCall("wordPreview", { job:k }); } catch(e){ d = { ok:false, error:String(e && e.message || e) }; }
+  if (d && d.ok && /^[A-Za-z0-9_-]{10,100}$/.test(String(d.fileId||""))){
+    delete state.procView[k]; render();
+    const j = state.jobs.find(x => procKey(x) === k) || {};
+    procPhotosClose();
+    const ov = document.createElement("div"); ov.className = "ph-ov"; ov.id = "phOv";
+    ov.innerHTML = `<div class="ph-win" role="dialog" aria-modal="true" aria-label="Report ${esc(k)}">
+      <div class="ph-bar"><b>Report · ${esc(k)} · ${esc(j.address ? fullAddress(j) : "")} · saved ${esc(procWhen(d.modified))}</b>
+        <button type="button" class="ph-b" onclick="procPhotosClose()" aria-label="Close">Close</button></div>
+      <iframe src="https://drive.google.com/file/d/${d.fileId}/preview" title="Report" allow="autoplay"></iframe></div>`;
+    ov.addEventListener("click", e => { if (e.target === ov) procPhotosClose(); });
+    document.body.appendChild(ov);
+  } else {
+    state.procView[k] = { error: (d && d.error === "Unknown request.") ? "The script hasn't got View report yet (new deployment needed)." : ((d && d.error) || "No answer from the WPS script") };
+    render();
+  }
 }
 function procPhotosClose(){ const o = document.getElementById("phOv"); if (o) o.remove(); }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("phOv")){
@@ -5635,7 +5662,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#115)";
+const BUILD = "23 Oct 2026 (#116)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
