@@ -152,6 +152,7 @@
   .big-toast.ok{ background:#12A150; } .big-toast.busy{ background:#1F2D5A; } .big-toast.bad{ background:#D93A1F; }
   .big-toast b{ display:block; font-size:19px; margin-bottom:2px; } .big-toast > span:nth-child(2){ flex:1; min-width:0; overflow-wrap:anywhere; }
   .big-toast .bt-ic{ flex:none; width:34px; height:34px; border-radius:17px; background:rgba(255,255,255,.22); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; }
+  .big-toast .bt-btn{ flex:none; align-self:center; border:2px solid #fff; background:transparent; color:#fff; font:inherit; font-weight:600; border-radius:8px; padding:6px 12px; cursor:pointer; }
   .big-toast .bt-x{ flex:none; margin-left:6px; background:transparent; border:0; color:#fff; font-size:20px; cursor:pointer; line-height:1; }
   @keyframes bt-in{ from{ transform:translate(-50%, 20px); opacity:0; } to{ transform:translate(-50%, 0); opacity:1; } }
   .pr-present{ display:flex; align-items:center; gap:6px; margin-top:6px; white-space:nowrap; }
@@ -230,7 +231,7 @@
   .side-links .side-label{ font-size:11px; font-weight:600; letter-spacing:.16em; color:#8A97B8; padding:0 14px 6px; }
   .side-links a{ color:var(--sky); font-size:13.5px; text-decoration:none; padding:5px 14px; border-radius:6px; }
   .side-links a:hover{ background:rgba(255,255,255,.06); color:#fff; }
-  #undo-bar{ position:fixed; left:50%; bottom:20px; transform:translate(-50%,140%); display:flex; align-items:center; gap:14px; max-width:calc(100vw - 32px); padding:10px 12px 10px 16px; background:var(--brand); color:#fff; border-radius:10px; font-size:14px; box-shadow:0 6px 24px rgba(31,45,90,.28); opacity:0; transition:transform .2s, opacity .2s; z-index:999; pointer-events:none; }
+  #undo-bar{ position:fixed; left:50%; bottom:20px; transform:translate(-50%,140%); display:flex; align-items:center; gap:14px; max-width:calc(100vw - 32px); padding:14px 16px 14px 20px; background:var(--brand); color:#fff; border-radius:12px; font-size:16px; box-shadow:0 10px 36px rgba(0,0,0,.35), 0 0 0 3px rgba(255,255,255,.9); opacity:0; transition:transform .2s, opacity .2s; z-index:999; pointer-events:none; }
   #undo-bar.show{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
   #undo-bar button{ border:0; border-radius:6px; background:var(--coral); color:#fff; font:inherit; font-weight:600; padding:6px 12px; cursor:pointer; }
   #undo-bar button.undo-x{ background:transparent; padding:6px 4px; font-weight:400; opacity:.8; }
@@ -2831,6 +2832,7 @@ function saveRearrange(id){
 }
 // One-off bar like the undo bar, with an optional button (13 Oct)
 function showActionBar(msg, btnLabel, onBtn){
+  if (!btnLabel){ bigToast(/^(not sent|couldn|failed|error|no answer)/i.test(String(msg)) ? "bad" : "ok", String(msg), "", 12000); return; }   // 23 Oct (Lex): actions must show clearly
   let bar = document.getElementById("undo-bar");
   if (!bar){ bar = document.createElement("div"); bar.id = "undo-bar"; document.body.appendChild(bar); }
   undoSnap = null; window._actionBarFn = onBtn || null;
@@ -4264,6 +4266,9 @@ async function procMake(k){
     else state.procMade[k] = { error: (d && d.error === "Unknown request.") ? "The script hasn't got Make Word file yet (new deployment needed)." : ((d && d.error) || "No answer from the WPS script") };
   } catch(e){ state.procMade[k] = { error: String(e && e.message || e) }; }
   delete state.procMaking[k]; render();
+  const mm = state.procMade[k] || {};
+  if (mm.error) bigToast("bad", k + ": Word file not made", mm.error, 20000);
+  else bigToast("ok", k + ": Word file " + (mm.already ? "already there" : "made"), mm.file + " in Dropbox > Reports > Word Docs.", 12000);
 }
 function renderProcUpcoming(){
   const up = procUpcoming();
@@ -4293,12 +4298,13 @@ async function procCheck(k){
 function procWhen(iso){ const d = new Date(iso); if (isNaN(d)) return "an unknown time";
   const t = d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
   return d.toDateString() === new Date().toDateString() ? t : t + " " + d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
-function bigToast(kind, title, text, ms){
+function bigToast(kind, title, text, ms, btnLabel, onBtn){
   let t = document.getElementById("bigToast");
   if (!t){ t = document.createElement("div"); t.id = "bigToast"; t.setAttribute("role","status"); t.setAttribute("aria-live","assertive"); document.body.appendChild(t); }
   if (typeof hideUndo === "function") hideUndo();   // one message at a time at the bottom
   t.className = "big-toast " + kind;
-  t.innerHTML = `<span class="bt-ic">${kind === "ok" ? "✓" : kind === "bad" ? "!" : "…"}</span><span><b>${esc(title)}</b>${esc(text||"")}</span><button class="bt-x" aria-label="Close" onclick="document.getElementById('bigToast').remove()">✕</button>`;
+  window._bigToastFn = onBtn || null;
+  t.innerHTML = `<span class="bt-ic">${kind === "ok" ? "✓" : kind === "bad" ? "!" : "…"}</span><span><b>${esc(title)}</b>${esc(text||"")}</span>${btnLabel ? `<button class="bt-btn" onclick="(window._bigToastFn||function(){})();document.getElementById('bigToast').remove()">${esc(btnLabel)}</button>` : ""}<button class="bt-x" aria-label="Close" onclick="document.getElementById('bigToast').remove()">✕</button>`;
   clearTimeout(window._bigToastT);
   if (ms) window._bigToastT = setTimeout(() => { const x = document.getElementById("bigToast"); if (x) x.remove(); }, ms);
 }
@@ -4489,7 +4495,7 @@ async function msSend(){
     const after = s.after; state.msBox = null; render();
     if (after) try { after(d); } catch(e){}
     showActionBar("Sent from hello@: "+MS_WORDS[s.kind].toLowerCase()+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+".");
-  } catch(e){ s.busy = false; s.preview = null; s.msg = "Not sent: "+String(e && e.message || e)+". Nothing went to the tenants."; render(); }
+  } catch(e){ s.busy = false; s.preview = null; s.msg = "Not sent: "+String(e && e.message || e)+". Nothing went to the tenants."; render(); bigToast("bad", "Email not sent", s.msg, 20000); }
 }
 function renderMsBox(){
   const s = state.msBox; if (!s) return "";
@@ -4634,8 +4640,8 @@ async function ciSend(){
     state.ciBox = null;
     saveJobs(); render();
     if ((s.kind === "confirm" || s.kind === "taken") && state.gcalConnected) syncJobToCalendar(j);
-    showUndo((j.jobNo||"Job")+": sent. "+(CI_KIND_WORDS[s.kind] || "Email")+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+". Undo puts the job back; the email has gone.", before);
-  } catch(e){ s.busy = false; s.msg = "Not sent: "+String(e && e.message || e)+". Nothing went to the tenants."; render(); }
+    bigToast("ok", (j.jobNo||"Job")+": email sent", (CI_KIND_WORDS[s.kind] || CI_TPL_WORDS[s.kind] || "Email")+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+", from hello@ in the navy look. Undo job change puts the job back; the email has gone.", 20000, "Undo job change", () => { undoSnap = before; doUndo(); });
+  } catch(e){ s.busy = false; s.msg = "Not sent: "+String(e && e.message || e)+". Nothing went to the tenants."; render(); bigToast("bad", "Email not sent", s.msg, 20000); }
 }
 function renderCiBox(){
   const s = state.ciBox; if (!s) return "";
@@ -5698,7 +5704,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#119)";
+const BUILD = "23 Oct 2026 (#120)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
