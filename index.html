@@ -962,6 +962,10 @@
   .mt-msg{ margin:10px 0 4px; font-size:13px; color:var(--ink-soft); }
   .mt-msg.bad{ color:var(--red); }
   .mt-who{ margin:10px 0 6px; font-size:13px; display:grid; gap:2px; word-break:break-word; }
+  .ci-edit{ margin:10px 0 4px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .ci-edit summary{ cursor:pointer; font-weight:600; color:#1F2D5A; }
+  .ci-edit[open] summary{ margin-bottom:8px; }
+  html[data-theme="night"] .ci-edit summary{ color:#B7C6F0; }
   .mt-frame{ width:100%; height:520px; border:1px solid var(--line); border-radius:8px; background:#141D3D; display:block; }
   .mt-b{ margin-top:12px; }
   .mt-f textarea.ci-body{ font:inherit; font-size:14px; line-height:1.5; padding:8px 10px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink); resize:vertical; min-height:200px; width:100%; box-sizing:border-box; }
@@ -4322,13 +4326,14 @@ async function procMake(k){
   state.procMaking[k] = true; delete state.procMade[k]; render();
   try {
     const d = await dashCall("wordMake", { job:k });
-    if (d && d.ok){ state.procMade[k] = { file:d.file, left:d.left || [], already:!!d.already }; state.proc = state.proc || {}; state.proc[k] = Object.assign({ job:k }, state.proc[k] || {}, { word:{ name:d.file } }); }
+    if (d && d.ok){ state.procMade[k] = { file:d.file, left:d.left || [], already:!!d.already, rooms:d.rooms || null, roomsWhy:d.roomsWhy || "" }; state.proc = state.proc || {}; state.proc[k] = Object.assign({ job:k }, state.proc[k] || {}, { word:{ name:d.file } }); }
     else state.procMade[k] = { error: (d && d.error === "Unknown request.") ? "The script hasn't got Make Word file yet (new deployment needed)." : ((d && d.error) || "No answer from the WPS script") };
   } catch(e){ state.procMade[k] = { error: String(e && e.message || e) }; }
   delete state.procMaking[k]; render();
   const mm = state.procMade[k] || {};
   if (mm.error) bigToast("bad", k + ": Word file not made", mm.error, 20000);
-  else bigToast("ok", k + ": Word file " + (mm.already ? "already there" : "made"), mm.file + " in Dropbox > Reports > Word Docs.", 12000);
+  else bigToast("ok", k + ": Word file " + (mm.already ? (mm.rooms ? "rooms fitted" : "already there") : "made"), mm.file + " in Dropbox > Reports > Word Docs. "
+    + (mm.rooms ? "Rooms from the photos: " + mm.rooms.join(", ") + "." : mm.roomsWhy ? "Rooms: template rooms (" + mm.roomsWhy + ")." : ""), 15000);
 }
 function renderProcUpcoming(){
   const up = procUpcoming();
@@ -4625,6 +4630,7 @@ function ciRead(){
   const subj = v("ci_subject"), body = v("ci_body");
   if (subj !== null) s.subject = subj; if (body !== null) s.body = body;
 }
+function ciEditTyped(){ ciRead(); const b = document.getElementById("ci_send"); if (b) b.disabled = ciWordingChanged(state.ciBox) || !!(state.ciBox && state.ciBox.busy); }
 function ciYouChanged(){ ciRead(); const b = document.getElementById("ci_body"), y = state.ciBox; if (y && y.preview && b) y.body = b.value; render(); }
 function ciChanged(){
   const s = state.ciBox; if (!s) return;
@@ -4667,13 +4673,31 @@ async function ciPreview(){
     if (!d.preview) throw new Error("the WPS script didn't send back a preview. Nothing was sent.");
     s.preview = Object.assign({}, d, { chk: JSON.stringify([s.kind, params]) });
     s.subject = d.subject; s.body = d.body; s.msg = "";
+    s.shown = { subject: d.subject, body: d.body }; s.editOpen = false;
   } catch(e){ s.msg = "Can't send: "+String(e && e.message || e); }
   s.busy = false; render();
   const f = document.getElementById("ci_body"); if (f && s.preview) f.scrollIntoView({ block:"nearest" });
 }
+// Refine 2 (Lex 23 Oct): the preview is the navy email as it will arrive. Changed wording is shown again in the navy
+// look before it can go (Update preview), so what you see is what's sent.
+async function ciPreviewEdited(){
+  const s = state.ciBox, j = s && state.jobs.find(x => x.id === s.id); if (!j || !s.preview) return;
+  ciRead();
+  if (/whatsapp|wa\.me/i.test(s.subject+" "+s.body)){ s.msg = "No WhatsApp in emails (replies need to come by email so the system sees them)."; render(); return; }
+  s.busy = true; s.msg = "Updating the preview…"; s.editOpen = true; render();
+  try {
+    const d = await dashCall("ciSend", { job: j.jobNo, kind: "preview:"+s.kind, params: ciParams(s), subject: s.subject, body: s.body });
+    if (!d || !d.ok || !d.preview) throw new Error((d && d.error) || "no answer from the WPS script");
+    s.preview.html = d.html || ""; s.preview.shownSubject = d.shownSubject || s.subject;
+    s.shown = { subject: s.subject, body: s.body }; s.msg = d.edited ? "Preview shows your wording." : "Back to the template's wording.";
+  } catch(e){ s.msg = "Can't update the preview: "+String(e && e.message || e)+". Nothing was sent."; }
+  s.busy = false; render();
+}
+function ciWordingChanged(s){ return !!(s && s.preview && s.shown && (s.subject !== s.shown.subject || s.body !== s.shown.body)); }
 async function ciSend(){
   const s = state.ciBox, j = s && state.jobs.find(x => x.id === s.id); if (!j || !s.preview) return;
   ciRead();
+  if (ciWordingChanged(s)){ s.msg = "You changed the wording: press Update preview first, so you see exactly what goes."; s.editOpen = true; render(); return; }
   const params = ciParams(s);
   if (s.preview.chk !== JSON.stringify([s.kind, params])){ s.preview = null; s.msg = "Something changed since the preview. Press Preview again."; render(); return; }
   if (/whatsapp|wa\.me/i.test(s.subject+" "+s.body)){ s.msg = "No WhatsApp in emails (replies need to come by email so the system sees them)."; render(); return; }
@@ -4725,13 +4749,18 @@ function renderCiBox(){
     ${youRow}
     ${s.msg ? `<div class="mt-msg${/^Can't|^Not sent|^Pick|^Something|^No WhatsApp|same as theirs/.test(s.msg) ? " bad" : ""}">${esc(s.msg)}</div>` : ""}
     ${p ? `<div class="mt-who"><div><span class="c-dim">To</span> ${esc(p.to)}</div>${p.cc ? `<div><span class="c-dim">CC</span> ${esc(p.cc)}</div>` : ""}<div><span class="c-dim">From</span> hello@wellington-ps.co.uk</div></div>
-      <label class="mt-f">Subject<input type="text" id="ci_subject" maxlength="200" value="${esc(s.subject)}"${dis}></label>
-      <label class="mt-f">Email (change anything you like)<textarea id="ci_body" class="ci-body" rows="12"${dis}>${esc(s.body)}</textarea></label>
-      <div class="ci-sig">${esc(p.sig || "").replace(/\n/g, "<br>")}</div>
-      <div class="c-dim ci-hint">Sent in the navy look from hello@. If you change the wording, your text goes as written. No WhatsApp or links to it.</div>` : ""}
+      <div class="mt-who"><div><span class="c-dim">Subject</span> ${esc(p.shownSubject || s.subject)}</div></div>
+      <iframe id="ci_frame" class="mt-frame" sandbox="" title="Email preview" srcdoc="${esc(p.html || "<pre style='white-space:pre-wrap;font-family:Arial;color:#fff'>"+esc(((s.shown && s.shown.body) || s.body)+"\n\n"+(p.sig || ""))+"</pre>")}"></iframe>
+      <details class="ci-edit" id="ci_edit"${s.editOpen || ciWordingChanged(s) ? " open" : ""} ontoggle="if(state.ciBox) state.ciBox.editOpen = this.open">
+        <summary>Change the wording</summary>
+        <label class="mt-f">Subject<input type="text" id="ci_subject" maxlength="200" value="${esc(s.subject)}" oninput="ciEditTyped()"${dis}></label>
+        <label class="mt-f">Email<textarea id="ci_body" class="ci-body" rows="12" oninput="ciEditTyped()"${dis}>${esc(s.body)}</textarea></label>
+        <div class="c-dim ci-hint">The signature and the navy look are added by the script. No WhatsApp or links to it. Press Update preview to see your wording before it can be sent.</div>
+        <button class="btn btn-ghost btn-sm" onclick="ciPreviewEdited()"${dis}>Update preview</button>
+      </details>` : ""}
     <div class="rr-b mt-b">
       <button class="btn btn-ghost btn-sm" onclick="ciPreview()"${dis}${keyMode() ? "" : " disabled"}>${p ? "Start again from the template" : "Preview"}</button>
-      <button class="btn btn-coral btn-sm" onclick="ciSend()"${p && !s.busy ? "" : " disabled"}${tip("Sends this email from hello@ now. The agent (or landlord) is copied in.")}>Send</button>
+      <button class="btn btn-coral btn-sm" id="ci_send" onclick="ciSend()"${p && !s.busy && !ciWordingChanged(s) ? "" : " disabled"}${tip("Sends the email shown in the preview from hello@ now. The agent (or landlord) is copied in.")}>Send</button>
       <button class="btn btn-ghost btn-sm" onclick="closeCiBox()"${dis}>${p ? "Don't send" : "Close"}</button>
     </div>
   </div></div>`;
@@ -5644,6 +5673,21 @@ const SS_FROM_DEC = "wps_from_decisions_v1";
   if (u.searchParams.get("from") === "decisions"){ sessionStorage.setItem(SS_FROM_DEC, "1"); u.searchParams.delete("from"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
 } catch(e){} })();
 function fromDecisions(){ try { return sessionStorage.getItem(SS_FROM_DEC) === "1"; } catch(e){ return false; } }
+// Refine 2 (Lex 23 Oct): Decisions "yes" on a tenant time offers "Email the tenants": the Decisions page opens
+// ?from=decisions&email=confirm&job=WPS..., and once the latest Job Log is loaded the email box opens with a preview.
+(function(){ try {
+  const u = new URL(location.href), k = u.searchParams.get("email"), no = (u.searchParams.get("job") || "").toUpperCase().replace(/\s+/g, "");
+  if (k && /^WPS\d{6}$/.test(no)){ state.pendingEmail = { kind: k, job: no }; u.searchParams.delete("email"); u.searchParams.delete("job"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+} catch(e){} })();
+function openPendingEmail(){
+  const p = state.pendingEmail; if (!p) return;
+  const j = state.jobs.filter(x => (x.jobNo || "").toUpperCase() === p.job && x.status !== "archived")[0];
+  state.pendingEmail = null;
+  if (!j){ bigToast("bad", p.job + " not found", "The job isn't in the Job Log on this device. Nothing was sent.", 15000); return; }
+  if (state.editing || state.ciBox || state.mtBox || state.msBox) return;
+  openCiBox(j.id, p.kind);
+  if (state.ciBox && state.ciBox.kind === p.kind && keyMode() && !ciMissing(state.ciBox)) ciPreview();
+}
 function hideBackToDecisions(){ try { sessionStorage.removeItem(SS_FROM_DEC); } catch(e){} render(); }
 function renderBackToDecisions(){
   if (!fromDecisions()) return "";
@@ -5676,7 +5720,7 @@ function renderPageHead(){
     <div class="page-right">${renderBuildTop()}${state.view === "today" ? renderDriving() : ""}<div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
-        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint(keyMode() ? "Updates by itself: when the page opens, every 3 minutes and when you come back to it. Click to update now." : "One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${engageLabel()}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
+        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint(keyMode() ? "Updates by itself: when the page opens, every 3 minutes and when you come back to it. Click to update now." : "One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}><span id="engageLbl">${engageLabel()}</span>${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
       <button class="nj-btn" onclick="openNew()"${tip("New job: log a job by hand")} aria-label="New job"><span class="door-circle"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></span><span class="nj-lbl">New job</span></button>
     </div></div>
@@ -5766,7 +5810,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#124)";
+const BUILD = "23 Oct 2026 (#125)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -7212,10 +7256,18 @@ window.addEventListener("storage", function(e){
 // or in a background tab). Every 3 minutes, and when the tab is shown again. Never while a job form is
 // open or something is being typed, so nothing in progress is lost.
 let lastRefreshDay = isoToday(0);
-function autoRefresh(){
-  if (document.hidden || state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox) return;   // not while the Rearrange panel or mid-term email box is open
+// Refine 2 (Lex, 23 Oct 19:01: "time doesn't move, only when I switch tabs"): with a form or box open, or the cursor
+// in a box, the full reload still waits (so nothing being typed is lost), but the queue, cards, Keeper and Decisions
+// count are read and the "Up to date" time moves on.
+function refreshBlocked(){
+  if (state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox) return true;
   const a = document.activeElement;
-  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+}
+function paintEngage(){ const el = document.getElementById("engageLbl"); if (el) el.textContent = engageLabel(); }
+function autoRefresh(){
+  if (document.hidden) return;
+  if (refreshBlocked()){ if (keyMode()) dashCycle({ light: true }); return; }
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
   if (keyMode()){ dashCycle(); return; }   // device key: save, get the latest, read the queue and amendments
   // Re-read the amendments in the background when the list is stale and Google is already signed in (no pop-up).
@@ -7293,21 +7345,22 @@ async function dashSync(quiet){
     setCloud("error", "Couldn't reach the WPS script (no connection?). Will retry.");
   }
 }
-async function dashCycle(){
+async function dashCycle(opt){
   if (!keyMode() || state.dashBusy) return;
-  state.dashBusy = true; state.dashCycleAt = Date.now();
+  const light = !!(opt && opt.light);
+  state.dashBusy = true; state.dashCycleAt = Date.now(); paintEngage();
   try {
     if (!state.dashDevice){ try { const h = await dashCall("hello"); if (h.ok) state.dashDevice = h.device; } catch(e){} }   // the device name for the sidebar
     if (!keyMode()) return;
-    await dashSync(true);
+    if (!light) await dashSync(true);   // light (form or box open): the Job Log reload waits until it's closed
     if (!keyMode()) return;
     await dashQueue(true);
     loadAmendments(true);
     loadKp();
     loadDecisionCount();
-    autoDeem();
+    if (!light) autoDeem();
     state.lastCycleOk = new Date();
-  } finally { state.dashBusy = false; safeRender(); }
+  } finally { state.dashBusy = false; safeRender(); paintEngage(); if (!light && state.pendingEmail) openPendingEmail(); }
 }
 // Keeper (20 Oct): held reports and day-before reminders from the script logs (Dash op kpRead, script file Keeper).
 const HELD_FOLDER_URL = "https://drive.google.com/drive/folders/1i3YRfUbB6zQ_dDPHv8F9ZDkmBepn8hCO";
