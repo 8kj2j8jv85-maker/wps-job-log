@@ -5766,7 +5766,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#123)";
+const BUILD = "23 Oct 2026 (#124)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6894,12 +6894,12 @@ function pastReportsFor(f){
   const lead = a => (String(a||"").toLowerCase().match(/^(?:flat|apartment|apt|unit)?\s*[\w-]*\d[\w-]*/) || [""])[0].replace(/\s+/g," ").trim();
   const me = lead(f.address), key = (n, t) => normJobNo(n||"") + "|" + String(t||"").toUpperCase();
   const dbx = (state.pastDbx && state.pastDbx[pc] && state.pastDbx[pc].files) || [], used = {};
-  const list = rpAll().filter(x => x.id !== f.id && rpReportUrl(x) && (normPc(x.postcode) === pc || normPc(x.address).endsWith(pc)))
+  const list = rpAll().filter(x => rpReportUrl(x) && (normPc(x.postcode) === pc || normPc(x.address).endsWith(pc)))
     .map(x => { const d = dbx.find(o => key(o.job, o.type) === key(x.jobNo, x.type)) || dbx.find(o => normJobNo(o.job) === normJobNo(x.jobNo) && !used[o.path]);
       if (d) used[d.path] = 1;
       return { j: x, same: !!me && lead(x.address) === me, date: x.date || "", dbx: d ? d.url : "" }; });
   // PDFs in Dropbox the Reports page hasn't got (not copied yet, or other copies): Dropbox link only
-  dbx.filter(o => !used[o.path] && normJobNo(o.job) !== normJobNo(f.jobNo||"")).forEach(o => list.push({ j: { id:"", jobNo:o.job, type:o.type, date:o.date, address:o.name, isArchive: !/^WPS/i.test(o.job) }, same:false, date:o.date || "", dbx:o.url }));
+  dbx.filter(o => !used[o.path]).forEach(o => list.push({ j: { id:"", jobNo:o.job, type:o.type, date:o.date, address:o.name, isArchive: !/^WPS/i.test(o.job) }, same:false, date:o.date || "", dbx:o.url }));
   list.sort((a, b) => (b.same - a.same) || String(b.date).localeCompare(String(a.date)));
   return { pc, list };
 }
@@ -6926,7 +6926,7 @@ function renderPastReports(f, isNew){
       const open = x.id ? `<button type="button" class="btn ${o.same ? "btn-coral" : "btn-ghost"} btn-sm" onclick="pastOpen('${esc(x.id)}')">Open PDF</button>` : "";
       const db = o.dbx ? `<a class="btn btn-ghost btn-sm" href="${esc(o.dbx)}" target="_blank" rel="noopener"${tip("Opens this PDF on dropbox.com")}>Dropbox</a>` : "";
       return `<div class="pl-row wf-row">${open}${db}
-      <span class="wf-name">${esc([x.date ? formatDate(x.date) : "", x.type, x.jobNo].filter(Boolean).join(" · "))}${x.isArchive ? " (Wellington Parker)" : ""}</span><span class="field-hint">${esc(String(x.address||"").slice(0,60))}</span></div>`; }).join("")
+      <span class="wf-name">${esc([x.date ? formatDate(x.date) : "", x.type, x.jobNo].filter(Boolean).join(" · "))}${x.isArchive ? " (Wellington Parker)" : ""}${f.jobNo && normJobNo(x.jobNo) === normJobNo(f.jobNo) ? " (this job)" : ""}</span><span class="field-hint">${esc(String(x.address||"").slice(0,60))}</span></div>`; }).join("")
     + (list.length > 10 ? `<span class="field-hint">${list.length - 10} more on the Reports page.</span>` : "");
   const note = dx && dx.busy ? `<span class="field-hint">Getting the Dropbox links...</span>` : dx && dx.error ? `<span class="field-hint">Dropbox links: ${esc(dx.error)}</span>` : "";
   const all = pc ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pastAll('${esc(f.postcode || pc)}')">All reports at ${esc(f.postcode || pc)}</button>` : "";
