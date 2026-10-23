@@ -12,7 +12,8 @@
   Opened in a normal browser (e.g. the tablet beside Word) the same page works with Copy instead of "in at the cursor".
   Nothing here changes a report except what you press; the WPS script is only read (jobs, dictation notes).
 -->
-<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<!-- 23 Oct: Office's script only inside Word. Opened from the dashboard (?embed=1) it would blank the window, so it's skipped there. -->
+<script>if (!/[?&]embed=1/.test(location.search)) document.write('<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"><\/script>');</script>
 <!-- integrity: same checked copy as the Photo Tool (17 Oct 2026) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="wpslink.js?v=20261022c"></script>
