@@ -501,7 +501,14 @@
   .drv-on .drv-sw{ background:var(--coral); justify-content:flex-end; }
   .drv-sw:focus-visible{ outline:3px solid #B7C6F0; outline-offset:2px; }
   .drv-knob{ width:32px; height:32px; border-radius:50%; background:#fff; display:block; }
-  @media (max-width:600px){ .drv{ width:100%; order:2; } .page-head > .page-right{ order:3; } .page-head .drv + .page-right{ padding-top:0; } }
+  /* Today header (Lex, 23 Oct 01:45): title, weather and ticker left; right column = version label, Who's driving, then Engage and New job, all one width */
+  .page-head-today{ flex-wrap:nowrap; align-items:flex-start; }
+  .page-head-today > .ph-left{ flex:1 1 auto; min-width:0; }
+  .page-head-today > .page-right{ flex:0 0 420px; width:420px; align-items:stretch; justify-content:flex-start; gap:12px; }
+  .page-head-today .drv{ width:100%; align-self:stretch; }
+  .page-head-today .page-actions{ flex-wrap:nowrap; align-items:center; }
+  .page-head-today .page-actions > .btn-ghost{ flex:1 1 auto; min-width:0; }
+  @media (max-width:860px){ .page-head-today{ flex-wrap:wrap; } .page-head-today > .page-right{ flex:1 1 100%; width:100%; padding-top:0; } }
   /* New job = round button with the WPS door mark in the logo coral (Lex, 21 Oct 03:00; mark from Dropbox WPS LOGOS) */
   .nj-btn{ display:inline-flex; flex-direction:column; align-items:center; gap:4px; align-self:flex-end; background:none; border:none; padding:0 2px; font:inherit; cursor:pointer; color:var(--ink); }
   .door-circle{ width:54px; height:54px; border-radius:50%; background:#e8735a; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(0,0,0,.18); transition:transform .12s, background .12s; }
@@ -5307,10 +5314,9 @@ function renderPageHead(){
     <div class="page-right">${renderBuildTop()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button><div class="d-note">Sign in as info@wellingtonparker.com when Google asks.</div></div>`}`;
   }
-  return `<div class="page-head">
-    <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : state.view === "reports" ? "Reports" : state.view === "processing" ? "Processing" : "Job Log"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div>${state.view === "today" ? renderWxLine() : ""}${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
-    ${state.view === "today" ? renderDriving() : ""}
-    <div class="page-right">${renderBuildTop()}<div class="page-actions">
+  return `<div class="page-head${state.view === "today" ? " page-head-today" : ""}">
+    <div class="ph-left"><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : state.view === "reports" ? "Reports" : state.view === "processing" ? "Processing" : "Job Log"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div>${state.view === "today" ? renderWxLine() : ""}${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
+    <div class="page-right">${renderBuildTop()}${state.view === "today" ? renderDriving() : ""}<div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
         ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Engaging…" : "Engage"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
@@ -5403,7 +5409,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#107)";
+const BUILD = "23 Oct 2026 (#108)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
