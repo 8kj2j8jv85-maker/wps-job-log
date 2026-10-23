@@ -145,6 +145,15 @@
   .pr-type{ border:1px solid var(--coral); border-radius:6px; padding:1px 7px; font-size:12px; }
   .pr-sub{ font-size:13px; opacity:.85; margin-top:3px; }
   .pr-btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  /* Photos on the Processing page (23 Oct, Lex): the WPS panel's photo picker in a big window over the page */
+  .ph-ov{ position:fixed; inset:0; z-index:400; background:rgba(12,18,40,.6); display:flex; align-items:stretch; justify-content:center; padding:2vh 2vw; }
+  .ph-win{ flex:1; max-width:1400px; background:#0C1228; border:1.5px solid var(--coral); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; }
+  .ph-bar{ display:flex; align-items:center; gap:8px; padding:8px 12px; color:#fff; font-size:14px; }
+  .ph-bar b{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ph-bar .ph-b{ flex:none; padding:7px 14px; border-radius:8px; border:1.5px solid var(--coral); background:#1E2A55; color:#fff; font:inherit; font-size:13px; text-decoration:none; cursor:pointer; }
+  .ph-bar .ph-b:hover{ background:var(--coral); }
+  .ph-win iframe{ flex:1; width:100%; border:0; background:#fff; }
+  @media (max-width:700px){ .ph-ov{ padding:0; } .ph-win{ border-radius:0; border:0; } }
   .pr-btns .btn{ min-height:40px; text-decoration:none; }
   .page-head.page-head-pr{ flex-wrap:nowrap; align-items:center; gap:20px; padding-top:16px; }
   .page-head-pr .pr-hl{ flex:0 0 auto; }
@@ -4150,7 +4159,7 @@ function renderProcessing(){
   return head + tiles + note + jobs.map(j => {
     const k = procKey(j), d = dueInfo(j), c = C[k], ok = /^WPS\d{6}$/.test(k);
     const v = visitTime(j), vis = v ? v.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) : "no date";
-    const photos = /^https?:\/\//.test(String(j.photoLink||"")) ? `<a class="btn btn-ghost btn-sm" href="${esc(j.photoLink)}" target="_blank" rel="noopener"${tip("Download the photo zip")}>Photos</a>` : `<a class="btn btn-ghost btn-sm" href="photos.html"${tip("No photo link yet: open the Photo Tool")}>Photos</a>`;
+    const photos = /^https?:\/\//.test(String(j.photoLink||"")) ? `<button type="button" class="btn btn-ghost btn-sm" onclick="procPhotos('${esc(j.id)}')"${tip("See this job's photos here: pick a room, double-click a photo to see it big, drag it into Word or copy it")}>Photos</button>` : `<a class="btn btn-ghost btn-sm" href="photos.html"${tip("No photo link yet: open the Photo Tool")}>Photos</a>`;
     const conf = (state.procConfirm||"") === k;
     const checks = c && !c.busy ? (c.error ? `<div class="pr-checks"><span class="bad">${esc(c.error)}</span></div>` : `<div class="pr-checks">${c.checks.map(x => `<span class="${x.state === "ok" ? "ok" : "bad"}">${esc(x.text)}</span>`).join("")}<small class="pr-ver">Checked the version Dropbox received at <b>${esc(procWhen(c.modified))}</b> (${esc(c.file||"")}). Saved in Word since then? Wait for Dropbox's green tick and Run checks again. Send to PDF only sends this version.</small></div>`) : "";
     const sentMsg = (state.procSent||{})[k] ? `<div class="pr-msg">Copied into To PDF: ${esc(state.procSent[k])}. The PDF arrives in Ready to send in about 10 minutes, then the send scripts take over.</div>` : "";
@@ -4172,6 +4181,24 @@ function renderProcessing(){
     </section>`;
   }).join("") + renderProcUpcoming();
 }
+// Photos on the Processing page (23 Oct, Lex): opens the WPS panel (workpanel.html, same site, same device key)
+// for this job in a big window over the page. The panel loads the job's uploaded zip by itself. Esc or X closes it.
+function procPhotos(id){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  procPhotosClose();
+  const ov = document.createElement("div"); ov.className = "ph-ov"; ov.id = "phOv";
+  ov.innerHTML = `<div class="ph-win" role="dialog" aria-modal="true" aria-label="Photos ${esc(j.jobNo||"")}">
+    <div class="ph-bar"><b>Photos · ${esc(j.jobNo||"")} · ${esc(fullAddress(j))}</b>
+      <a class="ph-b" href="${esc(j.photoLink)}" target="_blank" rel="noopener"${tip("Download the photo zip")}>Download zip</a>
+      <button type="button" class="ph-b" onclick="procPhotosClose()" aria-label="Close">Close</button></div>
+    <iframe src="workpanel.html?embed=1&job=${encodeURIComponent(j.jobNo||"")}" title="Photos" allow="clipboard-write"></iframe></div>`;
+  ov.addEventListener("click", e => { if (e.target === ov) procPhotosClose(); });
+  document.body.appendChild(ov);
+}
+function procPhotosClose(){ const o = document.getElementById("phOv"); if (o) o.remove(); }
+document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("phOv")){
+  const f = document.querySelector("#phOv iframe"); const z = f && f.contentDocument && f.contentDocument.getElementById("zoom");
+  if (!(z && !z.hidden)) procPhotosClose(); } });
 // Open in Word when the job has its Word file (or before the first look); Make Word file when it hasn't.
 function procWordBtn(j){
   const k = procKey(j), r = (state.proc||{})[k];
@@ -5608,7 +5635,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#113)";
+const BUILD = "23 Oct 2026 (#115)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
