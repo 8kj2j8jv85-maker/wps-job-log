@@ -281,6 +281,7 @@
   </div>
   <div class="help-box" id="helpBox"><button class="hb-hide" id="hbHide" title="Hide this box. Switch Help hints off and on to bring it back.">Hide</button><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; upload</b> (or <b>Process &amp; download zip</b> on a device without its key). The zip is uploaded and the photo link is saved to the job automatically. Your original photos are never changed.</div>
   <div id="jobsNote" class="notice info hidden"></div>
+  <div id="keyNote" class="notice warn hidden"></div>
 
   <div id="dropZone" class="drop">
     <div class="big">Drop a day's photos here</div>
@@ -358,6 +359,7 @@
 </main>
 </div>
 <div id="panel" class="panel hidden"></div>
+<div id="doneBox" class="progress hidden" role="dialog" aria-label="Finished"><div class="box"><div id="doneTitle" style="font-weight:600"></div><div id="doneText" class="small" style="margin-top:8px;line-height:1.5"></div><div style="margin-top:14px;text-align:right"><button class="btn btn-coral" id="doneOk" onclick="hideDone()">OK</button></div></div></div>
 <div id="progress" class="progress hidden"><div class="box"><div id="progTitle" style="font-weight:600">Working&hellip;</div><div id="progText" class="muted small" style="margin-top:4px"></div><div class="bar"><div id="progBar"></div></div></div></div>
 
 <!-- integrity: the browser refuses the file if the CDN copy is ever changed (hash checked 17 Oct 2026 against cdnjs and jsdelivr, identical) -->
@@ -933,6 +935,7 @@ function areaMap(){
 
 // ============================================================ render
 function render(){
+  renderKeyNote();
   const has = S.photos.length > 0;
   $("workArea").classList.toggle("hidden", !has);
   ["sideBatch","btnAll","btnAddMore","btnClear"].forEach(id => $(id).classList.toggle("hidden", !has));
@@ -1294,6 +1297,9 @@ async function processGroup(gid, opts){
   if (typeof JSZip === "undefined"){ alert("The zip tool didn't load (no internet, or the download failed its safety check). Refresh the page and try again."); return; }
   const zip = new JSZip();
   if (!opts || !opts.inBatch) showProgress(`Processing ${m.jobNo}`, 0, keep.length);
+  // 23 Oct (Lex, iPhone): the box stayed on "Making cover photo…" for good. Now it always closes and says what happened.
+  let coverErr = "", fatal = "", up = null;
+  try {
   let i = 0;
   for (const p of keep){
     const a = amap[p.id] || "Unsorted";
@@ -1307,7 +1313,7 @@ async function processGroup(gid, opts){
   const out = await zip.generateAsync({ type:"blob", compression:"STORE" });
   let name = zipName(m);
   // 22 Oct: with the device key, the zip goes straight to WPS storage and the script saves the link on the job.
-  const up = uploadOn() ? await uploadStartFor(m, out) : null;
+  up = uploadOn() ? await uploadStartFor(m, out) : null;
   if (up && up.ok) name = up.key.split("/").pop();   // Downloads copy gets the same name as the uploaded zip
   if (!up || !up.ok || S.settings.keepDownload !== false) downloadBlob(out, name);
   // 8 Oct: report cover photo — a clean copy (no watermark or date tag), bigger, saved next to the zip.
@@ -1317,8 +1323,10 @@ async function processGroup(gid, opts){
   for (const p of covers){
     cn++;
     $("progText").textContent = "Making cover photo…";
-    const cbuf = await processPhoto(p, { clean:true, size: S.settings.coverSize || 2400, quality: 88 });
-    downloadBlob(new Blob([cbuf], { type:"image/jpeg" }), coverName(m, cn, covers.length));
+    try {
+      const cbuf = await processPhoto(p, { clean:true, size: S.settings.coverSize || 2400, quality: 88 });
+      downloadBlob(new Blob([cbuf], { type:"image/jpeg" }), coverName(m, cn, covers.length));
+    } catch(e){ coverErr = String(e && e.message || e || "unknown error"); }
     await new Promise(r => setTimeout(r, 400));
   }
   if (up){
@@ -1345,8 +1353,47 @@ async function processGroup(gid, opts){
       });
     } catch(e){ m.thumbMsg = "Front photo not saved: " + (e && e.message || e); }
   }
-  if (!opts || !opts.inBatch) hideProgress();
+  } catch(e){ fatal = String(e && e.message || e || "unknown error"); }
+  finally { if (!opts || !opts.inBatch) hideProgress(); }
   render();
+  if (!opts || !opts.inBatch) showDone(m, up, coverErr, fatal);
+}
+// What happened, in plain words, with an OK button (23 Oct)
+function showDone(m, up, coverErr, fatal){
+  const lines = [];
+  let title;
+  if (fatal){ title = "Stopped: " + m.jobNo; lines.push("Something went wrong: " + fatal, "Nothing was uploaded. Try again, or do this set on the PC."); }
+  else if (up && up.ok && !m.upBad){ title = "Done: " + m.jobNo + " uploaded"; lines.push("Photos uploaded to WPS storage. The photo link is saved on the job in the Job Log."); }
+  else if (up){ title = "Not uploaded: " + m.jobNo; lines.push(m.upMsg || "The upload didn't finish.", "Press Retry upload on the set to try again."); }
+  else { title = "Done: " + m.jobNo + " zip downloaded"; lines.push(uploadOn() || S.settings.upload === false ? "The zip was saved to this device's downloads." : "Not uploaded: this device hasn't got the device key, so the zip was saved to this device's downloads instead. Paste the key in the box at the top of the Photo Tool, then process again to upload."); }
+  if (coverErr) lines.push("The clean cover photo couldn't be made on this device (" + coverErr + "). The photos themselves are fine; make the cover on the PC if you need it.");
+  if (m.thumbMsg && /not saved/i.test(m.thumbMsg)) lines.push(m.thumbMsg);
+  $("doneTitle").textContent = title;
+  $("doneText").innerHTML = lines.map(x => "<div style='margin-bottom:6px'>" + esc(x) + "</div>").join("");
+  $("doneBox").classList.remove("hidden");
+  try { $("doneOk").focus(); } catch(e){}
+}
+function hideDone(){ $("doneBox").classList.add("hidden"); }
+// No device key in this browser = the zip downloads instead of uploading. Say so, and let Lex paste the key here (23 Oct).
+const PT_KEY_RE = /^wpsdk_[A-Za-z0-9_-]{43}$/;
+function renderKeyNote(){
+  const el = $("keyNote"); if (!el) return;
+  const missing = S.settings.upload !== false && !(window.WPSLink && WPSLink.key());
+  el.classList.toggle("hidden", !missing);
+  if (!missing){ el.innerHTML = ""; return; }
+  if (el.dataset.drawn === "1") return;
+  el.dataset.drawn = "1";
+  el.innerHTML = `<b>This device can't upload photos yet.</b> It hasn't got the device key, so photos will be zipped and saved to this device instead of uploaded.
+    Paste this device's key (the same one you pasted on the dashboard, More &gt; Device key):
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input id="ptKey" type="password" autocomplete="off" placeholder="wpsdk_…" style="flex:1 1 220px;min-width:0;padding:8px;font-size:16px;border:1px solid var(--line);border-radius:6px"><button class="btn btn-coral" onclick="ptSaveKey()">Save key</button></div>
+    <div id="ptKeyMsg" class="small" style="margin-top:6px"></div>`;
+}
+function ptSaveKey(){
+  const v = (($("ptKey") || {}).value || "").trim(), msg = $("ptKeyMsg");
+  if (!PT_KEY_RE.test(v)){ if (msg) msg.textContent = "That doesn't look like a device key. It starts wpsdk_ and is 49 characters long."; return; }
+  try { localStorage.setItem("wps_dash_key_v1", v); } catch(e){ if (msg) msg.textContent = "Couldn't save it in this browser."; return; }
+  const el = $("keyNote"); if (el){ el.dataset.drawn = ""; }
+  renderKeyNote(); render();
 }
 // ============================================================ upload to WPS storage (22 Oct, WPS script file PhotoUp)
 // Without the device key, or with the setting off, none of this runs and the tool works as before.
