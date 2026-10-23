@@ -97,6 +97,19 @@
   .mic.on{ background:#fff; color:var(--coral); }
   .grid2{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
   .lessonprev{ font-size:14px; color:var(--coral-hl); min-height:20px; line-height:1.4; }
+  /* Who's driving switch, same as the dashboard's (Lex, 23 Oct night) */
+  .drv{ display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:18px; background:var(--navy); border:1px solid var(--line); color:#fff; }
+  .drv-mark{ width:46px; height:46px; flex:0 0 46px; border-radius:50%; background:var(--coral); display:flex; align-items:center; justify-content:center; }
+  .drv-mark svg{ width:28px; height:28px; }
+  .drv-txt{ display:flex; flex-direction:column; gap:2px; flex:1 1 auto; min-width:0; }
+  .drv-k{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
+  .drv-t{ font-size:18px; font-weight:700; line-height:1.2; }
+  .drv-s{ font-size:12.5px; color:var(--text2); line-height:1.35; }
+  .drv-sw{ flex:0 0 72px; width:72px; height:40px; border-radius:999px; border:none; padding:4px; cursor:pointer; display:flex; justify-content:flex-start; background:var(--line); transition:background .15s; }
+  .drv-on .drv-sw{ background:var(--coral); justify-content:flex-end; }
+  .drv-sw:disabled{ opacity:.6; cursor:wait; }
+  .drv-sw:focus-visible{ outline:3px solid var(--text3); outline-offset:2px; }
+  .drv-knob{ width:32px; height:32px; border-radius:50%; background:#fff; display:block; }
   [hidden]{ display:none !important; }
   @media (min-width:700px){ .stage{ min-height:480px; } }
 </style>
@@ -110,6 +123,7 @@
     </div>
     <span class="count zero" id="count">–</span>
   </header>
+  <div id="driving"></div>
   <div id="area"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div id="recent"></div>
@@ -122,7 +136,7 @@
 <script src="wpslink.js"></script>
 <script>
 "use strict";
-const S = { cards: [], recent: [], score: {}, mode: "", phase: 0, busy: false, loaded: false, err: "", lastUndo: null, why: { chip: "", note: "" } };
+const S = { cards: [], recent: [], score: {}, mode: "", modeAt: "", phase: 0, busy: false, loaded: false, err: "", lastUndo: null, why: { chip: "", note: "" }, switching: false };
 const KIND_TAG = { booking: "Booking", reply: "Reply to send", ask: "Needs your answer", info: "Warning" };
 const CAT_WORD = { new: "new jobs", change: "date changes", time: "time confirmations", tenants: "tenant details", cancel: "cancellations", flagged: "checks", reply: "replies", ask: "questions", trick: "warnings" };
 const CHIPS = [["notbooking","Not a booking"],["wrongjob","Wrong job"],["wrongdate","Wrong date or time"],["oldtenants","Tenants are old"],["already","Already done"],["mine","I'll deal with it"],["other","Something else"]];
@@ -139,7 +153,7 @@ async function load(quiet){
   const d = await WPSLink.call("auList");
   S.loaded = true;
   if (!d || !d.ok){ S.err = (d && d.error) || "Couldn't reach the WPS script"; render(); return; }
-  S.err = ""; S.cards = d.cards || []; S.recent = d.recent || []; S.score = d.score || {}; S.mode = d.mode; S.phase = d.phase;
+  S.err = ""; S.cards = d.cards || []; S.recent = d.recent || []; S.score = d.score || {}; S.mode = d.mode; S.modeAt = d.modeAt || ""; S.phase = d.phase;
   render();
 }
 async function decide(id, answer, extra){
@@ -162,6 +176,33 @@ async function undo(id){
   S.busy = false;
   toast(d && d.ok ? "Undone: " + esc(d.result || "") : esc((d && d.error) || "Couldn't undo."));
   await load(true);
+}
+
+// ---------- Who's driving switch (Lex, 23 Oct night): the dashboard's switch, mirrored. Saved by the WPS script in the Job Log
+// Sheet (op auSetMode); the dashboard picks it up on its next sync, and whichever was changed last wins. ----------
+const DOOR_SVG = '<svg viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#141D3D" stroke-width="20"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722"/><line x1="58" y1="722" x2="300" y2="722"/></g><circle cx="221" cy="678" r="13" fill="#141D3D"/></svg>';
+function renderDriving(){
+  const el = $("driving");
+  if (!S.loaded || S.err){ el.innerHTML = ""; return; }
+  const on = S.mode === "claude";
+  el.innerHTML = `<div class="drv${on ? " drv-on" : ""}">
+    <span class="drv-mark">${DOOR_SVG}</span>
+    <span class="drv-txt"><span class="drv-k">Who's driving</span><span class="drv-t">${S.switching ? "Saving…" : on ? "Claude autopilot" : "Manual"}</span>
+      <span class="drv-s">${on ? "Claude reads the booking emails. Nothing is emailed without your yes." : "Nothing runs on its own. You click every step."}</span></span>
+    <button class="drv-sw" role="switch" aria-checked="${on}" aria-label="Claude autopilot" ${S.switching ? "disabled" : ""} onclick="setMode(${!on})"><span class="drv-knob"></span></button>
+  </div>`;
+}
+async function setMode(on){
+  if (S.switching || on === (S.mode === "claude")) return;
+  if (on && !confirm("Switch to Claude autopilot?\n\nClaude can add and change jobs without asking.\nNothing is emailed to a client, agent, landlord or tenant until you say yes.")) return;
+  S.switching = true; renderDriving();
+  const d = await WPSLink.call("auSetMode", { mode: on ? "claude" : "manual" });
+  S.switching = false;
+  if (!d || !d.ok){ renderDriving(); toast(esc((d && d.error) || "Not saved. Try again.")); return; }
+  S.mode = d.mode; S.modeAt = d.at || "";
+  try { localStorage.setItem("wps_autopilot_v1", JSON.stringify({ mode: d.mode, at: d.at })); } catch(e){}   // same as the dashboard in this app
+  toast(d.mode === "claude" ? "Claude autopilot on. The dashboard follows within a few minutes." : "Back on Manual. The dashboard follows within a few minutes.");
+  render();
 }
 
 // ---------- main view ----------
@@ -187,6 +228,7 @@ function scoreHtml(){
   return `<div class="score"><div class="sec" style="margin:0 0 4px">Last 7 days</div>${k.map(c => { const s = S.score[c]; return `${esc(CAT_WORD[c]||c)}: ${s.cards} card${s.cards===1?"":"s"}, ${s.yes} yes as written, ${s.changed} changed, ${s.no} no, ${s.auto} by autopilot${s.undone?", "+s.undone+" undone":""}`; }).join("<br>")}</div>`;
 }
 function render(){
+  renderDriving();
   const n = S.cards.length;
   $("count").textContent = S.loaded && !S.err ? n + " waiting" : "–";
   $("count").className = "count" + (n ? "" : " zero");
