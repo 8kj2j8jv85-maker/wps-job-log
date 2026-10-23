@@ -501,6 +501,8 @@
   .drv-on .drv-sw{ background:var(--coral); justify-content:flex-end; }
   .drv-sw:focus-visible{ outline:3px solid #B7C6F0; outline-offset:2px; }
   .drv-knob{ width:32px; height:32px; border-radius:50%; background:#fff; display:block; }
+  .drv-link{ align-self:flex-start; margin-top:4px; color:#F2937D; font-size:13px; font-weight:600; text-decoration:underline; display:inline-flex; align-items:center; gap:6px; min-height:24px; }
+  .drv-n{ background:var(--coral); color:#fff; border-radius:999px; padding:0 8px; font-size:12px; text-decoration:none; }
   /* Today header (Lex, 23 Oct 01:45): title, weather and ticker left; right column = version label, Who's driving, then Engage and New job, all one width */
   .page-head-today{ flex-wrap:nowrap; align-items:flex-start; }
   .page-head-today > .ph-left{ flex:1 1 auto; min-width:0; }
@@ -4552,6 +4554,7 @@ function refreshAll(){
       if (state.cloudStatus === "saving" && waited < 30000){ waited += 300; return setTimeout(next, 300); }
       loadAmendments();
       checkForBookings();
+      loadDecisionCount();
       setTimeout(done, 400);
     };
     setTimeout(next, 300);
@@ -5409,7 +5412,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#108)";
+const BUILD = "23 Oct 2026 (#109)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6063,32 +6066,41 @@ function refreshHealth(){ ensureSheetsToken(async function(){ await loadHealth()
 const LS_SLOT_SET = "wps_slot_settings_v1";
 // Who's driving (Lex, 23 Oct 01:29): Manual or Claude autopilot. Saved to the Job Log Sheet (Meta tab, row "autopilot")
 // so the PC and phone show the same. With autopilot on, Claude may add and edit jobs without asking; anything that emails
-// a client, agent, landlord or tenant still waits for Lex's yes. AUTOPILOT_LIVE stays false until the hourly Claude check
-// reads this setting (step 2); until then the panel says so, so nobody thinks Claude is already running the office.
+// a client, agent, landlord or tenant still waits for Lex's yes. 23 Oct 02:20: live through the WPS script (file Autopilot):
+// the booking reader turns booking emails into cards on the Decisions page (decisions.html); the panel links there with a count.
 const LS_AUTOPILOT = "wps_autopilot_v1";
 const DOOR_MARK_SVG = '<svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg>';
-const AUTOPILOT_LIVE = false;
+const AUTOPILOT_LIVE = true;
 function autopilotParse(raw){
   try { const v = typeof raw === "string" ? JSON.parse(raw) : raw; if (!v || (v.mode !== "claude" && v.mode !== "manual")) return null;
         return { mode: v.mode, at: /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v.at || "") ? v.at : "" }; } catch(e){ return null; }
 }
 function autopilotGet(){ return autopilotParse(lsGet(LS_AUTOPILOT) || "") || { mode:"manual", at:"" }; }
 function autopilotOn(){ return autopilotGet().mode === "claude"; }
+// Waiting cards for the panel's Decisions link (device key only; quiet if the script file isn't pasted yet).
+async function loadDecisionCount(){
+  if (!dashKey() || !autopilotOn()){ if (state.auWaiting){ state.auWaiting = 0; render(); } return; }
+  try { const d = await dashCall("auList"); const n = d && d.ok && Array.isArray(d.cards) ? d.cards.filter(c => c.status === "waiting").length : 0;
+        if (n !== (state.auWaiting || 0)){ state.auWaiting = n; render(); } } catch(e){}
+}
 function setAutopilot(on){
   if (on === autopilotOn()) return;
   if (on && !confirm("Switch to Claude autopilot?\n\nClaude can add and change jobs without asking.\nNothing is emailed to a client, agent, landlord or tenant until you say yes.")) return;
   lsSet(LS_AUTOPILOT, JSON.stringify({ mode: on ? "claude" : "manual", at: new Date().toISOString() }));
   const dd = dirtyGet(); dd.auto = true; dirtySet(dd);
-  markLocalChange();   // saves to the Job Log Sheet (Meta tab), where the hourly check will read it
+  markLocalChange();   // saves to the Job Log Sheet (Meta tab), where the autopilot script reads it (file Autopilot)
   render();
+  setTimeout(loadDecisionCount, 1500);
 }
 function renderDriving(){
   const on = autopilotOn();
   const sub = !AUTOPILOT_LIVE ? (on ? "Saved. Claude starts acting on this once the hourly check is updated." : "Nothing runs on its own. You click every step.")
-            : on ? "Claude runs the office. Nothing is emailed without your yes." : "Nothing runs on its own. You click every step.";
+            : on ? "Claude reads the booking emails. Nothing is emailed without your yes." : "Nothing runs on its own. You click every step.";
+  const n = state.auWaiting;
+  const link = on || n ? `<a class="drv-link" href="decisions.html"${tip("Your decisions: swipe right yes, left no, up later")}>Decisions${n ? ` <span class="drv-n">${n}</span>` : ""}</a>` : "";
   return `<div class="drv${on ? " drv-on" : ""}">
     <span class="drv-mark" aria-hidden="true">${DOOR_MARK_SVG}</span>
-    <span class="drv-txt"><span class="drv-k">Who's driving</span><span class="drv-t">${on ? "Claude autopilot" : "Manual"}</span><span class="drv-s">${sub}</span></span>
+    <span class="drv-txt"><span class="drv-k">Who's driving</span><span class="drv-t">${on ? "Claude autopilot" : "Manual"}</span><span class="drv-s">${sub}</span>${link}</span>
     <button class="drv-sw" role="switch" aria-checked="${on}" aria-label="Claude autopilot" onclick="setAutopilot(${!on})"${tip(on ? "Switch back to Manual: nothing runs on its own" : "Switch on Claude autopilot")}><span class="drv-knob"></span></button>
   </div>`;
 }
@@ -6781,6 +6793,8 @@ function autoRefresh(){
   window.scrollTo(0, y);
 }
 setInterval(autoRefresh, 3*60*1000);
+setTimeout(loadDecisionCount, 4000);                                   // Decisions count on the Who's driving panel (23 Oct)
+setInterval(() => { if (document.visibilityState === "visible") loadDecisionCount(); }, 5*60*1000);
 document.addEventListener("visibilitychange", function(){ if (!document.hidden){ autoRefresh(); checkBuild(false); } });
 window.addEventListener("pageshow", function(e){ if (e.persisted){ autoRefresh(); checkBuild(false); } });   // iPhone: back to the open tab
 window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (state.dashCycleAt || 0) > 60000) autoRefresh(); });
