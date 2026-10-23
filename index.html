@@ -8,6 +8,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>WPS Dashboard</title>
+<!-- Home-screen icon and app mode (Lex, 23 Oct 2026): navy tile with the WPS door mark from the logo -->
+<meta name="theme-color" content="#141D3D" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="WPS" />
+<link rel="apple-touch-icon" href="icons/dashboard-180.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/dashboard-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/dashboard-192.png" />
+<link rel="manifest" href="dashboard.webmanifest" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
 <script>try{var th=localStorage.getItem("wps_theme_v1");if(th==="light"||th==="night")document.documentElement.setAttribute("data-theme",th);}catch(e){}</script>
@@ -5412,7 +5422,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#109)";
+const BUILD = "23 Oct 2026 (#110)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
