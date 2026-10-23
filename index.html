@@ -1552,6 +1552,14 @@ async function cloudSyncNow(){
     }
   });
 }
+// Auto-engage (Lex, 23 Oct 18:13: "fed up with this having to press this engage button"). With the device key the
+// dashboard already updates itself on open, every 3 minutes and on coming back to the tab (dashCycle); the button now
+// just says when it last did, and clicking it updates straight away.
+function engageLabel(){
+  if (state.refreshBusy || state.dashBusy) return "Updating…";
+  if (keyMode()) return state.lastCycleOk ? "Up to date " + pad2(state.lastCycleOk.getHours()) + ":" + pad2(state.lastCycleOk.getMinutes()) : "Updating…";
+  return "Engage";
+}
 function renderSyncBtn(){
   // phone/tablet: the Sync button itself says what's happening
   const s = state.cloudStatus || "idle";
@@ -1560,7 +1568,7 @@ function renderSyncBtn(){
   const cls = s==="saved" ? " sync-ok" : (s==="error"||s==="conflict") ? " sync-bad" : "";
   // Phone Dashboard (Lex, 18 Oct): no separate Save button, "Engage" (was Check everything now) saves too. Just a status line.
   if (state.view === "today"){
-    const line = s==="saving" ? "Saving to Google…" : s==="saved" ? "Saved to Google ✓ "+t : (s==="error"||s==="conflict") ? "Not saved ⚠ "+(state.cloudMsg || "")+" Tap Engage to try again." : "";
+    const line = s==="saving" ? "Saving to Google…" : s==="saved" ? "Saved to Google ✓ "+t : (s==="error"||s==="conflict") ? "Not saved ⚠ "+(state.cloudMsg || "")+" Tap Up to date to try again." : "";
     return `<div id="syncBtn" class="phone-only sync-line${cls}">${esc(line)}</div>`;
   }
   return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}${hint("Tap after changes on the phone: saves to Google and loads changes from the PC")}>${esc(label)}</button>`
@@ -3279,8 +3287,17 @@ function queueAlreadyDone(it){
 // for anything from an agent or with booking words in it. It's only a heads-up: the card shows the email and
 // Open email / Dismiss. Once Claude's inbox check has read the same email and queued a booking card for it,
 // the heads-up card hides by itself.
+// A heads-up card also clears itself once the email has been answered (Lex, 23 Oct 18:14: Robbie's "12:00 is fine"
+// card stayed up after the confirm went): the Check-in emails log shows a send to that sender after the email came in.
+function watchAnswered(it){
+  const from = (String(it.sourceFrom||"").match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [""])[0].toLowerCase();
+  const at = new Date(it.sourceDate || 0).getTime();
+  if (!from || !at || !state.ciLog || !Array.isArray(state.ciLog.rows)) return false;
+  return state.ciLog.rows.some(r => /sent/i.test(r.status||"") && String(r.to||"").toLowerCase().indexOf(from) > -1 && new Date(r.at).getTime() > at);
+}
 function watchCovered(it){
   if (!it || it.kind !== "watch") return false;
+  if (watchAnswered(it)) return true;
   const keys = [it.msgId, it.threadId].map(x => String(x||"")).filter(x => /^[A-Za-z0-9]{6,}$/.test(x));
   if (!keys.length) return false;
   return state.queue.some(o => o !== it && o.kind !== "watch" && keys.some(k => String(o.id||"").indexOf(k) === 0 || String(o.sourceUrl||"").indexOf(k) > -1));
@@ -4926,7 +4943,7 @@ function loadAmendments(quiet){
     rerenderToday();
   });
 }
-function rerenderToday(){ if (state.view === "today") render(); else if (state.view === "reports") rpRedraw(); }   // Reports: Amendments status
+function rerenderToday(){ if (state.view === "reports") rpRedraw(); else safeRender(); }   // 23 Oct: Job Log too (its To review cards use the check-in log)   // Reports: Amendments status
 // Amendments points (Lex, 20 Oct): tap a job to read every point sent in through the form, straight from the Amendments tab.
 // The old review page (claude.ai artifact) had its own empty database, so it's no longer linked.
 function toggleAmendJob(job){ state.amendOpen = state.amendOpen || {}; state.amendOpen[job] = !state.amendOpen[job]; render(); }
@@ -5537,7 +5554,7 @@ function renderToday(){
       + (sentNoDate ? note(sentNoDate+" check-in report"+(sentNoDate===1?"":"s")+" marked Sent before dates were recorded, so not shown.") : ""); break;
     case "amend": title = "Amendments"; body = renderAmendCard(true); break;
     case "temail": title = "Emails to tenants (last 14 days)";
-      body = (state.ciLog ? rows(ciRecent, r => ciLogLine(r, true), "No check-in emails sent to tenants in the last 14 days.") : `<div class="t-empty">Not loaded yet. Press Engage.</div>`)
+      body = (state.ciLog ? rows(ciRecent, r => ciLogLine(r, true), "No check-in emails sent to tenants in the last 14 days.") : `<div class="t-empty">${keyMode() ? "Loading… (the dashboard updates itself)" : "Not loaded yet. Press Engage."}</div>`)
         + note("From the WPS script's Check-in emails log, so it's the real record of what went out. Red NOT SENT lines never went and say why; grey lines are repeat clicks the script stopped. Each job's form lists its own emails too."); break;
     case "times": { title = "Times to agree";
       const ttRow = j => needsTenantTime(j)
@@ -5572,7 +5589,7 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`Start each day with <b>Engage</b> (top right). Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`The dashboard updates itself (on open, every 3 minutes and when you come back to it); the top-right button says when it last did. Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
     ${panel ? `<div class="t-card d-card d-panel d-panel-top" id="dashPanel">
       <h3>${esc(title)} <button class="d-x" onclick="setDashPanel(null)"${tip("Close this list")}>✕ Close</button></h3>
       ${body}
@@ -5659,7 +5676,7 @@ function renderPageHead(){
     <div class="page-right">${renderBuildTop()}${state.view === "today" ? renderDriving() : ""}<div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
-        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Engaging…" : "Engage"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
+        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint(keyMode() ? "Updates by itself: when the page opens, every 3 minutes and when you come back to it. Click to update now." : "One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${engageLabel()}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
       <button class="nj-btn" onclick="openNew()"${tip("New job: log a job by hand")} aria-label="New job"><span class="door-circle"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></span><span class="nj-lbl">New job</span></button>
     </div></div>
@@ -5749,7 +5766,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#121)";
+const BUILD = "23 Oct 2026 (#122)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6387,7 +6404,7 @@ function renderHealthSide(){
 function openHealth(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "health"; state.menuOpen = false; navSetView("today"); render(); focusDashPanel(); }
 function renderHealthPanel(){
   const h = state.health;
-  if (!h) return `<div class="t-empty">Not loaded yet. Click <b>Engage</b> (top right).</div>`;
+  if (!h) return `<div class="t-empty">${keyMode() ? "Loading… (the dashboard updates itself)" : "Not loaded yet. Click <b>Engage</b> (top right)."}</div>`;
   if (h.error) return `<div class="t-empty">${esc(h.error)}. <button class="t-link" onclick="refreshHealth()">Try again</button></div>`;
   if (h.missing) return `<div class="t-empty" style="color:var(--ink)">The health check hasn't been started yet. In the WPS Amendments script editor, pick <b>hcStart</b> in the function box and click Run.</div>`;
   const s = healthSummary();
@@ -6842,10 +6859,8 @@ function renderWordFileField(f, isNew){
   const r = state.wordFind && state.wordFind.job === String(f.jobNo).toUpperCase().replace(/\s+/g,"") ? state.wordFind : null;
   let body = "";
   const jn = String(f.jobNo).toUpperCase().replace(/\s+/g,"");
-  // One click into desktop Word on the PC (Lex, 22 Oct): wpsword: is registered on the HP and opens the job's newest
-  // .docx from the synced Dropbox Word Docs folder (C:\WPS Panel\wps-open-word.ps1). Phones and the tablet don't have it.
-  const wordBtn = `<div class="pl-row"><a class="btn btn-coral btn-sm" href="wpsword:${esc(jn)}"${tip("Opens this job's Word report in Word on the PC (needs the Open in Word helper on that PC)")}>Open in Word</a>
-      <span class="field-hint">PC only. If nothing opens, use the Dropbox links below.</span></div>`;
+  // Lex, 23 Oct 18:13: no Open in Word in the job form ("no need for it to open Word there"); Past reports below instead.
+  const wordBtn = "";
   if (!keyMode()) body = wordBtn + `<span class="field-hint">Dropbox list needs this device's key (More > Device key).</span>`;
   else if (!r) body = wordBtn + `<button type="button" class="btn btn-ghost btn-sm" onclick="findWordFile()"${tip("List this job's Word report(s) in Dropbox > Reports > Word Docs")}>Show Dropbox files</button>`;
   else if (r.busy) body = wordBtn + `<span class="field-hint">Looking in Dropbox...</span>`;
@@ -6869,6 +6884,50 @@ async function findWordFile(){
   rerenderWordFile();
 }
 // Redraws only the Word file box, so nothing typed in the form is lost.
+// Past reports for this address (Lex, 23 Oct 18:13): "a link to the PDFs, the latest report or all the reports on PDF,
+// related to this address". Every WPS and Wellington Parker report at the job's postcode, this property first, newest
+// first. Open = the same PDF viewer as the Reports page (arrows go through this list). All reports = the Reports page
+// searched by the postcode.
+function pastReportsFor(f){
+  const pc = normPc(f.postcode || (String(f.address||"").match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i) || [""])[0]);
+  if (!pc) return { pc:"", list:[] };
+  const lead = a => (String(a||"").toLowerCase().match(/^(?:flat|apartment|apt|unit)?\s*[\w-]*\d[\w-]*/) || [""])[0].replace(/\s+/g," ").trim();
+  const me = lead(f.address);
+  const list = rpAll().filter(x => x.id !== f.id && rpReportUrl(x) && (normPc(x.postcode) === pc || normPc(x.address).endsWith(pc)))
+    .map(x => Object.assign({ same: !!me && lead(x.address) === me }, { j: x }))
+    .sort((a, b) => (b.same - a.same) || String(b.j.date||"").localeCompare(String(a.j.date||"")));
+  return { pc, list };
+}
+function renderPastReports(f, isNew){
+  if (isNew || !f.address) return "";
+  if (!state.archive && keyMode() && !rpArchBusy && !state.pastTried){ state.pastTried = true; setTimeout(() => rpLoadArchive().then(rerenderPastReports, rerenderPastReports), 0); }
+  const { pc, list } = pastReportsFor(f);
+  let body;
+  if (!pc) body = `<span class="field-hint">No postcode on this job, so no past reports to match.</span>`;
+  else if (!list.length) body = `<span class="field-hint">${!state.archive && keyMode() && rpArchBusy ? "Looking for past reports..." : "No past report PDFs found for " + esc(f.postcode || pc) + "."}</span>`;
+  else body = list.slice(0, 8).map(o => { const x = o.j;
+      return `<div class="pl-row wf-row"><button type="button" class="btn ${o.same ? "btn-coral" : "btn-ghost"} btn-sm" onclick="pastOpen('${esc(x.id)}')">Open PDF</button>
+      <span class="wf-name">${esc(x.date ? formatDate(x.date) : "")} · ${esc(x.type||"")} · ${esc(x.jobNo||"")}${x.isArchive ? " (Wellington Parker)" : ""}</span><span class="field-hint">${esc(String(x.address||"").slice(0,60))}</span></div>`; }).join("")
+    + (list.length > 8 ? `<span class="field-hint">${list.length - 8} more on the Reports page.</span>` : "");
+  const all = pc ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pastAll('${esc(f.postcode || pc)}')">All reports at ${esc(f.postcode || pc)}</button>` : "";
+  return `<div class="field wide">Past reports (PDF)<div class="pr-box">${body}<div class="pl-row">${all}</div></div></div>`;
+}
+function rerenderPastReports(){
+  const box = document.querySelector(".pr-box"); if (!box || !state.editing) return;
+  const tmp = document.createElement("div"); tmp.innerHTML = renderPastReports(state.editing, false);
+  const nb = tmp.querySelector(".pr-box"); if (nb) box.replaceWith(nb);
+}
+function pastOpen(id){
+  const ids = pastReportsFor(state.editing || {}).list.map(o => o.j.id);
+  const x = rpAll().find(j => j.id === id), u = x ? rpReportUrl(x) : ""; if (!u) return;
+  if (window.innerWidth < 700){ window.open(u, "_blank", "noopener"); return; }
+  rpView = { ids: ids.length ? ids : [id], i: Math.max(0, ids.indexOf(id)), back: document.activeElement };
+  rpViewDraw();
+}
+function pastAll(pc){
+  if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); }
+  state.rpSearch = pc; state.rpLimit = RP_PAGE; navSetView("reports"); render();
+}
 function rerenderWordFile(){
   const box = document.querySelector(".wf-box"); if (!box || !state.editing) return;
   const tmp = document.createElement("div"); tmp.innerHTML = renderWordFileField(state.editing, false);
@@ -7046,6 +7105,7 @@ function renderForm(){
         <input type="text" id="f_parkingExtra" inputmode="decimal" value="${esc(f.parkingExtra||"")}" placeholder="Blank = included in the price" />
       </label>
       ${renderPhotoLinkField(f)}
+      ${renderPastReports(f, isNew)}
       ${renderWordFileField(f, isNew)}
       ${renderPropertyHistory(f)}
       ${!isNew && f.jobNo && keyMode() ? renderMailBox(f) : renderCiLogBox(f)}${renderVrBox(f)}${renderMtFormBox(f, isNew)}
@@ -7224,8 +7284,10 @@ async function dashCycle(){
     await dashQueue(true);
     loadAmendments(true);
     loadKp();
+    loadDecisionCount();
     autoDeem();
-  } finally { state.dashBusy = false; }
+    state.lastCycleOk = new Date();
+  } finally { state.dashBusy = false; safeRender(); }
 }
 // Keeper (20 Oct): held reports and day-before reminders from the script logs (Dash op kpRead, script file Keeper).
 const HELD_FOLDER_URL = "https://drive.google.com/drive/folders/1i3YRfUbB6zQ_dDPHv8F9ZDkmBepn8hCO";
