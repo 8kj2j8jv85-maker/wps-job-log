@@ -71,6 +71,9 @@
   .done .tx{ display:flex; flex-direction:column; gap:2px; flex:1 1 auto; min-width:0; }
   .done .who{ font-size:12px; font-weight:700; color:var(--text3); } .done .who.auto{ color:var(--coral-hl); }
   .done .what{ font-size:15px; font-weight:600; overflow-wrap:anywhere; } .done .res{ font-size:13px; color:#A8B1C2; overflow-wrap:anywhere; }
+  .embtn{ display:inline-flex; align-items:center; text-decoration:none; border-color:#E8735A; color:#E8735A; white-space:nowrap; }
+  .done .acts{ display:flex; flex-direction:column; gap:6px; flex:0 0 auto; }
+  #toast .embtn{ min-height:36px; margin-left:6px; }
   .ghost{ min-height:44px; padding:0 14px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:15px; font-weight:600; cursor:pointer; }
   .score{ background:var(--dark); border:1px solid #2B3550; border-radius:16px; padding:12px 14px; font-size:14px; line-height:1.5; color:var(--text2); }
   .msg{ background:var(--navy); border-radius:16px; padding:16px; font-size:15px; line-height:1.5; color:var(--text2); }
@@ -167,7 +170,7 @@ async function decide(id, answer, extra){
   }
   const what = answer === "later" ? "Later: kept in the list, no more alerts for it." : answer === "no" ? (d.lesson ? "No. Lesson saved." : "No. Dropped.") : esc(d.result || "Done.");
   S.lastUndo = (answer === "yes" || answer === "choice") && card && card.kind === "booking" ? id : null;
-  toast(what + (S.lastUndo ? ` <button onclick="undo('${id}')">Undo</button>` : ""));
+  toast(what + (d.email ? " " + emailBtn(d.email) : "") + (S.lastUndo ? ` <button onclick="undo('${id}')">Undo</button>` : ""));
   await load(true); return true;
 }
 async function undo(id){
@@ -206,6 +209,10 @@ async function setMode(on){
 }
 
 // ---------- main view ----------
+// Refine 2 (Lex 23 Oct): yes on a tenant time sets the job; the confirm email is offered, never sent from here.
+// The button opens the dashboard's Email the tenants box with a preview of the navy email.
+function emailLink(e){ return e && /^WPS\d{6}$/.test(e.job || "") ? "./?from=decisions&email=" + encodeURIComponent(e.kind || "confirm") + "&job=" + encodeURIComponent(e.job) : ""; }
+function emailBtn(e){ const u = emailLink(e); return u ? `<a class="ghost embtn" href="${esc(u)}">Email the tenants</a>` : ""; }
 function rowsHtml(rows){ return (rows||[]).length ? `<div class="rows">${rows.map(r => `<div><span class="k">${esc(r[0])}</span><span class="v">${esc(r[1])}</span></div>`).join("")}</div>` : ""; }
 function cardHtml(c){
   const tag = c.status === "later" ? `<span class="tag later">Later</span>` : "";
@@ -249,7 +256,7 @@ function render(){
       </div>`;
   }
   $("area").innerHTML = h;
-  const done = S.recent.map(r => `<div class="done"><div class="tx"><span class="who${r.status==="auto"?" auto":""}">${r.status==="auto"?"AUTOPILOT DID THIS":r.status==="undone"?"UNDONE":r.status==="failed"?"DIDN'T WORK":r.status==="no"?"YOU SAID NO":"YOU SAID YES"} · ${esc(ago(r.decided))}</span><span class="what">${esc(r.title)}</span>${r.result?`<span class="res">${esc(r.result)}</span>`:""}</div>${r.undo?`<button class="ghost" onclick="undo('${esc(r.id)}')">Undo</button>`:""}</div>`).join("");
+  const done = S.recent.map(r => `<div class="done"><div class="tx"><span class="who${r.status==="auto"?" auto":""}">${r.status==="auto"?"AUTOPILOT DID THIS":r.status==="undone"?"UNDONE":r.status==="failed"?"DIDN'T WORK":r.status==="no"?"YOU SAID NO":"YOU SAID YES"} · ${esc(ago(r.decided))}</span><span class="what">${esc(r.title)}</span>${r.result?`<span class="res">${esc(r.result)}</span>`:""}</div>${r.email||r.undo?`<span class="acts">${emailBtn(r.email)}${r.undo?`<button class="ghost" onclick="undo('${esc(r.id)}')">Undo</button>`:""}</span>`:""}</div>`).join("");
   $("recent").innerHTML = (done ? `<div class="sec">Done in the last 7 days</div><div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">${done}</div>` : "") + (scoreHtml() ? `<div style="margin-top:12px">${scoreHtml()}</div>` : "");
   wireSwipe();
 }
