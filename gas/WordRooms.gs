@@ -49,17 +49,24 @@ function wdrCdNames_(cd, at, count) {
   return out;
 }
 // Photo file names -> rooms in walk-round order (areas that aren't rooms left out).
+// Names look like JOB.PROP.23.10.26.Bedroom 1 (Forward)_07.jpg (date dd.mm.yy, or ddmmyy in older sets). The bracketed
+// part is the Photo Tool's direction note, not part of the room name (Oxley 23 Oct: "Bedroom 1 (Forward)" = Bedroom 1).
+// No kitchen area at all = open plan: the first living / reception area becomes "<name> and Kitchen" (Oxley's report).
 function wdrAreas_(names) {
   const out = [], seen = {};
   (names || []).forEach(function (n) {
     const base = String(n).split('/').pop();
-    const m = /^[^.]+\.[^.]+\.\d{6}\.(.+)_\d{2,3}\.jpe?g$/i.exec(base);
+    const m = /^[^.]+\.[^.]+\.(?:\d{6}|\d{2}\.\d{2}\.\d{2,4})\.(.+)_\d{2,3}\.jpe?g$/i.exec(base);
     if (!m) return;
-    const a = m[1].replace(/\s+/g, ' ').trim();
+    const a = m[1].replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, ' ').trim();
     if (!a || WDR.NOT_ROOMS.test(a)) return;
     const k = a.toLowerCase();
     if (!seen[k]) { seen[k] = 1; out.push(a); }
   });
+  if (!out.some(function (a) { return /kitchen/i.test(a); })) {
+    const i = out.findIndex(function (a) { return /living|lounge|reception|sitting|dining|open plan/i.test(a); });
+    if (i !== -1) out[i] = out[i] + ' and Kitchen';
+  }
   return out;
 }
 // Which template room a room is copied from. rooms: the template's room names.
