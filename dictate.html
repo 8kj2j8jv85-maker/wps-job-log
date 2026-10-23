@@ -751,7 +751,9 @@ function renderClips(){
 function buildOutput(){
   var j = job(); if(!j) return '';
   var t = TYPES[j.type] || TYPES.CO;
-  var d = new Date(j.created).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  // 23 Oct (Lex): the visit date from the Job Log, not the day this dictation was first started on the device
+  var lj = logJob(j.jobNo), vd = lj && /^\d{4}-\d{2}-\d{2}$/.test(String(lj.date||'')) ? new Date(lj.date + 'T12:00:00') : new Date(j.created);
+  var d = vd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   var lines = ['WPS dictation for report writing',
     'Job: ' + (j.jobNo || '(no job no.)') + ' | ' + t.name + ' | ' + (j.address || '(no address)'),
     'Date: ' + d, t.ask, ''];
