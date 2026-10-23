@@ -145,6 +145,10 @@
   .pr-type{ border:1px solid var(--coral); border-radius:6px; padding:1px 7px; font-size:12px; }
   .pr-sub{ font-size:13px; opacity:.85; margin-top:3px; }
   .pr-btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  .pr-present{ display:flex; align-items:center; gap:6px; margin-top:6px; white-space:nowrap; }
+  .pr-present select{ max-width:240px; }
+  .pr-present select{ font:inherit; padding:3px 6px; border-radius:6px; border:1px solid var(--coral); background:transparent; color:inherit; }
+  .pr-present select option{ color:#000; }
   /* Photos on the Processing page (23 Oct, Lex): the WPS panel's photo picker in a big window over the page */
   .ph-ov{ position:fixed; inset:0; z-index:400; background:rgba(12,18,40,.6); display:flex; align-items:stretch; justify-content:center; padding:2vh 2vw; }
   .ph-win{ flex:1; max-width:1400px; background:#0C1228; border:1.5px solid var(--coral); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; }
@@ -1655,7 +1659,7 @@ function logChange(j, text){
   j.history.unshift({ at: new Date().toISOString(), dev: navigator.platform||"", what: String(text).slice(0, 300) });
   if (j.history.length > 40) j.history.length = 40;
 }
-const HIST_FIELDS = [["date","Date"],["time","Time"],["address","Address"],["postcode","Postcode"],["client","Agent"],["type","Type"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no."],["photoLink","Photo link"],["keysFrom","Keys from"],["keysBack","Keys back to"],["parkingExtra","Parking extra"],["notes","Notes"]];
+const HIST_FIELDS = [["date","Date"],["time","Time"],["address","Address"],["postcode","Postcode"],["client","Agent"],["type","Type"],["tenants","Tenants"],["tenantEmails","Tenant emails"],["agentEmail","Copy to"],["invoice","Invoice"],["invoiceNo","Invoice no."],["photoLink","Photo link"],["keysFrom","Keys from"],["keysBack","Keys back to"],["present","Persons present"],["presentNote","Persons present names"],["parkingExtra","Parking extra"],["notes","Notes"]];
 function jobDiff(a, b){
   const st = a.status && b.status && a.status !== b.status ? ["Status: "+statusMeta(a.status).label+" → "+statusMeta(b.status).label] : [];
   return st.concat(HIST_FIELDS.filter(([k]) => String(a[k]||"") !== String(b[k]||"")).map(([k,l]) => k === "notes" ? "Notes changed" : l+": "+(String(a[k]||"")||"–")+" → "+(String(b[k]||"")||"–"))).join("; ");
@@ -2256,6 +2260,7 @@ function submitForm(){
     notes: g("f_notes").value,
     keysFrom: g("f_keysFrom").value, keysFromNote: g("f_keysFromNote").value.trim(),
     keysBack: g("f_keysBack").value, keysBackNote: g("f_keysBackNote").value.trim(),
+    present: g("f_present") ? g("f_present").value : (state.editing.present || ""), presentNote: g("f_presentNote") ? g("f_presentNote").value.trim() : (state.editing.presentNote || ""),
     noVisitReminder: !!(g("f_noVisitReminder") && g("f_noVisitReminder").checked),
     congestion: !!(g("f_congestion") && g("f_congestion").checked),
     parkingExtra: (g("f_parkingExtra") ? g("f_parkingExtra").value : "").replace(/[£\s]/g,""),
@@ -4168,7 +4173,8 @@ function renderProcessing(){
     return `<section class="pr-card" aria-label="${esc(k)}">
       <div class="pr-top">
         <div><div class="pr-title"><span class="pr-type">${esc(j.type||"")}</span><a href="#" onclick="openEdit('${esc(j.id)}');return false;"${tip("Open the job")}>${esc(j.jobNo||"(no job no.)")}</a> <span>${esc(fullAddress ? fullAddress(j) : (j.address||""))}</span></div>
-          <div class="pr-sub">${esc(j.client||"")} · visited ${esc(vis)}${d ? ` · <span class="${d.cls}">${esc(d.text)}</span>` : ""}</div></div>
+          <div class="pr-sub">${esc(j.client||"")} · visited ${esc(vis)}${d ? ` · <span class="${d.cls}">${esc(d.text)}</span>` : ""}</div>
+          <label class="pr-sub pr-present"${tip("Who was there at the visit: fills the report's Persons present line and Tenant present; Run checks compares the report with it")}>Persons present <select onchange="setPresent('${esc(j.id)}', this.value)" aria-label="Persons present at the visit">${PRESENT.map(p => `<option value="${p[0]}"${(j.present||"")===p[0]?" selected":""}>${esc(p[1])}</option>`).join("")}</select>${j.present === "other" || (j.presentNote && j.present !== "clerk") ? ` <span>${esc(presentText(j))}</span>` : ""}</label></div>
         <div class="pr-btns">
           ${procWordBtn(j)}
           ${photos}
@@ -4268,7 +4274,7 @@ async function procCheck(k){
   const j = state.jobs.find(x => procKey(x) === k); if (!j) return;
   state.procChecks = state.procChecks || {}; state.procChecks[k] = { busy:true }; render();
   try {
-    const d = await dashCall("wordCheck", { job:k, photoLink: j.photoLink || "", postcode: j.postcode || "", date: j.date || "", type: j.type || "", address: [j.address, j.town, j.postcode].filter(Boolean).join(", ") });   // build plan item 3: the script checks these against the file
+    const d = await dashCall("wordCheck", { job:k, photoLink: j.photoLink || "", postcode: j.postcode || "", date: j.date || "", type: j.type || "", address: [j.address, j.town, j.postcode].filter(Boolean).join(", "), present: j.present || "", presentText: presentText(j) });   // build plan item 3; persons present 23 Oct: the script checks these against the file
     state.procChecks[k] = d && d.ok ? { checks: d.checks || [], file: d.file, modified: d.modified || "" } : { error: (d && d.error === "Unknown request.") ? "The script hasn't got the Processing part yet (new deployment needed)." : ((d && d.error) || "No answer") };
   } catch(e){ state.procChecks[k] = { error: String(e && e.message || e) }; }
   render();
@@ -5155,6 +5161,15 @@ function linkPhones(t){
 }
 // Keys (Lex, 20 Oct, D1): where the keys come from and where they go back, per job. Collected keys that
 // haven't been marked returned after the visit show in Do next.
+// Persons present at the visit (Lex, 23 Oct): fills the report's "Persons present during the inspection" line and the
+// Inspection Summary "Tenant present"; Run checks compares the report with it.
+const PRESENT = [["","Not set yet"],["tenant","Tenant"],["tenants","Tenants"],["clerk","Clerk only (no one home)"],["agent","Agent"],["landlord","Landlord"],["other","Other (type names)"]];
+function presentText(j){ const v = j && j.present; if (!v) return ""; if (v === "other") return String(j.presentNote||"").trim() || "Other";
+  const base = (PRESENT.find(p => p[0] === v) || ["",""])[1].replace(/ \(.*\)$/, ""); return j.presentNote && v !== "clerk" ? base + " (" + String(j.presentNote).trim() + ")" : base; }
+function setPresent(id, v){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  const before = snapJob(j); j.present = v; saveJobs(); render(); showUndo(`${j.jobNo || "Job"}: persons present ${v ? presentText(j) : "cleared"}`, before);
+}
 const KEYS_FROM = [["","—"],["tenant","Tenant lets me in"],["office","Agent office"],["concierge","Concierge"],["lockbox","Key safe / lockbox"],["landlord","Landlord"],["other","Other (see note)"]];
 const KEYS_BACK = [["","—"],["none","Nothing to return"],["office","Agent office"],["concierge","Concierge"],["lockbox","Key safe / lockbox"],["property","Leave in the property"],["landlord","Landlord"],["tenant","Hand to tenant"],["other","Other (see note)"]];
 function keysLabel(list, v){ const r = list.find(x => x[0] === v); return r && v ? r[1] : ""; }
@@ -5662,7 +5677,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#117)";
+const BUILD = "23 Oct 2026 (#118)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6940,6 +6955,12 @@ function renderForm(){
       <label class="field">Where / who
         <input type="text" id="f_keysBackNote" value="${esc(f.keysBackNote||"")}" placeholder="Leave blank if the same place" />
       </label>
+      <label class="field"><span${hint("Who was there at the visit. Goes on the report's last page (Persons present) and the Inspection Summary (Tenant present); Run checks compares the report with it.")}>Persons present at the visit</span>
+        <select id="f_present">${PRESENT.map(k=>`<option value="${k[0]}" ${(f.present||"")===k[0]?"selected":""}>${esc(k[1])}</option>`).join("")}</select>
+      </label>
+      <label class="field">Names (if wanted)
+        <input type="text" id="f_presentNote" value="${esc(f.presentNote||"")}" placeholder="e.g. Esther Davies" />
+      </label>
       <label class="field wide" style="flex-direction:row;align-items:center;gap:8px">
         <input type="checkbox" id="f_noVisitReminder" ${f.noVisitReminder ? "checked" : ""} style="width:20px;height:20px;flex:none" />
         <span${hint("The script emails tenants about 17:00 the day before a booked visit that has a time. Tick to skip it for this job.")}>No day-before reminder to tenants</span>
@@ -7332,7 +7353,7 @@ let navReturn = { y: null, id: null };   // where the page was when the form ope
 
 const NAV_FIELDS = { jobNo:"f_jobNo", type:"f_type", status:"f_status", date:"f_date", time:"f_time", propertyType:"f_propertyType",
   address:"f_address", town:"f_town", postcode:"f_postcode", bedrooms:"f_bedrooms", extraAreas:"f_extraAreas",
-  notes:"f_notes", keysFrom:"f_keysFrom", keysFromNote:"f_keysFromNote", keysBack:"f_keysBack", keysBackNote:"f_keysBackNote", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
+  notes:"f_notes", keysFrom:"f_keysFrom", keysFromNote:"f_keysFromNote", keysBack:"f_keysBack", keysBackNote:"f_keysBackNote", present:"f_present", presentNote:"f_presentNote", photoLink:"f_photoLink", invoice:"f_invoice", invoiceNo:"f_invoiceNo" };
 function formSnapshot(){
   const f = state.editing; if (!f) return null;
   const val = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
