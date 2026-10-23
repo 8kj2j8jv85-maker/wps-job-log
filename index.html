@@ -486,6 +486,22 @@
   .page-head{ position:relative; }
   .page-head .build-top{ position:absolute; top:8px; right:0; }
   .page-head:not(.page-head-rp) .page-right{ padding-top:26px; }   /* clear space under the version label (Lex, 21 Oct 02:40) */
+  /* Who's driving panel (Lex, 23 Oct 01:21: mock-up C): navy, WPS door mark on coral, switch on the right */
+  .drv{ display:flex; align-items:center; gap:14px; align-self:center; width:420px; max-width:100%; box-sizing:border-box; padding:12px 16px; border-radius:18px; background:#141D3D; color:#fff; box-shadow:0 6px 18px rgba(20,29,61,.18); }
+  html[data-theme="night"] .drv{ background:#0B1020; border:1px solid #34436A; box-shadow:none; }
+  .drv-mark{ width:50px; height:50px; flex:0 0 50px; border-radius:50%; background:var(--coral); display:flex; align-items:center; justify-content:center; }
+  .drv-mark .door-mark{ width:30px; height:30px; }
+  .drv-mark .door-mark g{ stroke:#141D3D; stroke-width:2.6px; }
+  .drv-mark .door-mark circle{ fill:#141D3D; }
+  .drv-txt{ display:flex; flex-direction:column; gap:2px; flex:1 1 auto; min-width:0; }
+  .drv-k{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#B7C6F0; }
+  .drv-t{ font-size:18px; font-weight:700; line-height:1.2; }
+  .drv-s{ font-size:12px; color:#D6DDF2; line-height:1.35; }
+  .drv-sw{ flex:0 0 72px; width:72px; height:40px; border-radius:999px; border:none; padding:4px; cursor:pointer; display:flex; justify-content:flex-start; background:#3A4670; transition:background .15s; }
+  .drv-on .drv-sw{ background:var(--coral); justify-content:flex-end; }
+  .drv-sw:focus-visible{ outline:3px solid #B7C6F0; outline-offset:2px; }
+  .drv-knob{ width:32px; height:32px; border-radius:50%; background:#fff; display:block; }
+  @media (max-width:600px){ .drv{ width:100%; order:2; } .page-head > .page-right{ order:3; } .page-head .drv + .page-right{ padding-top:0; } }
   /* New job = round button with the WPS door mark in the logo coral (Lex, 21 Oct 03:00; mark from Dropbox WPS LOGOS) */
   .nj-btn{ display:inline-flex; flex-direction:column; align-items:center; gap:4px; align-self:flex-end; background:none; border:none; padding:0 2px; font:inherit; cursor:pointer; color:var(--ink); }
   .door-circle{ width:54px; height:54px; border-radius:50%; background:#e8735a; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(0,0,0,.18); transition:transform .12s, background .12s; }
@@ -1190,7 +1206,7 @@ function saveJobs(){ mergeJobNoHigh(); stampChanged(); localStorage.setItem(LS_J
 const jobSnap = new Map();
 function snapKey(j){ const c = Object.assign({}, j); delete c.updatedAt; return JSON.stringify(c); }
 function snapAll(){ jobSnap.clear(); state.jobs.forEach(j => jobSnap.set(j.id, snapKey(j))); }
-function dirtyGet(){ try { const d = JSON.parse(lsGet(LS_DIRTY) || "{}"); return { any: !!d.any, seq: d.seq || 0, ids: d.ids || {}, gone: d.gone || {}, slot: !!d.slot }; } catch(e){ return { any:false, seq:0, ids:{}, gone:{}, slot:false }; } }
+function dirtyGet(){ try { const d = JSON.parse(lsGet(LS_DIRTY) || "{}"); return { any: !!d.any, seq: d.seq || 0, ids: d.ids || {}, gone: d.gone || {}, slot: !!d.slot, auto: !!d.auto }; } catch(e){ return { any:false, seq:0, ids:{}, gone:{}, slot:false, auto:false }; } }
 function dirtySet(d){ lsSet(LS_DIRTY, JSON.stringify(d)); }
 function dirtyAny(){ const d = dirtyGet(); return d.any || Object.keys(d.ids).length > 0 || Object.keys(d.gone).length > 0; }
 function stampChanged(){
@@ -1204,7 +1220,7 @@ function dirtyClearSent(sent){
   const d = dirtyGet();
   Object.keys(sent.ids).forEach(id => { if (d.ids[id] === sent.ids[id]) delete d.ids[id]; });
   Object.keys(sent.gone).forEach(id => { if (d.gone[id] === sent.gone[id]) delete d.gone[id]; });
-  if (d.seq === sent.seq){ d.any = false; d.slot = false; }
+  if (d.seq === sent.seq){ d.any = false; d.slot = false; d.auto = false; }
   dirtySet(d);
 }
 function mergeJobLists(local, cloud, dirty){
@@ -1395,7 +1411,7 @@ async function cloudSave(){
     const prev = await gapi(base+":batchGet?ranges=Jobs!A:A&ranges=Clients!A:A&ranges=Contacts!A:A&ranges=Meta!A:A");
     const prevLen = i => ((prev.valueRanges[i] && prev.valueRanges[i].values) || []).length;
     const pad = (rows, oldLen) => { const w = rows[0].length, out = rows.slice(); while (out.length < oldLen) out.push(new Array(w).fill("")); return out; };
-    const metaRows = [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())],["slotSettings", lsGet(LS_SLOT_SET) || meta.slotSettings || ""]];
+    const metaRows = [["savedAt", savedAt],["jobs", String(state.jobs.length)],["device", navigator.platform||""],["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())],["slotSettings", lsGet(LS_SLOT_SET) || meta.slotSettings || ""],["autopilot", lsGet(LS_AUTOPILOT) || meta.autopilot || ""]];
     await gapi(base+":batchUpdate", { method:"POST", body: JSON.stringify({
       valueInputOption: "RAW",
       data: [
@@ -1441,10 +1457,11 @@ function applyCloudCopy(meta, jobs, clientsRaw, contactsRaw, merge){
   if (merge) fixJobNoClashes(jobs);   // D8, 20 Oct: a job made here with a number another device already saved gets the next free number
   try { mergeQueueDone(meta.queueDone ? JSON.parse(meta.queueDone) : null); } catch(e){}
   if (meta.slotSettings && !(merge && dirty.slot)) lsSet(LS_SLOT_SET, meta.slotSettings);   // slot picker settings saved from another device
+  if (meta.autopilot && !(merge && dirty.auto)){ const a = autopilotParse(meta.autopilot); if (a) lsSet(LS_AUTOPILOT, JSON.stringify(a)); }   // Who's driving, set on another device
   localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs));
   localStorage.setItem(LS_CLIENTS, JSON.stringify(state.clients));
   lsSet(LS_CLOUD_SYNCED_AT, meta.savedAt);
-  if (!merge){ lsSet(LS_LOCAL_SAVED_AT, meta.savedAt); dirtySet({ any:false, seq: dirty.seq, ids:{}, gone:{}, slot:false }); }
+  if (!merge){ lsSet(LS_LOCAL_SAVED_AT, meta.savedAt); dirtySet({ any:false, seq: dirty.seq, ids:{}, gone:{}, slot:false, auto:false }); }
   snapAll();
   return true;
 }
@@ -1491,9 +1508,9 @@ function renderSyncBtn(){
   const t = state.cloudAt ? pad2(state.cloudAt.getHours())+":"+pad2(state.cloudAt.getMinutes()) : "";
   const label = s==="saving" ? "Saving…" : s==="saved" ? "Saved ✓ "+t : (s==="error"||s==="conflict") ? "Try again ⚠" : "Save & get latest";
   const cls = s==="saved" ? " sync-ok" : (s==="error"||s==="conflict") ? " sync-bad" : "";
-  // Phone Dashboard (Lex, 18 Oct): no separate Save button, "Check everything now" saves too. Just a status line.
+  // Phone Dashboard (Lex, 18 Oct): no separate Save button, "Engage" (was Check everything now) saves too. Just a status line.
   if (state.view === "today"){
-    const line = s==="saving" ? "Saving to Google…" : s==="saved" ? "Saved to Google ✓ "+t : (s==="error"||s==="conflict") ? "Not saved ⚠ "+(state.cloudMsg || "")+" Tap Check everything now to try again." : "";
+    const line = s==="saving" ? "Saving to Google…" : s==="saved" ? "Saved to Google ✓ "+t : (s==="error"||s==="conflict") ? "Not saved ⚠ "+(state.cloudMsg || "")+" Tap Engage to try again." : "";
     return `<div id="syncBtn" class="phone-only sync-line${cls}">${esc(line)}</div>`;
   }
   return `<button id="syncBtn" class="btn btn-ghost phone-only${cls}" onclick="cloudSyncNow()" ${s==="saving"?"disabled":""}${hint("Tap after changes on the phone: saves to Google and loads changes from the PC")}>${esc(label)}</button>`
@@ -5187,7 +5204,7 @@ function renderToday(){
       + (sentNoDate ? note(sentNoDate+" check-in report"+(sentNoDate===1?"":"s")+" marked Sent before dates were recorded, so not shown.") : ""); break;
     case "amend": title = "Amendments"; body = renderAmendCard(true); break;
     case "temail": title = "Emails to tenants (last 14 days)";
-      body = (state.ciLog ? rows(ciRecent, r => ciLogLine(r, true), "No check-in emails sent to tenants in the last 14 days.") : `<div class="t-empty">Not loaded yet. Press Check everything now.</div>`)
+      body = (state.ciLog ? rows(ciRecent, r => ciLogLine(r, true), "No check-in emails sent to tenants in the last 14 days.") : `<div class="t-empty">Not loaded yet. Press Engage.</div>`)
         + note("From the WPS script's Check-in emails log, so it's the real record of what went out. Red NOT SENT lines never went and say why; grey lines are repeat clicks the script stopped. Each job's form lists its own emails too."); break;
     case "times": { title = "Times to agree";
       const ttRow = j => needsTenantTime(j)
@@ -5222,7 +5239,7 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`Start each day with <b>Check everything now</b> (top right). Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${helpBox(`Start each day with <b>Engage</b> (top right). Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
     ${panel ? `<div class="t-card d-card d-panel d-panel-top" id="dashPanel">
       <h3>${esc(title)} <button class="d-x" onclick="setDashPanel(null)"${tip("Close this list")}>✕ Close</button></h3>
       ${body}
@@ -5292,10 +5309,11 @@ function renderPageHead(){
   }
   return `<div class="page-head">
     <div><h1 class="page-title">${state.view === "today" ? "WPS Dashboard" : state.view === "reports" ? "Reports" : state.view === "processing" ? "Processing" : "Job Log"}</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div>${state.view === "today" ? renderWxLine() : ""}${renderDoneCount()}${state.view === "today" ? renderPerfTop() : ""}</div>
+    ${state.view === "today" ? renderDriving() : ""}
     <div class="page-right">${renderBuildTop()}<div class="page-actions">
       ${renderSyncBtn()}
       ${state.view === "today"
-        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Checking…" : "Check everything now"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
+        ? `<button class="btn btn-ghost" onclick="refreshAll()" ${state.refreshBusy ? "disabled" : ""}${hint("One click: saves and gets the latest from the Google Sheet, checks new bookings and loads amendments")}>${state.refreshBusy ? "Engaging…" : "Engage"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`
         : `<button class="btn btn-ghost" onclick="checkForBookings()" ${state.queueBusy ? "disabled" : ""}${hint("Shows bookings Claude found in Gmail")}>${state.queueBusy ? "Checking…" : "Check for new bookings"}${n ? `<span class="qbadge">${n}</span>` : ""}</button>`}
       <button class="nj-btn" onclick="openNew()"${tip("New job: log a job by hand")} aria-label="New job"><span class="door-circle"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></span><span class="nj-lbl">New job</span></button>
     </div></div>
@@ -5385,7 +5403,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "22 Oct 2026 (#106)";
+const BUILD = "23 Oct 2026 (#107)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6023,7 +6041,7 @@ function renderHealthSide(){
 function openHealth(){ if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); } state.dashPanel = "health"; state.menuOpen = false; navSetView("today"); render(); focusDashPanel(); }
 function renderHealthPanel(){
   const h = state.health;
-  if (!h) return `<div class="t-empty">Not loaded yet. Click <b>Check everything now</b> (top right).</div>`;
+  if (!h) return `<div class="t-empty">Not loaded yet. Click <b>Engage</b> (top right).</div>`;
   if (h.error) return `<div class="t-empty">${esc(h.error)}. <button class="t-link" onclick="refreshHealth()">Try again</button></div>`;
   if (h.missing) return `<div class="t-empty" style="color:var(--ink)">The health check hasn't been started yet. In the WPS Amendments script editor, pick <b>hcStart</b> in the function box and click Run.</div>`;
   const s = healthSummary();
@@ -6037,6 +6055,37 @@ function renderHealthPanel(){
 function refreshHealth(){ ensureSheetsToken(async function(){ await loadHealth(); render(); }); }
 
 const LS_SLOT_SET = "wps_slot_settings_v1";
+// Who's driving (Lex, 23 Oct 01:29): Manual or Claude autopilot. Saved to the Job Log Sheet (Meta tab, row "autopilot")
+// so the PC and phone show the same. With autopilot on, Claude may add and edit jobs without asking; anything that emails
+// a client, agent, landlord or tenant still waits for Lex's yes. AUTOPILOT_LIVE stays false until the hourly Claude check
+// reads this setting (step 2); until then the panel says so, so nobody thinks Claude is already running the office.
+const LS_AUTOPILOT = "wps_autopilot_v1";
+const DOOR_MARK_SVG = '<svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg>';
+const AUTOPILOT_LIVE = false;
+function autopilotParse(raw){
+  try { const v = typeof raw === "string" ? JSON.parse(raw) : raw; if (!v || (v.mode !== "claude" && v.mode !== "manual")) return null;
+        return { mode: v.mode, at: /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v.at || "") ? v.at : "" }; } catch(e){ return null; }
+}
+function autopilotGet(){ return autopilotParse(lsGet(LS_AUTOPILOT) || "") || { mode:"manual", at:"" }; }
+function autopilotOn(){ return autopilotGet().mode === "claude"; }
+function setAutopilot(on){
+  if (on === autopilotOn()) return;
+  if (on && !confirm("Switch to Claude autopilot?\n\nClaude can add and change jobs without asking.\nNothing is emailed to a client, agent, landlord or tenant until you say yes.")) return;
+  lsSet(LS_AUTOPILOT, JSON.stringify({ mode: on ? "claude" : "manual", at: new Date().toISOString() }));
+  const dd = dirtyGet(); dd.auto = true; dirtySet(dd);
+  markLocalChange();   // saves to the Job Log Sheet (Meta tab), where the hourly check will read it
+  render();
+}
+function renderDriving(){
+  const on = autopilotOn();
+  const sub = !AUTOPILOT_LIVE ? (on ? "Saved. Claude starts acting on this once the hourly check is updated." : "Nothing runs on its own. You click every step.")
+            : on ? "Claude runs the office. Nothing is emailed without your yes." : "Nothing runs on its own. You click every step.";
+  return `<div class="drv${on ? " drv-on" : ""}">
+    <span class="drv-mark" aria-hidden="true">${DOOR_MARK_SVG}</span>
+    <span class="drv-txt"><span class="drv-k">Who's driving</span><span class="drv-t">${on ? "Claude autopilot" : "Manual"}</span><span class="drv-s">${sub}</span></span>
+    <button class="drv-sw" role="switch" aria-checked="${on}" aria-label="Claude autopilot" onclick="setAutopilot(${!on})"${tip(on ? "Switch back to Manual: nothing runs on its own" : "Switch on Claude autopilot")}><span class="drv-knob"></span></button>
+  </div>`;
+}
 const SLOT_DEFAULT = { days:[1,2,3,4,5], start:"10:00", end:"15:00", slotMin:30, earliest:2, latest:14, bufferMin:30 };   // Lex, 19 Oct
 const SLOT_ACCESS_KEYS = "Please use the keys";
 const SLOT_DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -6761,7 +6810,7 @@ async function dashSave(){
   }
 }
 function dashMetaRows(){
-  return [["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())],["slotSettings", lsGet(LS_SLOT_SET) || ""]];
+  return [["note","Written by the WPS Job Log. Edit jobs in the Job Log, not here."],["jobNoHigh", JSON.stringify(mergeJobNoHigh())],["queueDone", JSON.stringify(queueDoneForSheet())],["slotSettings", lsGet(LS_SLOT_SET) || ""],["autopilot", lsGet(LS_AUTOPILOT) || ""]];
 }
 function rowsToObjects(rows){
   rows = rows || [];
