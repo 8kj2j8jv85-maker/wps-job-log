@@ -941,6 +941,10 @@
   .mt-who{ margin:10px 0 6px; font-size:13px; display:grid; gap:2px; word-break:break-word; }
   .mt-frame{ width:100%; height:520px; border:1px solid var(--line); border-radius:8px; background:#141D3D; display:block; }
   .mt-b{ margin-top:12px; }
+  .mt-f textarea.ci-body{ font:inherit; font-size:14px; line-height:1.5; padding:8px 10px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink); resize:vertical; min-height:200px; width:100%; box-sizing:border-box; }
+  .ci-sig{ font-size:13px; color:var(--ink-soft); padding:4px 10px 6px; border-left:3px solid var(--line); margin:2px 0 6px; }
+  .ci-hint{ font-size:12px; margin:4px 0; }
+  .ci-you{ align-items:flex-end; } .ci-you-t{ font-size:12px; flex:2 1 200px; padding-bottom:10px; }
   .mt-b .btn[disabled]{ opacity:.5; cursor:default; }
   @media (max-width:600px){ .mt-back{ padding:8px; } .mt-box{ padding:12px; } .mt-frame{ height:440px; } .mt-f input, .mt-f select{ font-size:16px; } }
   /* ---------- themes (Lex, 18 Oct): Classic (default), Light, Night. Picked in the left menu, remembered per device. ---------- */
@@ -2498,9 +2502,9 @@ function ciAddNote(j, line){ j.notes = j.notes ? line+"\n"+j.notes : line; }
 function askTenantsTime(id, w){
   if (w) try { w.close(); } catch(e){}
   const j = state.jobs.find(x=>x.id===id); if (!j) return;
-  return ciAutoSend(j, "ask");
+  return openCiBox(id, "ask");   // 23 Oct: preview first
 }
-function chaseTenants(id){ const j = state.jobs.find(x=>x.id===id); if (j) return ciAutoSend(j, "chaser"); }
+function chaseTenants(id){ const j = state.jobs.find(x=>x.id===id); if (j) return openCiBox(id, "chaser"); }
 function ciChaseBtn(j){
   if (state.ciBusy === j.id) return `<span class="c-dim">Sending…</span>`;
   return `<button class="d-mv sl-ok" onclick="chaseTenants('${j.id}')"${tip("Sends the tenants a short reminder now (navy look, from hello@): we still need your time. "+ciCopyWho(j)+" copied in. Once only.")}>Send chaser</button>`;
@@ -2651,7 +2655,8 @@ async function loadCiLog(){
     console.log("[WPS] check-in emails read failed", e);   // e.g. script older than v20 refuses the tab
   }
 }
-function openArrival(id, where){ const same = state.arrivalId === id && state.arrivalWhere === where; state.arrivalId = same ? null : id; state.arrivalWhere = where || "dn"; render(); const b = document.getElementById("arr_box"); if (b && b.scrollIntoView) b.scrollIntoView({block:"nearest"}); }
+function openArrival(id, where){ return openCiBox(id, "confirm"); }   // 23 Oct: the email box with a preview
+function openArrivalOld(id, where){ const same = state.arrivalId === id && state.arrivalWhere === where; state.arrivalId = same ? null : id; state.arrivalWhere = where || "dn"; render(); const b = document.getElementById("arr_box"); if (b && b.scrollIntoView) b.scrollIntoView({block:"nearest"}); }
 function closeArrival(){ state.arrivalId = null; render(); }
 function arrivalPreview(id, from){
   const j = state.jobs.find(x=>x.id===id), el = document.getElementById("arr_you"), a = document.getElementById("arr_asked"), t = document.getElementById("arr_time"), lb = document.getElementById("arr_email_lbl");
@@ -4422,6 +4427,166 @@ function renderMsBox(){
     </div>
   </div></div>`;
 }
+// ---------------------------------------------------------------- check-in / check-out emails with a preview (23 Oct, Lex)
+// "I need to be able to see a preview of what's going to be sent" and templates for the different situations. One box for
+// every tenant email about a check-in or check-out time: pick the situation, pick the times from easy dropdowns, Preview
+// shows exactly what goes (To, CC, subject, the text), Lex can change any of it, then Send. Nothing is sent without the
+// preview. The WPS script (file CheckinSend) builds and sends it from hello@ to the job's tenants with the agent copied in.
+// Lex 23 Oct: free editing stays while the templates are being worked out; it can be taken out later.
+const CI_TPL = [
+  ["confirm", "Their time works: confirm it"],
+  ["taken", "Their time's taken: offer another time"],
+  ["options", "Offer 2 or 3 times to pick from"],
+  ["otherday", "Their day doesn't work: offer another day"],
+  ["late", "Running late on the day"],
+  ["access", "Tenant can't be there: keys and access"],
+  ["ask", "Ask what time suits them (first email)"],
+  ["chaser", "Chaser: we still need your time"]
+];
+const CI_TPL_WORDS = Object.fromEntries(CI_TPL);
+Object.assign(CI_KIND_WORDS, { taken:"Email offering another time", options:"Email offering times to pick from", otherday:"Email offering another day", late:"Running late email", access:"Keys and access email" });
+// Time dropdown (Lex 23 Oct: the clock box was fiddly): every 15 minutes, 7am to 7pm, plus whatever is already set.
+function ciTimeOpts(cur){
+  const list = [];
+  for (let m = 7*60; m <= 19*60; m += 15) list.push(pad2(Math.floor(m/60))+":"+pad2(m%60));
+  if (cur && /^\d\d:\d\d$/.test(cur) && !list.includes(cur)) { list.push(cur); list.sort(); }
+  const nice = t => { const h = Number(t.slice(0,2)), mm = t.slice(3); return t+"  ("+(h === 12 && mm === "00" ? "12 noon" : (h%12||12)+(mm === "00" ? "" : ":"+mm)+(h < 12 ? "am" : "pm"))+")"; };
+  return `<option value="">Pick a time…</option>` + list.map(t => `<option value="${t}"${t === cur ? " selected" : ""}>${esc(nice(t))}</option>`).join("");
+}
+function ciTimeSel(id, cur, dis, label, fn){ return `<label class="mt-f">${esc(label)}<select id="${id}" onchange="${fn||"ciChanged()"}"${dis}>${ciTimeOpts(cur)}</select></label>`; }
+function openCiBox(id, kind){
+  const j = state.jobs.find(x => x.id === id); if (!j) return;
+  const asked = j.tenantAsked || "", arr = j.tenantArrival || "";
+  kind = CI_TPL_WORDS[kind] ? kind : "confirm";
+  state.ciBox = { id, kind, asked: kind === "confirm" ? (asked || arr) : asked, time: kind === "confirm" ? (asked || arr) : arr,
+    t1: "", t2: "", t3: "", day: "", dayTime: "", eta: "", you: "", youTouched: false,
+    preview: null, subject: "", body: "", busy: false, msg: "" };
+  if (!keyMode()) state.ciBox.msg = "Can't send: tenant emails are sent by the WPS script, which needs this device's key (More > Device key).";
+  render();
+  const b = document.getElementById("ci_box"); if (b) b.focus();
+}
+function closeCiBox(){ if (state.ciBox && state.ciBox.busy) return; state.ciBox = null; render(); }
+function ciRead(){
+  const s = state.ciBox; if (!s) return;
+  const v = id => { const el = document.getElementById(id); return el ? el.value : null; };
+  const k = v("ci_kind"); if (k !== null) s.kind = k;
+  [["ci_asked","asked"],["ci_time","time"],["ci_t1","t1"],["ci_t2","t2"],["ci_t3","t3"],["ci_day","day"],["ci_daytime","dayTime"],["ci_eta","eta"]]
+    .forEach(([id, key]) => { const x = v(id); if (x !== null) s[key] = x; });
+  const y = v("ci_you"); if (y !== null && y !== s.you){ s.you = y; s.youTouched = true; }
+  const subj = v("ci_subject"), body = v("ci_body");
+  if (subj !== null) s.subject = subj; if (body !== null) s.body = body;
+}
+function ciYouChanged(){ ciRead(); const b = document.getElementById("ci_body"), y = state.ciBox; if (y && y.preview && b) y.body = b.value; render(); }
+function ciChanged(){
+  const s = state.ciBox; if (!s) return;
+  ciRead();
+  s.preview = null; s.subject = ""; s.body = ""; s.msg = keyMode() ? "" : s.msg;
+  render();
+}
+// The tenants' time this email sets on the job ("" if it doesn't set one), and Lex's own arrival
+function ciOfferTime(s){ return s.kind === "confirm" || s.kind === "taken" ? s.time : ""; }
+function ciYou(s, j){ const t = ciOfferTime(s); if (!t) return ""; return s.youTouched && s.you ? s.you : minusMins(t, visitLead(j)); }
+function ciParams(s){
+  if (s.kind === "confirm") return { time: s.time };
+  if (s.kind === "taken") return { asked: s.asked, time: s.time };
+  if (s.kind === "options") return { asked: s.asked, times: [s.t1, s.t2, s.t3].filter(Boolean) };
+  if (s.kind === "otherday") return { date: s.day, time: s.dayTime };
+  if (s.kind === "late") return { eta: s.eta };
+  return {};
+}
+function ciMissing(s){
+  if (s.kind === "confirm" && !s.time) return "Pick the tenants' time.";
+  if (s.kind === "taken"){ if (!s.asked) return "Pick the time they asked for."; if (!s.time) return "Pick the time we can offer."; if (s.asked === s.time) return "The time we offer is the same as theirs: use \"Their time works\" instead."; }
+  if (s.kind === "options" && [s.t1, s.t2, s.t3].filter(Boolean).length < 2) return "Pick at least 2 times to offer.";
+  if (s.kind === "otherday" && !s.day) return "Pick the day to offer.";
+  if (s.kind === "late" && !s.eta) return "Pick the time you'll now be there.";
+  return "";
+}
+async function ciPreview(){
+  const s = state.ciBox, j = s && state.jobs.find(x => x.id === s.id); if (!j) return;
+  ciRead();
+  if (!keyMode()){ render(); return; }
+  const miss = ciMissing(s); if (miss){ s.msg = miss; s.preview = null; render(); return; }
+  s.busy = true; s.msg = "Building the email…"; s.preview = null; render();
+  try {
+    const params = ciParams(s);
+    const d = await dashCall("ciSend", { job: j.jobNo, kind: "preview:"+s.kind, params });
+    if (!d || !d.ok){
+      const err = (d && d.error) || "no answer from the WPS script";
+      throw new Error(/^Unknown email/.test(err) ? "the new CheckinSend script isn't pasted in yet, so there's no preview. Nothing was sent." : err);
+    }
+    if (!d.preview) throw new Error("the WPS script didn't send back a preview. Nothing was sent.");
+    s.preview = Object.assign({}, d, { chk: JSON.stringify([s.kind, params]) });
+    s.subject = d.subject; s.body = d.body; s.msg = "";
+  } catch(e){ s.msg = "Can't send: "+String(e && e.message || e); }
+  s.busy = false; render();
+  const f = document.getElementById("ci_body"); if (f && s.preview) f.scrollIntoView({ block:"nearest" });
+}
+async function ciSend(){
+  const s = state.ciBox, j = s && state.jobs.find(x => x.id === s.id); if (!j || !s.preview) return;
+  ciRead();
+  const params = ciParams(s);
+  if (s.preview.chk !== JSON.stringify([s.kind, params])){ s.preview = null; s.msg = "Something changed since the preview. Press Preview again."; render(); return; }
+  if (/whatsapp|wa\.me/i.test(s.subject+" "+s.body)){ s.msg = "No WhatsApp in emails (replies need to come by email so the system sees them)."; render(); return; }
+  s.busy = true; s.msg = "Sending…"; render();
+  try {
+    const d = await dashCall("ciSend", { job: j.jobNo, kind: s.kind, params, subject: s.subject, body: s.body });
+    if (!d || !d.ok) throw new Error((d && d.error) || "no answer from the WPS script");
+    const before = snapJob(j), when = new Date(), stamp = ciDay(when)+" "+pad2(when.getHours())+":"+pad2(when.getMinutes());
+    const you = ciYou(s, j), nice = t => t || "";
+    if (s.kind === "confirm"){
+      j.tenantAsked = s.time; j.tenantArrival = s.time; if (you) j.time = you; delete j.tenantTimeProposed;
+      ciAddNote(j, j.type === "CO" ? "Tenants out and ready "+s.time+" (agreed "+ciDay(when)+"). Booked in at "+j.time+"." : "Tenants arriving "+s.time+" (agreed "+ciDay(when)+"). Booked in at "+j.time+" to park and take the photos first.");
+    } else if (s.kind === "taken"){
+      j.tenantAsked = s.asked; j.tenantArrival = s.time; if (you) j.time = you; j.tenantTimeProposed = true;
+      ciAddNote(j, "Tenants asked for "+s.asked+"; offered "+s.time+" instead ("+ciDay(when)+"). Waiting for them to agree. Booked in at "+j.time+" for now.");
+    } else if (s.kind === "options"){
+      ciAddNote(j, "Offered the tenants "+params.times.join(", ")+(s.asked ? " (they asked "+s.asked+")" : "")+" ("+ciDay(when)+"). Waiting for them to pick.");
+    } else if (s.kind === "otherday"){
+      ciAddNote(j, "Offered the tenants "+s.day+(s.dayTime ? " at "+s.dayTime : "")+" instead of "+(j.date||"")+" ("+ciDay(when)+"). Job date not changed until they agree.");
+    } else if (s.kind === "late"){
+      ciAddNote(j, "Running late email sent "+stamp+": now about "+s.eta+".");
+    } else if (s.kind === "ask") j.tenantsAskedAt = when.toISOString();
+    else if (s.kind === "chaser") j.tenantsChasedAt = when.toISOString();
+    ciAddNote(j, (CI_KIND_WORDS[s.kind] || CI_TPL_WORDS[s.kind])+" sent by the dashboard "+stamp+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+(d.edited ? ", wording changed by Lex" : "")+".");
+    j.updatedAt = when.toISOString();
+    state.ciBox = null;
+    saveJobs(); render();
+    if ((s.kind === "confirm" || s.kind === "taken") && state.gcalConnected) syncJobToCalendar(j);
+    showUndo((j.jobNo||"Job")+": sent. "+(CI_KIND_WORDS[s.kind] || "Email")+" to "+d.to+(d.cc ? " (cc "+d.cc+")" : "")+". Undo puts the job back; the email has gone.", before);
+  } catch(e){ s.busy = false; s.msg = "Not sent: "+String(e && e.message || e)+". Nothing went to the tenants."; render(); }
+}
+function renderCiBox(){
+  const s = state.ciBox; if (!s) return "";
+  const j = state.jobs.find(x => x.id === s.id); if (!j){ state.ciBox = null; return ""; }
+  const p = s.preview, dis = s.busy ? " disabled" : "", co = j.type === "CO";
+  const opt = (v, label) => `<option value="${esc(v)}"${v === s.kind ? " selected" : ""}>${esc(label)}</option>`;
+  let fields = "";
+  if (s.kind === "confirm") fields = ciTimeSel("ci_time", s.time, dis, co ? "Tenants out and ready at" : "Tenants arriving at");
+  else if (s.kind === "taken") fields = ciTimeSel("ci_asked", s.asked, dis, "They asked for") + ciTimeSel("ci_time", s.time, dis, "We can offer");
+  else if (s.kind === "options") fields = ciTimeSel("ci_asked", s.asked, dis, "They asked for (optional)") + ciTimeSel("ci_t1", s.t1, dis, "Offer 1") + ciTimeSel("ci_t2", s.t2, dis, "Offer 2") + ciTimeSel("ci_t3", s.t3, dis, "Offer 3 (optional)");
+  else if (s.kind === "otherday") fields = `<label class="mt-f">Day to offer<input type="date" id="ci_day" min="${isoToday(1)}" value="${esc(s.day)}" onchange="ciChanged()"${dis}></label>` + ciTimeSel("ci_daytime", s.dayTime, dis, "Time (optional)");
+  else if (s.kind === "late") fields = ciTimeSel("ci_eta", s.eta, dis, "You'll now be there at about");
+  const you = ciYou(s, j);
+  const youRow = ciOfferTime(s) ? `<div class="mt-row ci-you">${ciTimeSel("ci_you", you, dis, co ? "Your visit time (they hand over the keys)" : "Your arrival (booked in at)", "ciYouChanged()")}<div class="c-dim ci-you-t">${esc(co ? "Same as their time for check-outs." : s.youTouched && s.you && s.you !== minusMins(ciOfferTime(s), visitLead(j)) ? "Your own time (usual is "+leadText(visitLead(j))+" before them)." : "Set to "+leadText(visitLead(j))+" before them, to park and take the photos. Change it if you like.")}</div></div>` : "";
+  return `<div class="mt-back" onclick="if(event.target===this)closeCiBox()"><div class="mt-box" id="ci_box" tabindex="-1" role="dialog" aria-label="Email the tenants">
+    <div class="mt-h"><div><b>Email the tenants</b><div class="c-dim">${esc(j.jobNo||"")} · ${esc(co ? "Check-out" : "Check-in")} ${esc(j.date ? ciDay(new Date(j.date+"T12:00:00")) : "")} · ${esc(fullAddress(j)||"No address")}</div></div><button class="undo-x" onclick="closeCiBox()" aria-label="Close">✕</button></div>
+    <label class="mt-f">Situation<select id="ci_kind" onchange="ciChanged()"${dis}>${CI_TPL.map(k => opt(k[0], k[1])).join("")}</select></label>
+    ${fields ? `<div class="mt-row">${fields}</div>` : ""}
+    ${youRow}
+    ${s.msg ? `<div class="mt-msg${/^Can't|^Not sent|^Pick|^Something|^No WhatsApp|same as theirs/.test(s.msg) ? " bad" : ""}">${esc(s.msg)}</div>` : ""}
+    ${p ? `<div class="mt-who"><div><span class="c-dim">To</span> ${esc(p.to)}</div>${p.cc ? `<div><span class="c-dim">CC</span> ${esc(p.cc)}</div>` : ""}<div><span class="c-dim">From</span> hello@wellington-ps.co.uk</div></div>
+      <label class="mt-f">Subject<input type="text" id="ci_subject" maxlength="200" value="${esc(s.subject)}"${dis}></label>
+      <label class="mt-f">Email (change anything you like)<textarea id="ci_body" class="ci-body" rows="12"${dis}>${esc(s.body)}</textarea></label>
+      <div class="ci-sig">${esc(p.sig || "").replace(/\n/g, "<br>")}</div>
+      <div class="c-dim ci-hint">Sent in the navy look from hello@. If you change the wording, your text goes as written. No WhatsApp or links to it.</div>` : ""}
+    <div class="rr-b mt-b">
+      <button class="btn btn-ghost btn-sm" onclick="ciPreview()"${dis}${keyMode() ? "" : " disabled"}>${p ? "Start again from the template" : "Preview"}</button>
+      <button class="btn btn-coral btn-sm" onclick="ciSend()"${p && !s.busy ? "" : " disabled"}${tip("Sends this email from hello@ now. The agent (or landlord) is copied in.")}>Send</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeCiBox()"${dis}>${p ? "Don't send" : "Close"}</button>
+    </div>
+  </div></div>`;
+}
 function renderMtBox(){
   const s = state.mtBox; if (!s) return "";
   const j = state.jobs.find(x => x.id === s.id); if (!j){ state.mtBox = null; return ""; }
@@ -4508,9 +4673,10 @@ function renderInner(app){
     </div>
     </main>
     </div>
-    ${state.editing || state.mtBox || state.view === "processing" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
+    ${state.editing || state.mtBox || state.ciBox || state.view === "processing" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
     ${renderMtBox()}
     ${renderMsBox()}
+    ${renderCiBox()}
   `;
 }
 
@@ -5442,7 +5608,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#112)";
+const BUILD = "23 Oct 2026 (#113)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6819,7 +6985,7 @@ window.addEventListener("storage", function(e){
 // open or something is being typed, so nothing in progress is lost.
 let lastRefreshDay = isoToday(0);
 function autoRefresh(){
-  if (document.hidden || state.editing || state.rearrangeId || state.mtBox || state.msBox) return;   // not while the Rearrange panel or mid-term email box is open
+  if (document.hidden || state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox) return;   // not while the Rearrange panel or mid-term email box is open
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   if (isoToday(0) !== lastRefreshDay){ lastRefreshDay = isoToday(0); state.dashAll = false; }
@@ -6842,7 +7008,7 @@ window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (stat
 // ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
 // (merging if another device saved first), load other devices' changes, read the queue, amendments and signings.
 function safeRender(){
-  if (state.editing || state.rearrangeId || state.mtBox || state.msBox) return;
+  if (state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox) return;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   const y = window.scrollY; render(); window.scrollTo(0, y);
@@ -7243,6 +7409,7 @@ window.addEventListener("popstate", function(){
 // Esc closes the form, like Cancel (fix 7). The Rearrange panel closes first if it's open.
 document.addEventListener("keydown", function(e){
   if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+  if (state.ciBox){ closeCiBox(); return; }
   if (state.msBox){ closeMsBox(); return; }
   if (state.mtBox){ closeMtBox(); return; }
   if (state.rearrangeId && typeof closeRearrange === "function"){ closeRearrange(); return; }
