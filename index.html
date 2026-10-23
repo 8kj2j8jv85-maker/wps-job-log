@@ -5442,7 +5442,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#111)";
+const BUILD = "23 Oct 2026 (#112)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -6112,6 +6112,15 @@ async function loadDecisionCount(){
   if (!dashKey()){ if (state.auWaiting){ state.auWaiting = 0; render(); } return; }   // 23 Oct: count shows whatever the switch says (Decisions link in the menu)
   try { const d = await dashCall("auList"); const n = d && d.ok && Array.isArray(d.cards) ? d.cards.filter(c => c.status === "waiting").length : 0;
         if (n !== (state.auWaiting || 0)){ state.auWaiting = n; render(); } } catch(e){}
+}
+// The switch can also be flipped on the Decisions page (op auSetMode writes only the Sheet's Meta row, not savedAt).
+// Take the Sheet's value when it was changed after this device's, unless this device has an unsaved change.
+function adoptAutopilot(meta){
+  if (!meta || !meta.autopilot || dirtyGet().auto) return false;
+  const a = autopilotParse(meta.autopilot), l = autopilotGet();
+  if (!a || !a.at || (l.at && a.at <= l.at)) return false;
+  lsSet(LS_AUTOPILOT, JSON.stringify(a));
+  return a.mode !== l.mode;
 }
 function setAutopilot(on){
   if (on === autopilotOn()) return;
@@ -6878,6 +6887,7 @@ async function dashSync(quiet){
     if (dirtyAny() || localNewer()){ await dashSave(); return; }
     const d = await dashCall("jlRead");
     if (!d.ok){ if (d.code !== "key") setCloud("error", "Couldn't read the Job Log: "+(d.error || "no answer")); return; }
+    if (adoptAutopilot(d.meta)){ if (quiet) safeRender(); else render(); setTimeout(loadDecisionCount, 500); }   // switch flipped on the Decisions page (23 Oct night)
     if (d.meta && d.meta.savedAt && d.meta.savedAt !== (lsGet(LS_CLOUD_SYNCED_AT) || "")){
       if (dirtyAny() || localNewer()){ await dashSave(); return; }   // changed here while reading: save (merges)
       if (!applyCloudCopy(d.meta, rowsToObjects(d.jobs), rowsToObjects(d.clients), d.hasContacts ? rowsToObjects(d.contacts) : null, false)) return;
