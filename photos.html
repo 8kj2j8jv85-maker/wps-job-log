@@ -219,6 +219,8 @@
     .side-nav a svg{ width:16px; height:16px; }
   }
   @media (max-width:420px){ .side-nav a svg{ display:none; } .side-nav a{ padding:7px 8px; } }
+  /* 27 Oct: the set header ran off the right edge on the phone (cut off the job list and warnings) */
+  @media (max-width:600px){ .ghead{ grid-template-columns:1fr; } .ghead > div{ min-width:0; } .gactions{ align-items:flex-start; } .field select{ max-width:100% !important; width:100%; } .gfields .field:first-child{ flex:1 1 100%; min-width:0; } .linkrow input{ min-width:0; max-width:100%; } }
   /* ---------- themes (Lex, 18 Oct): same setting as the Dashboard (wps_theme_v1), remembered per device ---------- */
   .theme-row{ display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:13px; color:var(--sky); }
   .theme-row select{ flex:1; font:inherit; font-size:13px; padding:4px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:#26335F; color:#fff; }
@@ -277,9 +279,9 @@
 <div class="wrap">
   <div class="page-head">
     <h1 class="page-title">Photo Tool</h1>
-    <div class="page-sub" id="pageSub">Drop a day's photos in. They're split into jobs by the gaps between them and matched to the Job Log by where they were taken.</div>
+    <div class="page-sub" id="pageSub">Drop a day's photos in. They're split into jobs by the gaps between them and by where they were taken, then matched to the Job Log.</div>
   </div>
-  <div class="help-box" id="helpBox"><button class="hb-hide" id="hbHide" title="Hide this box. Switch Help hints off and on to bring it back.">Hide</button><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; upload</b> (or <b>Process &amp; download zip</b> on a device without its key). The zip is uploaded and the photo link is saved to the job automatically. Your original photos are never changed.</div>
+  <div class="help-box" id="helpBox"><button class="hb-hide" id="hbHide" title="Hide this box. Switch Help hints off and on to bring it back.">Hide</button><div class="hb-t">HOW THIS WORKS</div><b>1.</b> Drop in the day's photos (JPG). <b>2.</b> They split into jobs by the time gaps and by place (a move of more than 300 m starts a new job), and are matched to the Job Log by where they were taken. Check the job on each set. <b>3.</b> Click the <b>first photo of each room</b> and pick the room: it carries on until the next room you mark. <b>4.</b> Click <b>Process &amp; upload</b> (or <b>Process &amp; download zip</b> on a device without its key). The zip is uploaded and the photo link is saved to the job automatically. Your original photos are never changed.</div>
   <div id="jobsNote" class="notice info hidden"></div>
   <div id="keyNote" class="notice warn hidden"></div>
 
@@ -295,7 +297,7 @@
 
   <div id="workArea" class="hidden">
     <div class="muted small" style="margin-top:8px">
-      How it works: photos are split into jobs by the gaps between them, and each set is matched to the Job Log by <b>where</b> the photos were taken. Check each job, then click the <b>first photo of each room</b> and pick the area &mdash; it carries on until the next room you mark.
+      How it works: photos are split into jobs by the gaps between them and by where they were taken, and each set is matched to the Job Log by <b>where</b> the photos were taken. Check each job, then click the <b>first photo of each room</b> and pick the area &mdash; it carries on until the next room you mark.
       Keys in the photo panel: <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> move, <span class="kbd">R</span> rotate, <span class="kbd">Del</span> remove photo, <span class="kbd">Esc</span> close. <span class="kbd">Shift</span>-click selects a run of photos to rotate together.
     </div>
     <div id="groups"></div>
@@ -586,6 +588,42 @@ function groupLoc(g){
   return { lat: med(pts.map(p=>p.lat)), lon: med(pts.map(p=>p.lon)), n: pts.length };
 }
 const MATCH_M = 400;   // photos within this distance of a job's postcode count as that job
+// 27 Oct (Lex): two check-outs about 2.5 km apart, less than 30 min between them, went into one set and one zip.
+// Splitting now also uses WHERE the photos were taken, and a set spread over two places won't process.
+const SPLIT_M = 300;    // the photos moving more than this starts a new job, whatever the time gap
+const SPREAD_M = 500;   // photos in one set further apart than this = two visits
+function medLoc(pts){
+  const med = arr => { const s = arr.slice().sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
+  return { lat: med(pts.map(p=>p.lat)), lon: med(pts.map(p=>p.lon)) };
+}
+// Photos where the place changes. Compares the middle place of up to 3 photos before with up to 3 after,
+// so one stray GPS reading doesn't split a visit.
+function locBreaks(photos){
+  const L = photos.filter(p => p.lat != null && p.lon != null);
+  const out = new Set(); let last = 0;
+  for (let k = 1; k < L.length; k++){
+    const before = medLoc(L.slice(Math.max(last, k-3), k)), after = medLoc(L.slice(k, k+3));
+    // the photo itself must be at the new place, so the break lands on the first photo taken there
+    if (distM(before, after) > SPLIT_M && distM(L[k], before) > SPLIT_M && distM(L[k], after) <= SPLIT_M){ out.add(L[k].id); last = k; }
+  }
+  return out;
+}
+// Is this set two visits? Returns the reason, or "".
+function setSpread(photos){
+  const L = photos.filter(p => p.lat != null && p.lon != null && !p.skip);
+  if (L.length < 2) return "";
+  const mid = medLoc(L); let worst = 0;
+  for (let k = 0; k < L.length; k++) worst = Math.max(worst, distM(mid, medLoc(L.slice(Math.max(0,k-1), k+2))));
+  return worst > SPREAD_M ? `These photos were taken in two places about ${fmtDist(worst)} apart, so this looks like two visits.` : "";
+}
+// No location to check with, and more than one job booked that day: say so before processing.
+function noLocRisk(photos, m){
+  const kept = photos.filter(p => !p.skip);
+  if (!kept.length || kept.some(p => p.lat != null)) return "";
+  const days = [...new Set(kept.map(p => isoDate(p.time)))];
+  const day = S.jobs.filter(j => !CLOSED.has(j.status) && days.includes(j.date));
+  return day.length >= 2 ? `These photos have no location and ${day.length} jobs were booked that day (${day.map(j=>j.jobNo).join(", ")}), so the tool can't check they're all one visit.` : "";
+}
 
 // ============================================================ EXIF (JPEG) — read + keep
 function readExifFromJpeg(buf){
@@ -816,10 +854,11 @@ function autoGroup(keepManual){
   const removed = keepManual ? new Set(S.removedBreaks || []) : new Set();
   S.breaks = new Set();
   if (!keepManual){ S.manualBreaks = []; S.removedBreaks = []; }
+  S.locBreaks = locBreaks(S.photos);
   S.photos.forEach((p, i) => {
     if (i === 0){ S.breaks.add(p.id); return; }
     const gapBreak = (p.time - S.photos[i-1].time) >= gapMs;
-    if ((gapBreak && !removed.has(p.id)) || manual.has(p.id)) S.breaks.add(p.id);
+    if (((gapBreak || S.locBreaks.has(p.id)) && !removed.has(p.id)) || manual.has(p.id)) S.breaks.add(p.id);
   });
   assignJobs();
 }
@@ -990,6 +1029,9 @@ function render(){
           ${addr ? `<div class="muted small" style="margin-top:2px">${esc(addr)}</div>` : ""}
           <div style="margin-top:6px">${badge} ${loc ? "" : `<span class="pill pill-info">No location in photos</span>`}</div>
           ${m.note ? `<div class="small" style="margin-top:6px;color:var(--coral-dark)">${esc(m.note)}</div>` : ""}
+          ${(() => { const sp = setSpread(sameJobGroups(g.id).length > 1 ? gs.filter(x => sameJobGroups(g.id).includes(x.id)).flatMap(x => x.photos) : g.photos);
+                     return sp ? `<div class="notice" style="margin-top:8px"><b>Two visits?</b> ${esc(sp)} Click the first photo of the second place and press &ldquo;Start a new job from here&rdquo;. It won't process until then.</div>` : ""; })()}
+          ${(S.locBreaks && S.locBreaks.has(g.id) && gi > 0 && (first.time - gs[gi-1].photos[gs[gi-1].photos.length-1].time) < S.settings.gap * 60000) ? `<div class="notice info" style="margin-top:8px">Split from the set above because the photos moved to another place (not by time).</div>` : ""}
           ${sameJobNote}
           <div class="gfields">
             ${S.jobs.length ? `<div class="field"><label>Job Log</label><select data-act="job" data-g="${g.id}" style="max-width:420px" title="Which job these photos belong to. Nearby jobs are listed first.">${opts}</select></div>` : ""}
@@ -1286,6 +1328,16 @@ async function processGroup(gid, opts){
   const sibs = sameJobGroups(gid);
   const all = groups().filter(x => sibs.includes(x.id));
   const keep = all.flatMap(x => x.photos).filter(p => !p.skip);
+  // 27 Oct: never zip two visits together. Process all checks these up front (processAll).
+  if (!(opts && opts.inBatch)){
+    const spread = setSpread(keep);
+    if (spread){
+      const typed = prompt(spread + "\n\nSplit it first: click the first photo of the second place and press \u201cStart a new job from here\u201d.\n\nOnly if you're sure it's all one visit, type " + m.jobNo + " to process anyway:");
+      if ((typed || "").trim().toUpperCase() !== m.jobNo.toUpperCase()) return;
+    }
+    const risk = noLocRisk(keep, m);
+    if (risk && !confirm(risk + "\n\nCheck every photo in this set is " + m.jobNo + ". Carry on?")) return;
+  }
   const noArea = keep.filter(p => !amap[p.id]).length;
   if (noArea && !(opts && opts.quiet)){
     if (!confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll be named "Unsorted". Carry on?`)) return;
@@ -1497,6 +1549,13 @@ async function processAll(){
   const gs = groups();
   const notReady = gs.filter(g => !S.meta[g.id].jobNo || !propCode(S.meta[g.id].postcode));
   if (notReady.length){ alert(`${notReady.length} job${notReady.length===1?" is":"s are"} missing a job number or postcode.`); return; }
+  // 27 Oct: stop before anything is zipped if a set looks like two visits.
+  const firsts = gs.filter(g => sameJobGroups(g.id)[0] === g.id);
+  const setOf = g => groups().filter(x => sameJobGroups(g.id).includes(x.id)).flatMap(x => x.photos).filter(p => !p.skip);
+  const spreads = firsts.map(g => [S.meta[g.id].jobNo, setSpread(setOf(g))]).filter(x => x[1]);
+  if (spreads.length){ alert("Nothing processed. " + spreads.map(x => x[0] + ": " + x[1]).join("\n") + "\n\nSplit it first: click the first photo of the second place and press \u201cStart a new job from here\u201d."); return; }
+  const risks = firsts.map(g => noLocRisk(setOf(g), S.meta[g.id])).filter(Boolean);
+  if (risks.length && !confirm([...new Set(risks)].join("\n") + "\n\nCheck every set is one visit. Carry on?")) return;
   const amap = areaMap();
   const noArea = S.photos.filter(p => !p.skip && !amap[p.id]).length;
   if (noArea && !confirm(`${noArea} photo${noArea===1?" has":"s have"} no area yet. They'll be named "Unsorted". Carry on?`)) return;
