@@ -200,7 +200,16 @@
   .gw-card{ gap:10px; }
   .gw-card.gw-due{ border-width:2px; }
   .gw-stage{ border-radius:999px; padding:1px 9px; font-size:12px; font-weight:600; background:var(--line-soft); color:var(--ink); }
-  .gw-st-4, .gw-st-5{ background:var(--amber-bg); color:var(--ink); } .gw-st-6, .gw-st-7{ background:var(--green-bg); color:var(--ink); } .gw-st-8{ opacity:.7; }
+  .gw-st-replied{ background:var(--coral); color:#fff; } .gw-st-interested, .gw-st-trial-agreed{ background:var(--amber-bg); color:var(--ink); } .gw-st-first-job, .gw-st-regular{ background:var(--green-bg); color:var(--ink); } .gw-st-not-now{ opacity:.7; }
+  /* build 2 (Lex, 3 Nov 23:15): replies picked up from the mailbox */
+  .gw-flag{ border-radius:999px; padding:1px 8px; font-size:11.5px; font-weight:700; margin-left:6px; white-space:nowrap; background:var(--coral); color:#fff; }
+  .gw-flag.gw-flag-soft{ background:transparent; color:var(--coral-dark); border:1px solid var(--coral); }
+  .gw-card.gw-answer{ border-color:var(--coral); border-width:2px; }
+  .gw-reply{ margin-top:6px; padding:8px 10px; border-left:3px solid var(--coral); background:var(--line-soft); border-radius:6px; font-size:13.5px; overflow-wrap:anywhere; }
+  .gw-reply b{ font-weight:600; } .gw-reply a{ margin-left:6px; white-space:nowrap; }
+  .gw-auto{ font-size:11px; opacity:.7; margin-left:4px; }
+  .gw-sample{ border:1.5px solid var(--coral); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:10px; }
+  @media (max-width:640px){ .gw-card > .pr-top{ flex-wrap:wrap; } .gw-card > .pr-top > .gw-main{ flex:1 1 100%; } .gw-card > .pr-top > .pr-btns{ flex:1 1 100%; justify-content:flex-start; flex-wrap:wrap; } }
   .gw-late{ color:var(--coral-dark); font-weight:600; }
   .gw-notes{ white-space:pre-line; }
   .gw-bar{ display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end; margin:4px 0 14px; }
@@ -4439,12 +4448,14 @@ async function procToPdf(k){
 // Build 1 (3 Nov 22:10): Type, First name, Postcode, Source, Batch, Do not contact; Delete (to the "Growth deleted"
 // tab, restorable); Bulk add (paste or CSV); tick contacts and send an email (preview first; one email per person,
 // from hello@, opt-out line; Do not contact / Not now / no email are never sent to).
-const GW_STAGES = ["To contact","Called","Emailed","Visited","Interested","Trial agreed","First job","Regular","Not now"];
+const GW_STAGES = ["To contact","Called","Emailed","Replied","Visited","Interested","Trial agreed","First job","Regular","Not now"];
+function gwSlug(s){ return String(s || "To contact").toLowerCase().replace(/[^a-z]+/g, "-"); }
 const GW_WON = ["Interested","Trial agreed","First job","Regular"];   // happy to try us, or better
 const GW_HOWS = ["Call","Email sent","Reply received","Visit","Meeting","Note"];
+// build 2: entries the mailbox check adds itself (how): Reply received, Email sent, No thanks, Email bounced, Auto-reply, Sample sent, Job booked
 const GW_TYPES = ["","Agent","Landlord"];
 const GW_FIELDS = ["Track","Agency","Area","Contact","Role","Phone","Email","Stage","Order","Next follow-up","Notes",
-  "Type","First name","Postcode","Source","Batch","Do not contact"];
+  "Type","First name","Postcode","Source","Batch","Do not contact","Flag"];
 // bulk add: column headings people are likely to use -> our field names
 const GW_ALIASES = { "track":"Track", "agency":"Agency", "name":"Agency", "landlord":"Agency", "agency or landlord":"Agency", "company":"Agency",
   "area":"Area", "address":"Area", "address or area":"Area", "contact":"Contact", "contact name":"Contact", "role":"Role", "their role":"Role",
@@ -4561,7 +4572,7 @@ function gwInput(k, label, type, extra){
 }
 function renderGwForm(){
   const d = state.gwDraft || {}, t = state.gwTouch || {}, isNew = state.gwEdit === "new";
-  const log = (d.log || []).slice(-5).reverse();
+  const log = (d.log || []).slice(-8).reverse();
   const dnc = /^yes$/i.test(d["Do not contact"] || "");
   const delBox = state.gwDelAsk ? `<div class="gw-del" role="alertdialog" aria-label="Delete this contact">
       <p><b>Delete ${esc(d.Agency || "this contact")}?</b> It moves to Deleted at the bottom of the page and can be restored from there.</p>
@@ -4595,13 +4606,45 @@ function renderGwForm(){
       </div>
       <label class="gw-f gw-wide"><span>What was said</span><input id="gwf-note" type="text" value="${esc(t.note || "")}" oninput="gwSetTouch('note', this.value)" placeholder="e.g. spoke to the lettings manager, uses an in-house clerk, call back in January"></label>
     </fieldset>
-    ${log.length ? `<div class="gw-log"><div class="gw-log-h">Last contacts</div>${log.map(x => `<div><b>${esc(gwNice(x.at))}</b> · ${esc(x.how)}${x.note ? " · " + esc(x.note) : ""}</div>`).join("")}</div>` : ""}
+    ${log.length ? `<div class="gw-log"><div class="gw-log-h">Last contacts</div>${log.map(x => `<div><b>${esc(gwNice(x.at))}</b> · ${esc(x.how)}${x.note ? " · " + esc(x.note) : ""}${x.auto ? `<span class="gw-auto">(auto)</span>` : ""}</div>`).join("")}</div>` : ""}
     ${state.gwMsg ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwMsg)}</p>` : ""}
     ${delBox}
     <div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwSave()"${state.gwSaving ? " disabled" : ""}>${state.gwSaving && !state.gwDelAsk ? "Saving…" : isNew ? "Add" : "Save"}</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="gwClose()">Cancel</button>
       ${isNew || state.gwDelAsk ? "" : `<button type="button" class="btn btn-ghost btn-sm gw-del-btn" onclick="gwDelStart()"${tip("Take this contact off the list (it can be restored)")}>Delete</button>`}</div>
   </div>`;
+}
+// build 2: the latest thing the mailbox check found from them (reply, no thanks, bounce), if it's newer than our last email
+function gwLastIn(r){
+  const IN = ["Reply received","No thanks","Email bounced"];
+  for (let i = r.log.length - 1; i >= 0; i--){ const x = r.log[i]; if (IN.includes(x.how)) return x; if (x.how === "Email sent" || x.how === "Sample sent") return null; }
+  return null;
+}
+function gwNeedsAnswer(rows){ return (rows || []).filter(r => r.Flag === "Needs answer" && !r.dnc); }
+function gwSampleSent(r){ return r.log.some(x => x.how === "Sample sent"); }
+async function gwAnswered(id){
+  const r = state.gw && state.gw.rows.find(x => x.Id === id); if (!r || state.gwSaving) return;
+  const row = {}; GW_FIELDS.forEach(k => { row[k] = r[k] == null ? "" : String(r[k]); }); row.Id = r.Id; row.Flag = "";
+  state.gwSaving = true; render();
+  try {
+    const out = await dashCall("growthSave", { row, ifUpdated: r.Updated || "" });
+    state.gwSaving = false;
+    if (out && out.ok){ gwTake(out); render(); showActionBar("Marked answered: " + r.Agency + "."); return; }
+    if (out && out.conflict && out.rows) gwTake(out);
+    showActionBar((out && out.error) || "Not saved.");
+  } catch(e){ state.gwSaving = false; showActionBar("Not saved: " + String(e && e.message || e)); }
+  render();
+}
+// Send sample: the same preview-then-send panel as Email…, for one contact and the sample email
+async function gwSampleOpen(id){
+  if (state.gwSending) return;
+  state.gwSend = { loading: true, kind: "sample" }; render();
+  try {
+    const r = await dashCall("growthSendPreview", { ids: [id], kind: "sample" });
+    state.gwSend = r && r.ok ? Object.assign({ kind: "sample" }, r) : { error: (r && r.error) || "Couldn't make the preview." };
+  } catch(e){ state.gwSend = { error: String(e && e.message || e) }; }
+  render();
+  setTimeout(() => { const el = document.getElementById("gwSendBox"); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
 }
 function gwPicked(){ return Object.keys(state.gwPick || {}).filter(k => state.gwPick[k]); }
 function gwTick(id, on){ state.gwPick = state.gwPick || {}; if (on) state.gwPick[id] = true; else delete state.gwPick[id]; gwRedrawPickBar(); }
@@ -4612,17 +4655,26 @@ function renderGwCard(r, due){
   const mail = r.Email ? `<a href="mailto:${esc(r.Email)}">${esc(r.Email)}</a>` : "";
   const picked = !!(state.gwPick && state.gwPick[r.Id]);
   const badges = [r.Type ? `<span class="gw-tag">${esc(r.Type)}</span>` : "", r.Batch ? `<span class="gw-tag">${esc(r.Batch)}</span>` : "",
-    r.dnc ? `<span class="gw-tag gw-dnc">Do not contact</span>` : ""].join("");
-  return `<section class="pr-card gw-card${due ? " gw-due" : ""}${picked ? " gw-picked" : ""}" aria-label="${esc(r.Agency)}">
+    r.dnc ? `<span class="gw-tag gw-dnc">Do not contact</span>` : "",
+    r.Flag === "Needs answer" && !r.dnc ? `<span class="gw-flag">Needs answering</span>` : "",
+    r.Flag === "Bounced" ? `<span class="gw-flag gw-flag-soft">Email bounced</span>` : ""].join("");
+  const last = gwLastIn(r), job = [...r.log].reverse().find(x => x.how === "Job booked");
+  const replyBox = last && !open ? `<div class="gw-reply"><b>${esc(last.how === "Reply received" ? "Replied" : last.how)} ${esc(gwNice(last.at))}</b>${last.note ? ": " + esc(last.note) : ""}${last.link ? `<a href="${esc(last.link)}" target="_blank" rel="noopener">Open in Gmail</a>` : ""}</div>` : "";
+  const jobLine = job && !open ? `<div class="pr-sub">${esc(job.note || "Job booked")} · booked ${esc(gwNice(job.at))}</div>` : "";
+  const canSample = !r.dnc && r.Email && ["Replied","Interested","Trial agreed"].includes(r.Stage) && !gwSampleSent(r);
+  return `<section class="pr-card gw-card${due ? " gw-due" : ""}${picked ? " gw-picked" : ""}${r.Flag === "Needs answer" && !r.dnc ? " gw-answer" : ""}" aria-label="${esc(r.Agency)}">
     <div class="pr-top">
       ${state.gwSelect && !open ? `<label class="gw-pick" title="${r.dnc ? "Do not contact: can't be emailed" : "Tick to email"}"><input type="checkbox"${picked ? " checked" : ""}${r.dnc ? " disabled" : ""} onchange="gwTick('${esc(r.Id)}', this.checked)" aria-label="Tick ${esc(r.Agency)}"></label>` : ""}
-      <div class="gw-main"><div class="pr-title">${r.Order ? `<span class="pr-type" title="Order in the plan">${esc(r.Order)}</span>` : ""}<span>${esc(r.Agency)}</span><span class="gw-stage gw-st-${esc(GW_STAGES.indexOf(r.Stage))}">${esc(r.Stage || "To contact")}</span>${badges}</div>
+      <div class="gw-main"><div class="pr-title">${r.Order ? `<span class="pr-type" title="Order in the plan">${esc(r.Order)}</span>` : ""}<span>${esc(r.Agency)}</span><span class="gw-stage gw-st-${esc(gwSlug(r.Stage))}">${esc(r.Stage || "To contact")}</span>${badges}</div>
         <div class="pr-sub">${[r.Track, r.Area, r.Postcode && !(r.Area || "").toUpperCase().includes(r.Postcode.toUpperCase()) ? r.Postcode : ""].filter(Boolean).map(esc).join(" · ")}</div>
         ${r.Contact || tel || mail ? `<div class="pr-sub">${[r.Contact ? esc(r.Contact) + (r.Role ? " (" + esc(r.Role) + ")" : "") : "", tel, mail].filter(Boolean).join(" · ")}</div>` : ""}
         <div class="pr-sub">${r["Last contact"] ? "Last contact " + esc(gwNice(r["Last contact"])) : "Not contacted yet"}${r["Next follow-up"] ? ` · <span class="${late ? "gw-late" : ""}">Follow up ${esc(gwNice(r["Next follow-up"]))}${late ? " (overdue)" : ""}</span>` : ""}</div>
+        ${jobLine}${replyBox}
         ${r.Notes && !open ? `<div class="pr-sub gw-notes">${esc(r.Notes)}</div>` : ""}
       </div>
-      ${open ? "" : `<div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwLog('${esc(r.Id)}')"${tip("Record a call, email, reply or visit, edit the details, or delete")}>Log contact</button></div>`}
+      ${open ? "" : `<div class="pr-btns">${canSample ? `<button type="button" class="btn btn-coral btn-sm" onclick="gwSampleOpen('${esc(r.Id)}')"${tip("Email them the sample report (you see it first)")}>Send sample</button>` : ""}
+        ${r.Flag === "Needs answer" && !r.dnc ? `<button type="button" class="btn btn-ghost btn-sm" onclick="gwAnswered('${esc(r.Id)}')"${tip("Take the Needs answering flag off (your reply from Gmail does this by itself)")}>Answered</button>` : ""}
+        <button type="button" class="btn ${canSample ? "btn-ghost" : "btn-coral"} btn-sm" onclick="gwLog('${esc(r.Id)}')"${tip("Record a call, email, reply or visit, edit the details, or delete")}>Log contact</button></div>`}
     </div>
     ${open ? renderGwForm() : ""}
   </section>`;
@@ -4653,7 +4705,7 @@ function renderGrowth(){
     <div class="pr-tile"><b>${replies}</b><span>Replies${ches ? ` · Chestertons ${chesReplied ? "replied" : "not yet"}` : ""}</span></div>
     <div class="pr-tile"><b>${won}</b><span>Booking us (March: 3 local, 2 London)</span></div></div>`;
   const due = gwDue(rows);
-  const dueIds = new Set(due.map(r => r.Id));
+  const dueIds = new Set(due.map(r => r.Id).concat(gwNeedsAnswer(rows).map(r => r.Id)));
   const shown = gwFilter(rows);
   const batches = Array.from(new Set(rows.map(r => r.Batch).filter(Boolean))).sort();
   const bar = `<div class="gw-bar">
@@ -4668,22 +4720,25 @@ function renderGrowth(){
       <button type="button" class="btn btn-ghost btn-sm" onclick="gwLoad()"${tip("Read the Growth tab again")}>${state.gwBusy ? "Loading…" : "Refresh"}</button></div>
   </div>`;
   const newBox = state.gwEdit === "new" ? `<section class="pr-card gw-card" aria-label="New contact"><div class="pr-title">New agent or landlord</div>${renderGwForm()}</section>` : "";
-  const dueBlock = due.length ? `<h2 class="pr-h2">Due this week</h2>${due.map(r => renderGwCard(r, true)).join("")}` : `<p class="pr-msg">No follow-ups due this week.</p>`;
-  return `${tiles}${state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)}</p>` : ""}${renderGwBulk()}${renderGwSend()}${newBox}${dueBlock}
+  const ans = gwNeedsAnswer(rows), ansIds = new Set(ans.map(r => r.Id));
+  const ansBlock = ans.length ? `<h2 class="pr-h2">Needs answering (${ans.length})</h2>${ans.map(r => renderGwCard(r, true)).join("")}` : "";
+  const dueLeft = due.filter(r => !ansIds.has(r.Id));
+  const dueBlock = dueLeft.length ? `<h2 class="pr-h2">Due this week</h2>${dueLeft.map(r => renderGwCard(r, true)).join("")}` : `<p class="pr-msg">No follow-ups due this week.</p>`;
+  return `${tiles}${state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)}</p>` : ""}${renderGwBulk()}${renderGwSend()}${newBox}${ansBlock}${dueBlock}
     <h2 class="pr-h2">Everyone</h2>${bar}<div id="gwPickBar">${renderGwPickBar(shown)}</div><div id="gwList">${renderGwList(shown, dueIds)}</div>${renderGwDeleted()}`;
 }
 function renderGwList(shown, dueIds){
   // a contact due this week shows once, in Due this week above, so its form can't open twice
   // (while ticking for an email, everyone shows here so they can all be ticked)
   const rest = state.gwSelect ? shown : shown.filter(r => !dueIds.has(r.Id)), up = shown.length - rest.length;
-  const note = up ? `<p class="pr-msg">${up} more in Due this week above.</p>` : "";
+  const note = up ? `<p class="pr-msg">${up} more in Needs answering / Due this week above.</p>` : "";
   if (!rest.length) return note || `<p class="pr-msg">Nothing matches.</p>`;
   return rest.map(r => renderGwCard(r, false)).join("") + note;
 }
 function gwRedrawList(){
   // search box: redraw the list only, so typing keeps focus
   const el = document.getElementById("gwList"); if (!el || !state.gw) return;
-  const dueIds = new Set(gwDue(state.gw.rows).map(r => r.Id));
+  const dueIds = new Set(gwDue(state.gw.rows).map(r => r.Id).concat(gwNeedsAnswer(state.gw.rows).map(r => r.Id)));
   const shown = gwFilter(state.gw.rows);
   el.innerHTML = renderGwList(shown, dueIds);
   gwRedrawPickBar();
