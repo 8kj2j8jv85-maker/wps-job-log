@@ -215,6 +215,25 @@
   .gw-touch legend{ font-weight:600; font-size:14px; padding:0 4px; }
   .gw-log{ font-size:13px; display:flex; flex-direction:column; gap:3px; }
   .gw-log-h{ font-weight:600; }
+  .gw-main{ flex:1; min-width:0; } .gw-main .pr-sub, .gw-who div, .gw-send-meta b, .gw-del-row span{ overflow-wrap:anywhere; }
+  .gw-tag{ border-radius:999px; padding:1px 8px; font-size:11.5px; font-weight:600; border:1px solid var(--line); margin-left:6px; white-space:nowrap; }
+  .gw-dnc{ border-color:var(--coral); color:var(--coral-dark); }
+  .gw-pick{ display:flex; align-items:flex-start; padding:4px 10px 0 0; } .gw-pick input{ width:22px; height:22px; }
+  .gw-card.gw-picked{ border-color:var(--coral); }
+  .gw-check-row{ display:flex; align-items:center; gap:8px; min-height:40px; font-size:14px; } .gw-check-row input{ width:20px; height:20px; }
+  .gw-del{ border:1.5px solid var(--coral); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:10px; }
+  .gw-del-btn{ margin-left:auto; color:var(--coral-dark); }
+  .gw-deleted{ margin:18px 0 6px; font-size:14px; } .gw-deleted summary{ cursor:pointer; font-weight:600; padding:6px 0; }
+  .gw-del-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--line-soft); }
+  .gw-pickbar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:0 0 12px; padding:10px 12px; border:1.5px solid var(--coral); border-radius:10px; }
+  .gw-hint{ font-size:12px; opacity:.8; flex-basis:100%; }
+  .gw-send{ gap:10px; } .gw-send-meta{ display:flex; flex-wrap:wrap; gap:8px 22px; font-size:14px; } .gw-send-meta div{ display:flex; flex-direction:column; } .gw-send-meta span{ font-size:12px; opacity:.8; }
+  .gw-who{ font-size:13.5px; } .gw-who summary{ cursor:pointer; font-weight:600; } .gw-who div{ padding:2px 0; }
+  .gw-frame{ width:100%; height:560px; border:1px solid var(--line); border-radius:8px; background:#141D3D; }
+  .gw-send{ min-width:0; max-width:100%; box-sizing:border-box; } .gw-send > *{ min-width:0; }
+  .gw-bulk-prev{ overflow:auto; max-height:320px; max-width:100%; } .gw-bulk-prev table{ border-collapse:collapse; font-size:13px; width:100%; }
+  .gw-bulk-prev th, .gw-bulk-prev td{ text-align:left; padding:4px 8px; border-bottom:1px solid var(--line-soft); white-space:nowrap; }
+  @media (max-width:640px){ .gw-frame{ height:480px; } .gw-del-btn{ margin-left:0; } }
   @media (max-width:640px){ .gw-grid{ grid-template-columns:1fr; } .gw-bar-btns{ margin-left:0; } .gw-bar > .gw-f{ flex:1 1 140px; } }
   @media (max-width:760px){ .pr-tiles{ grid-template-columns:repeat(2,minmax(0,1fr)); } .pr-steps{ grid-template-columns:repeat(2,minmax(0,1fr)); } }   /* Reports page (Lex, 20 Oct): use the whole screen for tiles */
   .wrap-dash .page-head{ padding-top:20px; }
@@ -4415,19 +4434,35 @@ async function procToPdf(k){
 }
 // ---- Growth section (Lex, 3 Nov 2026): agents and landlords WPS is trying to win (Grays relaunch, London reconnect).
 // The list lives in the Job Log Sheet tab "Growth", read and saved through the WPS script with the device key (ops
-// growthRead / growthSave, script file Growth). No names or numbers are in this page's code: they load from the Sheet.
-// The Monday growth check (scheduled task) reads the same tab. Nothing here sends email.
+// growthRead / growthSave / growthDelete / growthRestore / growthBulk / growthSendPreview / growthSend, script file
+// Growth). No names, numbers or email wording are in this page's code: they load from the Sheet and the script.
+// Build 1 (3 Nov 22:10): Type, First name, Postcode, Source, Batch, Do not contact; Delete (to the "Growth deleted"
+// tab, restorable); Bulk add (paste or CSV); tick contacts and send an email (preview first; one email per person,
+// from hello@, opt-out line; Do not contact / Not now / no email are never sent to).
 const GW_STAGES = ["To contact","Called","Emailed","Visited","Interested","Trial agreed","First job","Regular","Not now"];
 const GW_WON = ["Interested","Trial agreed","First job","Regular"];   // happy to try us, or better
 const GW_HOWS = ["Call","Email sent","Reply received","Visit","Meeting","Note"];
-const GW_FIELDS = ["Track","Agency","Area","Contact","Role","Phone","Email","Stage","Order","Next follow-up","Notes"];
+const GW_TYPES = ["","Agent","Landlord"];
+const GW_FIELDS = ["Track","Agency","Area","Contact","Role","Phone","Email","Stage","Order","Next follow-up","Notes",
+  "Type","First name","Postcode","Source","Batch","Do not contact"];
+// bulk add: column headings people are likely to use -> our field names
+const GW_ALIASES = { "track":"Track", "agency":"Agency", "name":"Agency", "landlord":"Agency", "agency or landlord":"Agency", "company":"Agency",
+  "area":"Area", "address":"Area", "address or area":"Area", "contact":"Contact", "contact name":"Contact", "role":"Role", "their role":"Role",
+  "phone":"Phone", "tel":"Phone", "mobile":"Phone", "email":"Email", "e-mail":"Email", "stage":"Stage", "order":"Order", "order in the plan":"Order",
+  "next follow-up":"Next follow-up", "follow-up":"Next follow-up", "notes":"Notes", "note":"Notes", "type":"Type", "first name":"First name", "firstname":"First name",
+  "postcode":"Postcode", "post code":"Postcode", "source":"Source", "batch":"Batch", "do not contact":"Do not contact", "dnc":"Do not contact" };
 const ICON_GROW = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>';
 function gwRowsToObjs(head, rows){
   return (rows || []).map(r => { const o = {}; (head || []).forEach((h, i) => { o[h] = r[i] == null ? "" : String(r[i]); });
     try { o.log = JSON.parse(o.Log || "[]"); if (!Array.isArray(o.log)) o.log = []; } catch(e){ o.log = []; }
+    o.dnc = /^yes$/i.test(o["Do not contact"] || "");
     return o; });
 }
-function gwTake(d){ state.gw = { at: Date.now(), rows: gwRowsToObjs(d.head, d.rows) }; }
+function gwTake(d){
+  state.gw = { at: Date.now(), rows: gwRowsToObjs(d.head, d.rows), deleted: Array.isArray(d.deleted) ? d.deleted : (state.gw && state.gw.deleted) || [] };
+  // ticks only for contacts still in the list
+  if (state.gwPick){ const have = new Set(state.gw.rows.map(r => r.Id)); Object.keys(state.gwPick).forEach(k => { if (!have.has(k)) delete state.gwPick[k]; }); }
+}
 async function gwLoad(){
   if (!keyMode() || state.gwBusy) return;
   state.gwBusy = true; if (state.view === "growth") safeRender();
@@ -4440,7 +4475,7 @@ async function gwLoad(){
 }
 function gwDue(rows){
   const wk = isoToday(7);
-  return (rows || []).filter(r => r["Next follow-up"] && r["Next follow-up"] <= wk && r.Stage !== "Not now")
+  return (rows || []).filter(r => r["Next follow-up"] && r["Next follow-up"] <= wk && r.Stage !== "Not now" && !r.dnc)
     .sort((a,b) => a["Next follow-up"].localeCompare(b["Next follow-up"]));
 }
 function gwDueCount(){ return state.gw ? gwDue(state.gw.rows).length : 0; }
@@ -4450,14 +4485,14 @@ function gwAddDays(iso, n){ const d = new Date((iso || isoToday(0)) + "T12:00:00
 function gwOpen(id){
   const r = id === "new" ? null : (state.gw && state.gw.rows.find(x => x.Id === id));
   if (id !== "new" && !r) return;
-  state.gwEdit = id; state.gwMsg = "";
+  state.gwEdit = id; state.gwMsg = ""; state.gwDelAsk = null;
   state.gwDraft = r ? Object.assign({}, r) : { Track: state.gwTrack && state.gwTrack !== "all" ? state.gwTrack : "Grays", Stage: "To contact" };
   state.gwTouch = { how: "", note: "", date: isoToday(0) };
   render();
   setTimeout(() => { const el = document.getElementById("gwf-" + (id === "new" ? "Agency" : "how")); if (el) el.focus(); }, 0);
 }
 function gwLog(id){ gwOpen(id); }
-function gwClose(){ state.gwEdit = null; state.gwDraft = null; state.gwTouch = null; state.gwMsg = ""; render(); }
+function gwClose(){ state.gwEdit = null; state.gwDraft = null; state.gwTouch = null; state.gwMsg = ""; state.gwDelAsk = null; render(); }
 function gwSet(k, v){ if (state.gwDraft) state.gwDraft[k] = v; }
 function gwSetTouch(k, v){
   if (!state.gwTouch) return;
@@ -4477,6 +4512,7 @@ async function gwSave(){
   const d = state.gwDraft, t = state.gwTouch; if (!d || state.gwSaving) return;
   if (!keyMode()){ state.gwMsg = "This device has no key (More > Device key)."; render(); return; }
   if (!String(d.Agency || "").trim()){ state.gwMsg = "Put the agency or landlord name in."; render(); return; }
+  // every field goes on every save: the script writes the whole row
   const row = {}; GW_FIELDS.forEach(k => { row[k] = d[k] == null ? "" : String(d[k]); });
   if (state.gwEdit !== "new") row.Id = d.Id;
   const body = { row, ifUpdated: state.gwEdit === "new" ? "" : (d.Updated || "") };
@@ -4491,6 +4527,31 @@ async function gwSave(){
   } catch(e){ state.gwSaving = false; state.gwMsg = "Not saved: " + String(e && e.message || e); }
   render();
 }
+// ---- delete (asks inside the page; the row moves to the Growth deleted tab and can be restored) ----
+function gwDelStart(){ state.gwDelAsk = { reason: "" }; render(); setTimeout(() => { const el = document.getElementById("gwDelReason"); if (el) el.focus(); }, 0); }
+async function gwDelGo(){
+  const d = state.gwDraft; if (!d || !d.Id || state.gwSaving) return;
+  state.gwSaving = true; state.gwMsg = ""; render();
+  try {
+    const r = await dashCall("growthDelete", { id: d.Id, ifUpdated: d.Updated || "", reason: (state.gwDelAsk && state.gwDelAsk.reason) || "" });
+    state.gwSaving = false;
+    if (r && r.ok){ gwTake(r); const who = d.Agency; state.gwEdit = null; state.gwDraft = null; state.gwTouch = null; state.gwDelAsk = null; render(); showActionBar("Deleted: " + who + ". It's in Deleted at the bottom of the page if you need it back."); return; }
+    if (r && r.conflict && r.rows){ gwTake(r); const fresh = state.gw.rows.find(x => x.Id === d.Id); if (fresh) state.gwDraft = Object.assign({}, fresh); }
+    state.gwMsg = (r && r.error) || "Not deleted.";
+  } catch(e){ state.gwSaving = false; state.gwMsg = "Not deleted: " + String(e && e.message || e); }
+  render();
+}
+async function gwRestore(id){
+  if (state.gwSaving) return;
+  state.gwSaving = true; render();
+  try {
+    const r = await dashCall("growthRestore", { id });
+    state.gwSaving = false;
+    if (r && r.ok){ gwTake(r); render(); showActionBar("Restored."); return; }
+    showActionBar((r && r.error) || "Not restored.");
+  } catch(e){ state.gwSaving = false; showActionBar("Not restored: " + String(e && e.message || e)); }
+  render();
+}
 function gwSel(id, val, opts, onchange, label){
   return `<select id="${id}" onchange="${onchange}" aria-label="${esc(label)}">${opts.map(o => { const v = Array.isArray(o) ? o[0] : o, l = Array.isArray(o) ? o[1] : o; return `<option value="${esc(v)}"${v === val ? " selected" : ""}>${esc(l)}</option>`; }).join("")}</select>`;
 }
@@ -4501,18 +4562,30 @@ function gwInput(k, label, type, extra){
 function renderGwForm(){
   const d = state.gwDraft || {}, t = state.gwTouch || {}, isNew = state.gwEdit === "new";
   const log = (d.log || []).slice(-5).reverse();
+  const dnc = /^yes$/i.test(d["Do not contact"] || "");
+  const delBox = state.gwDelAsk ? `<div class="gw-del" role="alertdialog" aria-label="Delete this contact">
+      <p><b>Delete ${esc(d.Agency || "this contact")}?</b> It moves to Deleted at the bottom of the page and can be restored from there.</p>
+      <label class="gw-f"><span>Why (optional)</span><input id="gwDelReason" type="text" value="${esc(state.gwDelAsk.reason || "")}" oninput="state.gwDelAsk.reason=this.value" placeholder="e.g. out of area, duplicate"></label>
+      <div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwDelGo()"${state.gwSaving ? " disabled" : ""}>${state.gwSaving ? "Deleting…" : "Yes, delete"}</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="state.gwDelAsk=null;render()">Keep it</button></div></div>` : "";
   return `<div class="gw-form">
     <div class="gw-grid">
       <label class="gw-f"><span>Track</span>${gwSel("gwf-Track", d.Track || "Grays", ["Grays","London"], "gwSet('Track', this.value)", "Track")}</label>
+      <label class="gw-f"><span>Type</span>${gwSel("gwf-Type", d.Type || "", [["","Not set"],"Agent","Landlord"], "gwSet('Type', this.value)", "Type")}</label>
       ${gwInput("Agency", "Agency or landlord")}
       ${gwInput("Area", "Address or area")}
+      ${gwInput("Postcode", "Postcode")}
       ${gwInput("Contact", "Contact name")}
+      ${gwInput("First name", "First name (for Hi …)")}
       ${gwInput("Role", "Their role")}
       ${gwInput("Phone", "Phone", "tel")}
       ${gwInput("Email", "Email", "email")}
       <label class="gw-f"><span>Stage</span>${gwSel("gwf-Stage", d.Stage || "To contact", GW_STAGES, "gwSet('Stage', this.value)", "Stage")}</label>
       ${gwInput("Order", "Order in the plan", "number", ' min="0" max="999"')}
       ${gwInput("Next follow-up", "Next follow-up", "date")}
+      ${gwInput("Batch", "Batch (e.g. Reconnect Nov 26)")}
+      ${gwInput("Source", "Source")}
+      <label class="gw-f gw-check"><span>Do not contact</span><span class="gw-check-row"><input id="gwf-dnc" type="checkbox"${dnc ? " checked" : ""} onchange="gwSet('Do not contact', this.checked ? 'yes' : '')"> They asked not to be emailed</span></label>
     </div>
     <label class="gw-f gw-wide"><span>Notes</span><textarea id="gwf-Notes" rows="3" oninput="gwSet('Notes', this.value)">${esc(d.Notes || "")}</textarea></label>
     <fieldset class="gw-touch"><legend>Log a contact${isNew ? " (optional)" : ""}</legend>
@@ -4524,34 +4597,49 @@ function renderGwForm(){
     </fieldset>
     ${log.length ? `<div class="gw-log"><div class="gw-log-h">Last contacts</div>${log.map(x => `<div><b>${esc(gwNice(x.at))}</b> · ${esc(x.how)}${x.note ? " · " + esc(x.note) : ""}</div>`).join("")}</div>` : ""}
     ${state.gwMsg ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwMsg)}</p>` : ""}
-    <div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwSave()"${state.gwSaving ? " disabled" : ""}>${state.gwSaving ? "Saving…" : isNew ? "Add" : "Save"}</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="gwClose()">Cancel</button></div>
+    ${delBox}
+    <div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwSave()"${state.gwSaving ? " disabled" : ""}>${state.gwSaving && !state.gwDelAsk ? "Saving…" : isNew ? "Add" : "Save"}</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="gwClose()">Cancel</button>
+      ${isNew || state.gwDelAsk ? "" : `<button type="button" class="btn btn-ghost btn-sm gw-del-btn" onclick="gwDelStart()"${tip("Take this contact off the list (it can be restored)")}>Delete</button>`}</div>
   </div>`;
 }
+function gwPicked(){ return Object.keys(state.gwPick || {}).filter(k => state.gwPick[k]); }
+function gwTick(id, on){ state.gwPick = state.gwPick || {}; if (on) state.gwPick[id] = true; else delete state.gwPick[id]; gwRedrawPickBar(); }
 function renderGwCard(r, due){
   const today = isoToday(0), late = r["Next follow-up"] && r["Next follow-up"] < today;
   const open = state.gwEdit === r.Id;
   const tel = r.Phone ? `<a href="tel:${esc(String(r.Phone).replace(/[^\d+]/g, ""))}">${esc(r.Phone)}</a>` : "";
   const mail = r.Email ? `<a href="mailto:${esc(r.Email)}">${esc(r.Email)}</a>` : "";
-  return `<section class="pr-card gw-card${due ? " gw-due" : ""}" aria-label="${esc(r.Agency)}">
+  const picked = !!(state.gwPick && state.gwPick[r.Id]);
+  const badges = [r.Type ? `<span class="gw-tag">${esc(r.Type)}</span>` : "", r.Batch ? `<span class="gw-tag">${esc(r.Batch)}</span>` : "",
+    r.dnc ? `<span class="gw-tag gw-dnc">Do not contact</span>` : ""].join("");
+  return `<section class="pr-card gw-card${due ? " gw-due" : ""}${picked ? " gw-picked" : ""}" aria-label="${esc(r.Agency)}">
     <div class="pr-top">
-      <div><div class="pr-title">${r.Order ? `<span class="pr-type" title="Order in the plan">${esc(r.Order)}</span>` : ""}<span>${esc(r.Agency)}</span><span class="gw-stage gw-st-${esc(GW_STAGES.indexOf(r.Stage))}">${esc(r.Stage || "To contact")}</span></div>
-        <div class="pr-sub">${[r.Track, r.Area].filter(Boolean).map(esc).join(" · ")}</div>
+      ${state.gwSelect && !open ? `<label class="gw-pick" title="${r.dnc ? "Do not contact: can't be emailed" : "Tick to email"}"><input type="checkbox"${picked ? " checked" : ""}${r.dnc ? " disabled" : ""} onchange="gwTick('${esc(r.Id)}', this.checked)" aria-label="Tick ${esc(r.Agency)}"></label>` : ""}
+      <div class="gw-main"><div class="pr-title">${r.Order ? `<span class="pr-type" title="Order in the plan">${esc(r.Order)}</span>` : ""}<span>${esc(r.Agency)}</span><span class="gw-stage gw-st-${esc(GW_STAGES.indexOf(r.Stage))}">${esc(r.Stage || "To contact")}</span>${badges}</div>
+        <div class="pr-sub">${[r.Track, r.Area, r.Postcode && !(r.Area || "").toUpperCase().includes(r.Postcode.toUpperCase()) ? r.Postcode : ""].filter(Boolean).map(esc).join(" · ")}</div>
         ${r.Contact || tel || mail ? `<div class="pr-sub">${[r.Contact ? esc(r.Contact) + (r.Role ? " (" + esc(r.Role) + ")" : "") : "", tel, mail].filter(Boolean).join(" · ")}</div>` : ""}
         <div class="pr-sub">${r["Last contact"] ? "Last contact " + esc(gwNice(r["Last contact"])) : "Not contacted yet"}${r["Next follow-up"] ? ` · <span class="${late ? "gw-late" : ""}">Follow up ${esc(gwNice(r["Next follow-up"]))}${late ? " (overdue)" : ""}</span>` : ""}</div>
         ${r.Notes && !open ? `<div class="pr-sub gw-notes">${esc(r.Notes)}</div>` : ""}
       </div>
-      ${open ? "" : `<div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwLog('${esc(r.Id)}')"${tip("Record a call, email, reply or visit, and set the next follow-up")}>Log contact</button></div>`}
+      ${open ? "" : `<div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwLog('${esc(r.Id)}')"${tip("Record a call, email, reply or visit, edit the details, or delete")}>Log contact</button></div>`}
     </div>
     ${open ? renderGwForm() : ""}
   </section>`;
+}
+function gwFilter(rows){
+  const track = state.gwTrack || "all", stage = state.gwStage || "all", type = state.gwType || "all", batch = state.gwBatch || "all", q = (state.gwQ || "").trim().toLowerCase();
+  return rows.filter(r => (track === "all" || r.Track === track) && (stage === "all" || r.Stage === stage)
+      && (type === "all" || (type === "none" ? !r.Type : r.Type === type)) && (batch === "all" || (batch === "none" ? !r.Batch : r.Batch === batch))
+      && (!q || [r.Agency, r.Area, r.Postcode, r.Contact, r["First name"], r.Email, r.Notes].join(" ").toLowerCase().includes(q)))
+    .sort((a,b) => (a.Track || "").localeCompare(b.Track || "") || (Number(a.Order) || 999) - (Number(b.Order) || 999) || (a.Agency || "").localeCompare(b.Agency || ""));
 }
 function renderGrowth(){
   if (document.title !== "WPS Growth") document.title = "WPS Growth";   // also when opened straight at #growth
   if (keyMode() && !state.gw && !state.gwBusy && !state.gwErr) setTimeout(gwLoad, 0);
   if (!keyMode()) return `<p class="pr-msg">The Growth list is kept in the Job Log Sheet and needs this device's key (More > Device key).</p>`;
   if (!state.gw) return state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)} <button type="button" class="btn btn-ghost btn-sm" onclick="state.gwErr='';gwLoad()">Try again</button></p>` : `<p class="pr-msg">Loading the Growth list…</p>`;
-  const rows = state.gw.rows, track = state.gwTrack || "all", stage = state.gwStage || "all", q = (state.gwQ || "").trim().toLowerCase();
+  const rows = state.gw.rows;
   const grays = rows.filter(r => r.Track === "Grays"), london = rows.filter(r => r.Track === "London");
   const spoken = grays.filter(r => r.Stage !== "To contact").length;
   const willing = rows.filter(r => GW_WON.includes(r.Stage)).length;
@@ -4566,24 +4654,28 @@ function renderGrowth(){
     <div class="pr-tile"><b>${won}</b><span>Booking us (March: 3 local, 2 London)</span></div></div>`;
   const due = gwDue(rows);
   const dueIds = new Set(due.map(r => r.Id));
-  const shown = rows.filter(r => (track === "all" || r.Track === track) && (stage === "all" || r.Stage === stage)
-      && (!q || [r.Agency, r.Area, r.Contact, r.Notes].join(" ").toLowerCase().includes(q)))
-    .sort((a,b) => (a.Track || "").localeCompare(b.Track || "") || (Number(a.Order) || 999) - (Number(b.Order) || 999) || (a.Agency || "").localeCompare(b.Agency || ""));
+  const shown = gwFilter(rows);
+  const batches = Array.from(new Set(rows.map(r => r.Batch).filter(Boolean))).sort();
   const bar = `<div class="gw-bar">
-    <label class="gw-f"><span>Track</span>${gwSel("gwTrack", track, [["all","Both"],"Grays","London"], "state.gwTrack=this.value;render()", "Track")}</label>
-    <label class="gw-f"><span>Stage</span>${gwSel("gwStage", stage, [["all","All stages"]].concat(GW_STAGES), "state.gwStage=this.value;render()", "Stage")}</label>
-    <label class="gw-f gw-q"><span>Search</span><input id="gwQ" type="search" value="${esc(state.gwQ || "")}" oninput="state.gwQ=this.value;gwRedrawList()" placeholder="Agency, area, name or note"></label>
+    <label class="gw-f"><span>Track</span>${gwSel("gwTrack", state.gwTrack || "all", [["all","Both"],"Grays","London"], "state.gwTrack=this.value;render()", "Track")}</label>
+    <label class="gw-f"><span>Type</span>${gwSel("gwType", state.gwType || "all", [["all","All types"],"Agent","Landlord",["none","Not set"]], "state.gwType=this.value;render()", "Type")}</label>
+    <label class="gw-f"><span>Stage</span>${gwSel("gwStage", state.gwStage || "all", [["all","All stages"]].concat(GW_STAGES), "state.gwStage=this.value;render()", "Stage")}</label>
+    ${batches.length ? `<label class="gw-f"><span>Batch</span>${gwSel("gwBatch", state.gwBatch || "all", [["all","All batches"]].concat(batches).concat([["none","No batch"]]), "state.gwBatch=this.value;render()", "Batch")}</label>` : ""}
+    <label class="gw-f gw-q"><span>Search</span><input id="gwQ" type="search" value="${esc(state.gwQ || "")}" oninput="state.gwQ=this.value;gwRedrawList()" placeholder="Name, area, postcode, email or note"></label>
     <div class="pr-btns gw-bar-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwOpen('new')">Add agent or landlord</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="gwBulkOpen()"${tip("Paste a list or pick a CSV file to add many at once")}>Bulk add</button>
+      <button type="button" class="btn btn-ghost btn-sm${state.gwSelect ? " on" : ""}" onclick="gwSelectToggle()"${tip("Tick contacts to send them an email")}>${state.gwSelect ? "Done ticking" : "Email…"}</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="gwLoad()"${tip("Read the Growth tab again")}>${state.gwBusy ? "Loading…" : "Refresh"}</button></div>
   </div>`;
   const newBox = state.gwEdit === "new" ? `<section class="pr-card gw-card" aria-label="New contact"><div class="pr-title">New agent or landlord</div>${renderGwForm()}</section>` : "";
   const dueBlock = due.length ? `<h2 class="pr-h2">Due this week</h2>${due.map(r => renderGwCard(r, true)).join("")}` : `<p class="pr-msg">No follow-ups due this week.</p>`;
-  return `${tiles}${state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)}</p>` : ""}${newBox}${dueBlock}
-    <h2 class="pr-h2">Everyone</h2>${bar}<div id="gwList">${renderGwList(shown, dueIds)}</div>`;
+  return `${tiles}${state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)}</p>` : ""}${renderGwBulk()}${renderGwSend()}${newBox}${dueBlock}
+    <h2 class="pr-h2">Everyone</h2>${bar}<div id="gwPickBar">${renderGwPickBar(shown)}</div><div id="gwList">${renderGwList(shown, dueIds)}</div>${renderGwDeleted()}`;
 }
 function renderGwList(shown, dueIds){
   // a contact due this week shows once, in Due this week above, so its form can't open twice
-  const rest = shown.filter(r => !dueIds.has(r.Id)), up = shown.length - rest.length;
+  // (while ticking for an email, everyone shows here so they can all be ticked)
+  const rest = state.gwSelect ? shown : shown.filter(r => !dueIds.has(r.Id)), up = shown.length - rest.length;
   const note = up ? `<p class="pr-msg">${up} more in Due this week above.</p>` : "";
   if (!rest.length) return note || `<p class="pr-msg">Nothing matches.</p>`;
   return rest.map(r => renderGwCard(r, false)).join("") + note;
@@ -4591,13 +4683,170 @@ function renderGwList(shown, dueIds){
 function gwRedrawList(){
   // search box: redraw the list only, so typing keeps focus
   const el = document.getElementById("gwList"); if (!el || !state.gw) return;
-  const rows = state.gw.rows, track = state.gwTrack || "all", stage = state.gwStage || "all", q = (state.gwQ || "").trim().toLowerCase();
-  const dueIds = new Set(gwDue(rows).map(r => r.Id));
-  const shown = rows.filter(r => (track === "all" || r.Track === track) && (stage === "all" || r.Stage === stage)
-      && (!q || [r.Agency, r.Area, r.Contact, r.Notes].join(" ").toLowerCase().includes(q)))
-    .sort((a,b) => (a.Track || "").localeCompare(b.Track || "") || (Number(a.Order) || 999) - (Number(b.Order) || 999) || (a.Agency || "").localeCompare(b.Agency || ""));
+  const dueIds = new Set(gwDue(state.gw.rows).map(r => r.Id));
+  const shown = gwFilter(state.gw.rows);
   el.innerHTML = renderGwList(shown, dueIds);
+  gwRedrawPickBar();
 }
+function renderGwDeleted(){
+  const del = (state.gw && state.gw.deleted) || [];
+  if (!del.length) return "";
+  return `<details class="gw-deleted"${state.gwDelOpen ? " open" : ""} ontoggle="state.gwDelOpen=this.open"><summary>Deleted (${del.length})</summary>
+    ${del.map(x => `<div class="gw-del-row"><span><b>${esc(x.agency)}</b> · ${esc(x.track)}${x.reason ? " · " + esc(x.reason) : ""} · deleted ${esc(gwNice(String(x.deleted || "").slice(0,10)))}${x.by ? " (" + esc(x.by) + ")" : ""}</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="gwRestore('${esc(x.id)}')"${state.gwSaving ? " disabled" : ""}>Restore</button></div>`).join("")}</details>`;
+}
+
+// ---- tick and email ----
+function gwSelectToggle(){ state.gwSelect = !state.gwSelect; if (!state.gwSelect){ state.gwPick = {}; } render(); }
+function renderGwPickBar(shown){
+  if (!state.gwSelect) return "";
+  const n = gwPicked().length;
+  const can = (shown || []).filter(r => !r.dnc);
+  return `<div class="gw-pickbar"><span><b>${n}</b> ticked</span>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="gwTickShown(true)">Tick all shown (${can.length})</button>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="gwTickShown(false)">Clear</button>
+    <button type="button" class="btn btn-coral btn-sm" onclick="gwSendOpen()"${n ? "" : " disabled"}>Preview email to ${n}</button>
+    <span class="gw-hint">Do not contact can't be ticked. Not now and no email are skipped at the preview.</span></div>`;
+}
+function gwRedrawPickBar(){
+  const el = document.getElementById("gwPickBar"); if (!el || !state.gw) return;
+  el.innerHTML = renderGwPickBar(gwFilter(state.gw.rows));
+  document.querySelectorAll(".gw-card").forEach(c => { const cb = c.querySelector(".gw-pick input"); if (cb) c.classList.toggle("gw-picked", cb.checked); });
+}
+function gwTickShown(on){
+  state.gwPick = on ? Object.assign(state.gwPick || {}, Object.fromEntries(gwFilter(state.gw.rows).filter(r => !r.dnc).map(r => [r.Id, true]))) : {};
+  render();
+}
+async function gwSendOpen(){
+  const ids = gwPicked(); if (!ids.length || state.gwSending) return;
+  state.gwSend = { loading: true, kind: "reconnect" }; render();
+  try {
+    const r = await dashCall("growthSendPreview", { ids, kind: state.gwSend.kind });
+    state.gwSend = r && r.ok ? Object.assign({ kind: state.gwSend.kind }, r) : { error: (r && r.error) || "Couldn't make the preview." };
+  } catch(e){ state.gwSend = { error: String(e && e.message || e) }; }
+  render();
+  setTimeout(() => { const el = document.getElementById("gwSendBox"); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+}
+async function gwSendGo(){
+  const p = state.gwSend; if (!p || !p.will || !p.will.length || state.gwSending) return;
+  state.gwSending = true; render();
+  try {
+    const r = await dashCall("growthSend", { ids: p.will.map(x => x.id), kind: p.kind, confirm: true });
+    state.gwSending = false;
+    if (r && r.ok){
+      gwTake(r);
+      const left = r.left || 0;
+      state.gwSend = { done: true, kind: p.kind, sent: r.sent || [], failed: r.failed || [], skip: r.skip || [], left,
+        will: left ? p.will.filter(x => !(r.sent || []).some(s => s.id === x.id) && !(r.failed || []).some(f => f.id === x.id)) : [] };
+      (r.sent || []).forEach(s => { if (state.gwPick) delete state.gwPick[s.id]; });
+      render(); return;
+    }
+    state.gwSend = Object.assign({}, p, { error: (r && r.error) || "Not sent." });
+  } catch(e){ state.gwSending = false; state.gwSend = Object.assign({}, p, { error: "Not sent: " + String(e && e.message || e) }); }
+  render();
+}
+function gwSendClose(){ state.gwSend = null; render(); }
+function renderGwSend(){
+  const s = state.gwSend; if (!s) return "";
+  const close = `<button type="button" class="btn btn-ghost btn-sm" onclick="gwSendClose()">Close</button>`;
+  if (s.loading) return `<section class="pr-card gw-send" id="gwSendBox"><p class="pr-msg">Making the preview…</p></section>`;
+  if (s.done) return `<section class="pr-card gw-send" id="gwSendBox"><div class="pr-title">Email sent</div>
+    <p class="pr-msg"><b>${s.sent.length}</b> sent from hello@, each logged on the contact (stage Emailed, follow-up in 10 days).</p>
+    ${s.failed.length ? `<p class="pr-msg" style="color:var(--coral)">Not sent: ${s.failed.map(f => esc(f.agency) + " (" + esc(f.why) + ")").join("; ")}</p>` : ""}
+    ${s.left ? `<p class="pr-msg">${s.left} still to go (sent in batches of 25).</p><div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwSendGo()"${state.gwSending ? " disabled" : ""}>${state.gwSending ? "Sending…" : "Send the next " + Math.min(25, s.left)}</button>${close}</div>` : `<div class="pr-btns">${close}</div>`}</section>`;
+  if (s.error && !s.will) return `<section class="pr-card gw-send" id="gwSendBox"><p class="pr-msg" style="color:var(--coral)">${esc(s.error)}</p><div class="pr-btns">${close}</div></section>`;
+  const n = (s.will || []).length;
+  return `<section class="pr-card gw-send" id="gwSendBox" aria-label="Email preview"><div class="pr-title">Check before sending</div>
+    <div class="gw-send-meta"><div><span>From</span><b>${esc(s.from || "hello@")}</b></div><div><span>Subject</span><b>${esc(s.subject || "")}</b></div>
+      <div><span>Email</span><b>${esc(s.label || s.kind)}</b></div></div>
+    <p class="pr-msg"><b>${n}</b> will get their own copy${s.sampleFor ? ` (preview shows ${esc(s.sampleFor)}'s)` : ""}.${n > (s.max || 25) ? ` They go in batches of ${s.max || 25}.` : ""}</p>
+    ${n ? `<details class="gw-who"><summary>Who gets it (${n})</summary>${s.will.map(x => `<div>${esc(x.agency)} · ${esc(x.email)}${x.first ? " · Hi " + esc(x.first) : " · Hello"}</div>`).join("")}</details>` : ""}
+    ${(s.skip || []).length ? `<details class="gw-who" open><summary>Won't get it (${s.skip.length})</summary>${s.skip.map(x => `<div>${esc(x.agency)} · ${esc(x.why)}</div>`).join("")}</details>` : ""}
+    ${s.html ? `<iframe class="gw-frame" title="Email preview" sandbox="" srcdoc="${esc(s.html)}"></iframe>` : ""}
+    ${s.error ? `<p class="pr-msg" style="color:var(--coral)">${esc(s.error)}</p>` : ""}
+    <div class="pr-btns">${n ? `<button type="button" class="btn btn-coral btn-sm" onclick="gwSendGo()"${state.gwSending ? " disabled" : ""}>${state.gwSending ? "Sending…" : "Send to " + Math.min(n, s.max || 25)}</button>` : ""}${close}</div></section>`;
+}
+
+// ---- bulk add (paste a list with a heading row, or pick a CSV file) ----
+function gwBulkOpen(){ state.gwBulk = state.gwBulk || { text: "", batch: "", track: "London", type: "" }; state.gwBulk.result = null; render(); setTimeout(() => { const el = document.getElementById("gwBulkText"); if (el) el.focus(); }, 0); }
+function gwBulkClose(){ state.gwBulk = null; render(); }
+function gwCsvSplit(text){
+  // CSV or tab-separated, quotes allowed ("a, b" stays one cell)
+  const t = String(text || "").replace(/\r\n?/g, "\n").trim(); if (!t) return [];
+  const sep = t.split("\n")[0].includes("\t") ? "\t" : ",";
+  const out = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < t.length; i++){
+    const c = t[i];
+    if (q){ if (c === '"'){ if (t[i+1] === '"'){ cell += '"'; i++; } else q = false; } else cell += c; continue; }
+    if (c === '"'){ q = true; continue; }
+    if (c === sep){ row.push(cell); cell = ""; continue; }
+    if (c === "\n"){ row.push(cell); out.push(row); row = []; cell = ""; continue; }
+    cell += c;
+  }
+  row.push(cell); out.push(row);
+  return out.filter(r => r.some(x => String(x).trim()));
+}
+function gwBulkParse(b){
+  const grid = gwCsvSplit(b.text); if (grid.length < 2) return { rows: [], unknown: [], error: grid.length ? "Put a heading row first (e.g. Agency, Email, First name, Area, Postcode, Notes), then one line per contact." : "" };
+  const heads = grid[0].map(h => GW_ALIASES[String(h).trim().toLowerCase()] || "");
+  const unknown = grid[0].filter((h, i) => !heads[i] && String(h).trim());
+  if (!heads.includes("Agency")) return { rows: [], unknown, error: "There's no Agency (or Name) column." };
+  const rows = grid.slice(1).map(cells => {
+    const o = {}; heads.forEach((h, i) => { if (h) o[h] = String(cells[i] == null ? "" : cells[i]).trim(); });
+    if (!o.Track) o.Track = b.track || "London";
+    if (!o.Type && b.type) o.Type = b.type;
+    if (!o.Batch && b.batch) o.Batch = b.batch;
+    if (!o.Stage) o.Stage = "To contact";
+    return o;
+  }).filter(o => o.Agency);
+  return { rows, unknown, error: "" };
+}
+function gwBulkFile(input){
+  const f = input.files && input.files[0]; if (!f) return;
+  if (f.size > 500000){ showActionBar("That file is too big for a contact list."); return; }
+  const rd = new FileReader(); rd.onload = () => { state.gwBulk.text = String(rd.result || ""); state.gwBulk.result = null; render(); }; rd.readAsText(f);
+}
+async function gwBulkGo(){
+  const b = state.gwBulk; if (!b || state.gwSaving) return;
+  const p = gwBulkParse(b); if (p.error || !p.rows.length) return;
+  state.gwSaving = true; b.result = null; render();
+  try {
+    const r = await dashCall("growthBulk", { rows: p.rows, batch: b.batch || "" });
+    state.gwSaving = false;
+    if (r && r.ok){ gwTake(r); b.result = { ok: true, added: r.added || 0, skipped: r.skipped || [] }; b.text = ""; render(); showActionBar("Added " + (r.added || 0) + "."); return; }
+    b.result = { ok: false, error: (r && r.error) || "Nothing added.", errors: (r && r.errors) || [] };
+  } catch(e){ state.gwSaving = false; b.result = { ok: false, error: String(e && e.message || e), errors: [] }; }
+  render();
+}
+function renderGwBulk(){
+  const b = state.gwBulk; if (!b) return "";
+  return `<section class="pr-card gw-send" aria-label="Bulk add"><div class="pr-title">Bulk add</div>
+    <p class="pr-msg">Paste from a spreadsheet (or pick a CSV file). First line = headings, e.g. <i>Agency, First name, Email, Area, Postcode, Notes</i>. Anyone already on the list (same email, or same name if no email) is skipped.</p>
+    <div class="gw-grid">
+      <label class="gw-f"><span>Track (if not in the list)</span>${gwSel("gwBulkTrack", b.track || "London", ["London","Grays"], "state.gwBulk.track=this.value;gwBulkLive()", "Track")}</label>
+      <label class="gw-f"><span>Type (if not in the list)</span>${gwSel("gwBulkType", b.type || "", [["","Not set"],"Agent","Landlord"], "state.gwBulk.type=this.value;gwBulkLive()", "Type")}</label>
+      <label class="gw-f"><span>Batch name</span><input id="gwBulkBatch" type="text" value="${esc(b.batch || "")}" oninput="state.gwBulk.batch=this.value" placeholder="e.g. Reconnect Nov 26"></label>
+      <label class="gw-f"><span>Or pick a CSV file</span><input id="gwBulkFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange="gwBulkFile(this)"></label>
+    </div>
+    <label class="gw-f gw-wide"><span>List</span><textarea id="gwBulkText" rows="6" oninput="state.gwBulk.text=this.value;state.gwBulk.result=null;gwBulkLiveSoon()" onchange="gwBulkLive()" placeholder="Agency,First name,Email,Area,Postcode,Notes">${esc(b.text || "")}</textarea></label>
+    <div id="gwBulkLive">${renderGwBulkLive()}</div></section>`;
+}
+function renderGwBulkLive(){
+  const b = state.gwBulk; if (!b) return "";
+  const p = gwBulkParse(b), res = b.result, prev = p.rows.slice(0, 50);
+  return `${p.error ? `<p class="pr-msg" style="color:var(--coral)">${esc(p.error)}</p>` : ""}
+    ${p.unknown.length ? `<p class="pr-msg">Columns not used: ${p.unknown.map(esc).join(", ")}</p>` : ""}
+    ${prev.length ? `<div class="gw-bulk-prev"><table><thead><tr><th>Agency or landlord</th><th>First name</th><th>Email</th><th>Area / postcode</th><th>Track</th><th>Type</th></tr></thead><tbody>
+      ${prev.map(o => `<tr><td>${esc(o.Agency)}</td><td>${esc(o["First name"] || "")}</td><td>${esc(o.Email || "")}</td><td>${esc([o.Area, o.Postcode].filter(Boolean).join(" · "))}</td><td>${esc(o.Track)}</td><td>${esc(o.Type || "")}</td></tr>`).join("")}
+      </tbody></table>${p.rows.length > prev.length ? `<p class="pr-msg">…and ${p.rows.length - prev.length} more.</p>` : ""}</div>` : ""}
+    ${res && res.ok ? `<p class="pr-msg"><b>${res.added}</b> added.${res.skipped.length ? ` Skipped ${res.skipped.length}: ${res.skipped.map(x => esc(x.agency) + " (" + esc(x.why) + ")").join("; ")}` : ""}</p>` : ""}
+    ${res && !res.ok ? `<p class="pr-msg" style="color:var(--coral)">${esc(res.error)}${(res.errors || []).length ? " " + res.errors.map(x => "Line " + x.line + (x.agency ? " (" + esc(x.agency) + ")" : "") + ": " + esc(x.error)).join("; ") : ""}</p>` : ""}
+    <div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwBulkGo()"${!p.rows.length || p.error || state.gwSaving ? " disabled" : ""}>${state.gwSaving ? "Adding…" : "Add " + p.rows.length}</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="gwBulkClose()">Close</button></div>`;
+}
+function gwBulkLive(){ const el = document.getElementById("gwBulkLive"); if (el) el.innerHTML = renderGwBulkLive(); }
+let gwBulkT = 0;
+function gwBulkLiveSoon(){ clearTimeout(gwBulkT); gwBulkT = setTimeout(gwBulkLive, 400); }
 
 function renderReports(){
   const f = rpF(), nf = f.type.length + f.client.length + f.status.length + f.date.length;
@@ -5049,7 +5298,7 @@ function renderInner(app){
       ${renderBackToDecisions()}
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" || state.view === "processing" ? "" : state.view === "growth" ? helpBox(`The agents and landlords we're trying to win: <b>Grays</b> (local relaunch) and <b>London</b> (old clients). <b>Due this week</b> lists everyone whose follow-up date has come round. <b>Log contact</b> records a call, email, reply or visit and moves the stage on; the next follow-up is set two weeks ahead unless you change it. The tiles show progress against the plan's checkpoints. The list is kept in the Job Log Sheet (tab Growth) and the Monday growth check reads it. Nothing here sends an email.`) : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "today" || state.view === "processing" ? "" : state.view === "growth" ? helpBox(`The agents and landlords we're trying to win: <b>Grays</b> (local relaunch) and <b>London</b> (old clients). <b>Due this week</b> lists everyone whose follow-up date has come round. <b>Log contact</b> records a call, email, reply or visit and moves the stage on; the next follow-up is set two weeks ahead unless you change it. The tiles show progress against the plan's checkpoints. <b>Log contact</b> also edits the details or <b>deletes</b> a contact (it goes to <b>Deleted</b> at the bottom and can be restored). <b>Bulk add</b> takes a pasted list or a CSV file. <b>Email…</b> lets you tick contacts and send them an email: you always see a preview and who will and won't get it first; each person gets their own copy from hello@ with a line to opt out, and anyone marked <b>Do not contact</b> is never emailed. The list is kept in the Job Log Sheet (tab Growth) and the Monday growth check reads it.`) : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
       ${state.view === "processing" || state.view === "growth" ? "" : renderQueueTray()}
       ${state.editing ? renderForm() : ""}
       ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : state.view === "processing" ? renderProcessing() : state.view === "growth" ? renderGrowth() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
@@ -6023,7 +6272,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "3 Nov 2026 (#127)";
+const BUILD = "3 Nov 2026 (#128)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
