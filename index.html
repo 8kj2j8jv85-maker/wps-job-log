@@ -196,6 +196,26 @@
   .pr-checks{ display:flex; flex-direction:column; gap:4px; font-size:14px; }
   .pr-checks .ok::before{ content:"✓ "; color:var(--green); font-weight:700; } .pr-checks .bad::before{ content:"! "; color:var(--coral); font-weight:700; }
   .pr-msg{ font-size:14px; }
+  /* Growth section (Lex, 3 Nov) */
+  .gw-card{ gap:10px; }
+  .gw-card.gw-due{ border-width:2px; }
+  .gw-stage{ border-radius:999px; padding:1px 9px; font-size:12px; font-weight:600; background:var(--line-soft); color:var(--ink); }
+  .gw-st-4, .gw-st-5{ background:var(--amber-bg); color:var(--ink); } .gw-st-6, .gw-st-7{ background:var(--green-bg); color:var(--ink); } .gw-st-8{ opacity:.7; }
+  .gw-late{ color:var(--coral-dark); font-weight:600; }
+  .gw-notes{ white-space:pre-line; }
+  .gw-bar{ display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end; margin:4px 0 14px; }
+  .gw-bar .gw-q{ flex:1 1 220px; } .gw-bar-btns{ margin-left:auto; }
+  .gw-f{ display:flex; flex-direction:column; gap:4px; font-size:13px; }
+  .gw-f > span{ opacity:.85; }
+  .gw-f input, .gw-f select, .gw-f textarea{ font:inherit; font-size:15px; padding:8px 10px; min-height:40px; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; background:var(--card,#fff); color:inherit; width:100%; }
+  .gw-f textarea{ min-height:70px; resize:vertical; }
+  .gw-form{ display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--line); padding-top:12px; }
+  .gw-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 14px; }
+  .gw-touch{ border:1px solid var(--line); border-radius:10px; padding:10px 12px 12px; margin:0; display:flex; flex-direction:column; gap:10px; }
+  .gw-touch legend{ font-weight:600; font-size:14px; padding:0 4px; }
+  .gw-log{ font-size:13px; display:flex; flex-direction:column; gap:3px; }
+  .gw-log-h{ font-weight:600; }
+  @media (max-width:640px){ .gw-grid{ grid-template-columns:1fr; } .gw-bar-btns{ margin-left:0; } .gw-bar > .gw-f{ flex:1 1 140px; } }
   @media (max-width:760px){ .pr-tiles{ grid-template-columns:repeat(2,minmax(0,1fr)); } .pr-steps{ grid-template-columns:repeat(2,minmax(0,1fr)); } }   /* Reports page (Lex, 20 Oct): use the whole screen for tiles */
   .wrap-dash .page-head{ padding-top:20px; }
   .d-tiles{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px 8px; margin:14px 0 12px; }
@@ -1943,7 +1963,7 @@ function setView(v){
   if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); }   // 17 Oct: don't leave a half-edited form open behind another page
   navSetView(v); state.menuOpen = false; render();
 }
-function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : v === "reports" ? "WPS Reports" : v === "processing" ? "WPS Processing" : "Wellington Property Services — Job Log"; if (v === "processing") procLoad(); }
+function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : v === "reports" ? "WPS Reports" : v === "processing" ? "WPS Processing" : v === "growth" ? "WPS Growth" : "Wellington Property Services — Job Log"; if (v === "processing") procLoad(); if (v === "growth" && keyMode() && !state.gwBusy) gwLoad(); }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -4393,6 +4413,192 @@ async function procToPdf(k){
   if ((state.procSent||{})[k] && !state.procErrs[k]) bigToast("ok", k + " sent to PDF", "Copied into To PDF: " + state.procSent[k] + ". The PDF arrives in Ready to send in about 10 minutes, then the send scripts take over.", 20000);
   else bigToast("bad", k + " not sent to PDF", state.procErrs[k] || "Something went wrong.", 20000);
 }
+// ---- Growth section (Lex, 3 Nov 2026): agents and landlords WPS is trying to win (Grays relaunch, London reconnect).
+// The list lives in the Job Log Sheet tab "Growth", read and saved through the WPS script with the device key (ops
+// growthRead / growthSave, script file Growth). No names or numbers are in this page's code: they load from the Sheet.
+// The Monday growth check (scheduled task) reads the same tab. Nothing here sends email.
+const GW_STAGES = ["To contact","Called","Emailed","Visited","Interested","Trial agreed","First job","Regular","Not now"];
+const GW_WON = ["Interested","Trial agreed","First job","Regular"];   // happy to try us, or better
+const GW_HOWS = ["Call","Email sent","Reply received","Visit","Meeting","Note"];
+const GW_FIELDS = ["Track","Agency","Area","Contact","Role","Phone","Email","Stage","Order","Next follow-up","Notes"];
+const ICON_GROW = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>';
+function gwRowsToObjs(head, rows){
+  return (rows || []).map(r => { const o = {}; (head || []).forEach((h, i) => { o[h] = r[i] == null ? "" : String(r[i]); });
+    try { o.log = JSON.parse(o.Log || "[]"); if (!Array.isArray(o.log)) o.log = []; } catch(e){ o.log = []; }
+    return o; });
+}
+function gwTake(d){ state.gw = { at: Date.now(), rows: gwRowsToObjs(d.head, d.rows) }; }
+async function gwLoad(){
+  if (!keyMode() || state.gwBusy) return;
+  state.gwBusy = true; if (state.view === "growth") safeRender();
+  try {
+    const d = await dashCall("growthRead");
+    if (d && d.ok){ gwTake(d); state.gwErr = ""; } else state.gwErr = (d && d.error) || "Couldn't read the Growth tab.";
+  } catch(e){ state.gwErr = String(e && e.message || e); }
+  state.gwBusy = false;
+  if (state.view === "growth") safeRender(); else if (state.gw) safeRender();   // sidebar count
+}
+function gwDue(rows){
+  const wk = isoToday(7);
+  return (rows || []).filter(r => r["Next follow-up"] && r["Next follow-up"] <= wk && r.Stage !== "Not now")
+    .sort((a,b) => a["Next follow-up"].localeCompare(b["Next follow-up"]));
+}
+function gwDueCount(){ return state.gw ? gwDue(state.gw.rows).length : 0; }
+function gwNice(iso){ if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return isNaN(d) ? iso : d.toLocaleDateString("en-GB",{ weekday:"short", day:"numeric", month:"short" }); }
+function gwAddDays(iso, n){ const d = new Date((iso || isoToday(0)) + "T12:00:00"); d.setDate(d.getDate() + n); return isoDate(d.getFullYear(), d.getMonth()+1, d.getDate()); }
+// edit box: what's typed is kept in state.gwDraft so the 3-minute refresh can't wipe it
+function gwOpen(id){
+  const r = id === "new" ? null : (state.gw && state.gw.rows.find(x => x.Id === id));
+  if (id !== "new" && !r) return;
+  state.gwEdit = id; state.gwMsg = "";
+  state.gwDraft = r ? Object.assign({}, r) : { Track: state.gwTrack && state.gwTrack !== "all" ? state.gwTrack : "Grays", Stage: "To contact" };
+  state.gwTouch = { how: "", note: "", date: isoToday(0) };
+  render();
+  setTimeout(() => { const el = document.getElementById("gwf-" + (id === "new" ? "Agency" : "how")); if (el) el.focus(); }, 0);
+}
+function gwLog(id){ gwOpen(id); }
+function gwClose(){ state.gwEdit = null; state.gwDraft = null; state.gwTouch = null; state.gwMsg = ""; render(); }
+function gwSet(k, v){ if (state.gwDraft) state.gwDraft[k] = v; }
+function gwSetTouch(k, v){
+  if (!state.gwTouch) return;
+  state.gwTouch[k] = v;
+  // first call / email / visit on a contact still at To contact moves the stage on (Lex can change it back)
+  const step = { "Call": "Called", "Email sent": "Emailed", "Visit": "Visited", "Meeting": "Visited" }[v];
+  if (k === "how" && step && state.gwDraft && (state.gwDraft.Stage || "To contact") === "To contact"){
+    state.gwDraft.Stage = step; const sel = document.getElementById("gwf-Stage"); if (sel) sel.value = step;
+  }
+  // first time a contact is logged with no follow-up date: suggest one in 2 weeks (Lex's plan: follow up at 2 weeks)
+  if (k === "how" && v && v !== "Note" && state.gwDraft && !state.gwDraft["Next follow-up"]){
+    state.gwDraft["Next follow-up"] = gwAddDays(state.gwTouch.date, 14);
+    const el = document.getElementById("gwf-Next follow-up"); if (el) el.value = state.gwDraft["Next follow-up"];
+  }
+}
+async function gwSave(){
+  const d = state.gwDraft, t = state.gwTouch; if (!d || state.gwSaving) return;
+  if (!keyMode()){ state.gwMsg = "This device has no key (More > Device key)."; render(); return; }
+  if (!String(d.Agency || "").trim()){ state.gwMsg = "Put the agency or landlord name in."; render(); return; }
+  const row = {}; GW_FIELDS.forEach(k => { row[k] = d[k] == null ? "" : String(d[k]); });
+  if (state.gwEdit !== "new") row.Id = d.Id;
+  const body = { row, ifUpdated: state.gwEdit === "new" ? "" : (d.Updated || "") };
+  if (t && t.how) body.touch = { how: t.how, note: t.note || "", date: t.date || isoToday(0) };
+  state.gwSaving = true; state.gwMsg = ""; render();
+  try {
+    const r = await dashCall("growthSave", body);
+    state.gwSaving = false;
+    if (r && r.ok){ gwTake(r); const who = row.Agency; state.gwEdit = null; state.gwDraft = null; state.gwTouch = null; render(); showActionBar("Saved: " + who + "."); return; }
+    if (r && r.conflict && r.rows){ gwTake(r); const fresh = state.gw.rows.find(x => x.Id === row.Id); if (fresh) state.gwDraft = Object.assign({}, fresh); }
+    state.gwMsg = (r && r.error) || "Not saved.";
+  } catch(e){ state.gwSaving = false; state.gwMsg = "Not saved: " + String(e && e.message || e); }
+  render();
+}
+function gwSel(id, val, opts, onchange, label){
+  return `<select id="${id}" onchange="${onchange}" aria-label="${esc(label)}">${opts.map(o => { const v = Array.isArray(o) ? o[0] : o, l = Array.isArray(o) ? o[1] : o; return `<option value="${esc(v)}"${v === val ? " selected" : ""}>${esc(l)}</option>`; }).join("")}</select>`;
+}
+function gwInput(k, label, type, extra){
+  const v = state.gwDraft ? (state.gwDraft[k] || "") : "";
+  return `<label class="gw-f"><span>${esc(label)}</span><input id="gwf-${esc(k)}" type="${type || "text"}" value="${esc(v)}" oninput="gwSet('${k}', this.value)"${extra || ""}></label>`;
+}
+function renderGwForm(){
+  const d = state.gwDraft || {}, t = state.gwTouch || {}, isNew = state.gwEdit === "new";
+  const log = (d.log || []).slice(-5).reverse();
+  return `<div class="gw-form">
+    <div class="gw-grid">
+      <label class="gw-f"><span>Track</span>${gwSel("gwf-Track", d.Track || "Grays", ["Grays","London"], "gwSet('Track', this.value)", "Track")}</label>
+      ${gwInput("Agency", "Agency or landlord")}
+      ${gwInput("Area", "Address or area")}
+      ${gwInput("Contact", "Contact name")}
+      ${gwInput("Role", "Their role")}
+      ${gwInput("Phone", "Phone", "tel")}
+      ${gwInput("Email", "Email", "email")}
+      <label class="gw-f"><span>Stage</span>${gwSel("gwf-Stage", d.Stage || "To contact", GW_STAGES, "gwSet('Stage', this.value)", "Stage")}</label>
+      ${gwInput("Order", "Order in the plan", "number", ' min="0" max="999"')}
+      ${gwInput("Next follow-up", "Next follow-up", "date")}
+    </div>
+    <label class="gw-f gw-wide"><span>Notes</span><textarea id="gwf-Notes" rows="3" oninput="gwSet('Notes', this.value)">${esc(d.Notes || "")}</textarea></label>
+    <fieldset class="gw-touch"><legend>Log a contact${isNew ? " (optional)" : ""}</legend>
+      <div class="gw-grid">
+        <label class="gw-f"><span>How</span>${gwSel("gwf-how", t.how || "", [["","Nothing to log"]].concat(GW_HOWS), "gwSetTouch('how', this.value)", "How you were in touch")}</label>
+        <label class="gw-f"><span>When</span><input id="gwf-when" type="date" value="${esc(t.date || isoToday(0))}" onchange="gwSetTouch('date', this.value)"></label>
+      </div>
+      <label class="gw-f gw-wide"><span>What was said</span><input id="gwf-note" type="text" value="${esc(t.note || "")}" oninput="gwSetTouch('note', this.value)" placeholder="e.g. spoke to the lettings manager, uses an in-house clerk, call back in January"></label>
+    </fieldset>
+    ${log.length ? `<div class="gw-log"><div class="gw-log-h">Last contacts</div>${log.map(x => `<div><b>${esc(gwNice(x.at))}</b> · ${esc(x.how)}${x.note ? " · " + esc(x.note) : ""}</div>`).join("")}</div>` : ""}
+    ${state.gwMsg ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwMsg)}</p>` : ""}
+    <div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwSave()"${state.gwSaving ? " disabled" : ""}>${state.gwSaving ? "Saving…" : isNew ? "Add" : "Save"}</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="gwClose()">Cancel</button></div>
+  </div>`;
+}
+function renderGwCard(r, due){
+  const today = isoToday(0), late = r["Next follow-up"] && r["Next follow-up"] < today;
+  const open = state.gwEdit === r.Id;
+  const tel = r.Phone ? `<a href="tel:${esc(String(r.Phone).replace(/[^\d+]/g, ""))}">${esc(r.Phone)}</a>` : "";
+  const mail = r.Email ? `<a href="mailto:${esc(r.Email)}">${esc(r.Email)}</a>` : "";
+  return `<section class="pr-card gw-card${due ? " gw-due" : ""}" aria-label="${esc(r.Agency)}">
+    <div class="pr-top">
+      <div><div class="pr-title">${r.Order ? `<span class="pr-type" title="Order in the plan">${esc(r.Order)}</span>` : ""}<span>${esc(r.Agency)}</span><span class="gw-stage gw-st-${esc(GW_STAGES.indexOf(r.Stage))}">${esc(r.Stage || "To contact")}</span></div>
+        <div class="pr-sub">${[r.Track, r.Area].filter(Boolean).map(esc).join(" · ")}</div>
+        ${r.Contact || tel || mail ? `<div class="pr-sub">${[r.Contact ? esc(r.Contact) + (r.Role ? " (" + esc(r.Role) + ")" : "") : "", tel, mail].filter(Boolean).join(" · ")}</div>` : ""}
+        <div class="pr-sub">${r["Last contact"] ? "Last contact " + esc(gwNice(r["Last contact"])) : "Not contacted yet"}${r["Next follow-up"] ? ` · <span class="${late ? "gw-late" : ""}">Follow up ${esc(gwNice(r["Next follow-up"]))}${late ? " (overdue)" : ""}</span>` : ""}</div>
+        ${r.Notes && !open ? `<div class="pr-sub gw-notes">${esc(r.Notes)}</div>` : ""}
+      </div>
+      ${open ? "" : `<div class="pr-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwLog('${esc(r.Id)}')"${tip("Record a call, email, reply or visit, and set the next follow-up")}>Log contact</button></div>`}
+    </div>
+    ${open ? renderGwForm() : ""}
+  </section>`;
+}
+function renderGrowth(){
+  if (document.title !== "WPS Growth") document.title = "WPS Growth";   // also when opened straight at #growth
+  if (keyMode() && !state.gw && !state.gwBusy && !state.gwErr) setTimeout(gwLoad, 0);
+  if (!keyMode()) return `<p class="pr-msg">The Growth list is kept in the Job Log Sheet and needs this device's key (More > Device key).</p>`;
+  if (!state.gw) return state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)} <button type="button" class="btn btn-ghost btn-sm" onclick="state.gwErr='';gwLoad()">Try again</button></p>` : `<p class="pr-msg">Loading the Growth list…</p>`;
+  const rows = state.gw.rows, track = state.gwTrack || "all", stage = state.gwStage || "all", q = (state.gwQ || "").trim().toLowerCase();
+  const grays = rows.filter(r => r.Track === "Grays"), london = rows.filter(r => r.Track === "London");
+  const spoken = grays.filter(r => r.Stage !== "To contact").length;
+  const willing = rows.filter(r => GW_WON.includes(r.Stage)).length;
+  const replies = rows.filter(r => r.log.some(x => x.how === "Reply received")).length;
+  const ches = london.find(r => /chestertons/i.test(r.Agency));
+  const chesReplied = ches && (ches.log.some(x => x.how === "Reply received") || GW_WON.includes(ches.Stage));
+  const won = rows.filter(r => r.Stage === "First job" || r.Stage === "Regular").length;
+  const tiles = `<div class="pr-tiles">
+    <div class="pr-tile"><b>${spoken}</b><span>Grays agents contacted (mid-Dec: all ten)</span></div>
+    <div class="pr-tile"><b>${willing}</b><span>Happy to try us (mid-Dec: two)</span></div>
+    <div class="pr-tile"><b>${replies}</b><span>Replies${ches ? ` · Chestertons ${chesReplied ? "replied" : "not yet"}` : ""}</span></div>
+    <div class="pr-tile"><b>${won}</b><span>Booking us (March: 3 local, 2 London)</span></div></div>`;
+  const due = gwDue(rows);
+  const dueIds = new Set(due.map(r => r.Id));
+  const shown = rows.filter(r => (track === "all" || r.Track === track) && (stage === "all" || r.Stage === stage)
+      && (!q || [r.Agency, r.Area, r.Contact, r.Notes].join(" ").toLowerCase().includes(q)))
+    .sort((a,b) => (a.Track || "").localeCompare(b.Track || "") || (Number(a.Order) || 999) - (Number(b.Order) || 999) || (a.Agency || "").localeCompare(b.Agency || ""));
+  const bar = `<div class="gw-bar">
+    <label class="gw-f"><span>Track</span>${gwSel("gwTrack", track, [["all","Both"],"Grays","London"], "state.gwTrack=this.value;render()", "Track")}</label>
+    <label class="gw-f"><span>Stage</span>${gwSel("gwStage", stage, [["all","All stages"]].concat(GW_STAGES), "state.gwStage=this.value;render()", "Stage")}</label>
+    <label class="gw-f gw-q"><span>Search</span><input id="gwQ" type="search" value="${esc(state.gwQ || "")}" oninput="state.gwQ=this.value;gwRedrawList()" placeholder="Agency, area, name or note"></label>
+    <div class="pr-btns gw-bar-btns"><button type="button" class="btn btn-coral btn-sm" onclick="gwOpen('new')">Add agent or landlord</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="gwLoad()"${tip("Read the Growth tab again")}>${state.gwBusy ? "Loading…" : "Refresh"}</button></div>
+  </div>`;
+  const newBox = state.gwEdit === "new" ? `<section class="pr-card gw-card" aria-label="New contact"><div class="pr-title">New agent or landlord</div>${renderGwForm()}</section>` : "";
+  const dueBlock = due.length ? `<h2 class="pr-h2">Due this week</h2>${due.map(r => renderGwCard(r, true)).join("")}` : `<p class="pr-msg">No follow-ups due this week.</p>`;
+  return `${tiles}${state.gwErr ? `<p class="pr-msg" style="color:var(--coral)">${esc(state.gwErr)}</p>` : ""}${newBox}${dueBlock}
+    <h2 class="pr-h2">Everyone</h2>${bar}<div id="gwList">${renderGwList(shown, dueIds)}</div>`;
+}
+function renderGwList(shown, dueIds){
+  // a contact due this week shows once, in Due this week above, so its form can't open twice
+  const rest = shown.filter(r => !dueIds.has(r.Id)), up = shown.length - rest.length;
+  const note = up ? `<p class="pr-msg">${up} more in Due this week above.</p>` : "";
+  if (!rest.length) return note || `<p class="pr-msg">Nothing matches.</p>`;
+  return rest.map(r => renderGwCard(r, false)).join("") + note;
+}
+function gwRedrawList(){
+  // search box: redraw the list only, so typing keeps focus
+  const el = document.getElementById("gwList"); if (!el || !state.gw) return;
+  const rows = state.gw.rows, track = state.gwTrack || "all", stage = state.gwStage || "all", q = (state.gwQ || "").trim().toLowerCase();
+  const dueIds = new Set(gwDue(rows).map(r => r.Id));
+  const shown = rows.filter(r => (track === "all" || r.Track === track) && (stage === "all" || r.Stage === stage)
+      && (!q || [r.Agency, r.Area, r.Contact, r.Notes].join(" ").toLowerCase().includes(q)))
+    .sort((a,b) => (a.Track || "").localeCompare(b.Track || "") || (Number(a.Order) || 999) - (Number(b.Order) || 999) || (a.Agency || "").localeCompare(b.Agency || ""));
+  el.innerHTML = renderGwList(shown, dueIds);
+}
+
 function renderReports(){
   const f = rpF(), nf = f.type.length + f.client.length + f.status.length + f.date.length;
   const isPhone = typeof window !== "undefined" && window.innerWidth <= 860;
@@ -4839,19 +5045,19 @@ function renderInner(app){
     <div class="shell">
     ${renderSidebar()}
     <main class="main">
-    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" ? " wrap-wide" : ""}">
+    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" || state.view === "growth" ? " wrap-wide" : ""}">
       ${renderBackToDecisions()}
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" || state.view === "processing" ? "" : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
-      ${state.view === "processing" ? "" : renderQueueTray()}
+      ${state.view === "today" || state.view === "processing" ? "" : state.view === "growth" ? helpBox(`The agents and landlords we're trying to win: <b>Grays</b> (local relaunch) and <b>London</b> (old clients). <b>Due this week</b> lists everyone whose follow-up date has come round. <b>Log contact</b> records a call, email, reply or visit and moves the stage on; the next follow-up is set two weeks ahead unless you change it. The tiles show progress against the plan's checkpoints. The list is kept in the Job Log Sheet (tab Growth) and the Monday growth check reads it. Nothing here sends an email.`) : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "processing" || state.view === "growth" ? "" : renderQueueTray()}
       ${state.editing ? renderForm() : ""}
-      ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : state.view === "processing" ? renderProcessing() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
+      ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : state.view === "processing" ? renderProcessing() : state.view === "growth" ? renderGrowth() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
       ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; pick a job's stage or invoice state from its box &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
     </div>
-    ${state.editing || state.mtBox || state.ciBox || state.view === "processing" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
+    ${state.editing || state.mtBox || state.ciBox || state.view === "processing" || state.view === "growth" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
     ${renderMtBox()}
     ${renderMsBox()}
     ${renderCiBox()}
@@ -5648,9 +5854,10 @@ function renderSidebar(){
     ${WPS_LOGO}
     <nav class="side-nav">
       <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;"${tip("Today's overview: what needs doing")}>${ICON_HOME} Dashboard</a>
-      <a href="#" class="${state.view!=='today'&&state.view!=='reports'&&state.view!=='processing'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
+      <a href="#" class="${state.view!=='today'&&state.view!=='reports'&&state.view!=='processing'&&state.view!=='growth'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
       <a href="#" class="${state.view==='processing'?'active':''}" onclick="setView('processing');return false;"${tip("Reports to write: open in Word, photos, dictation, checks, send to PDF")}>${ICON_DOC} Processing${(() => { const n = procJobs().length; return n ? ` <span class="side-count">${n}</span>` : ""; })()}</a>
       <a href="#" class="${state.view==='reports'?'active':''}" onclick="setView('reports');return false;"${tip("Every report as a photo tile, with filters")}>${ICON_GRID} Reports</a>
+      <a href="#" class="${state.view==='growth'?'active':''}" onclick="setView('growth');return false;"${tip("Agents and landlords to win: Grays and London, who to call, follow-ups due")}>${ICON_GROW} Growth${(() => { const n = gwDueCount(); return n ? ` <span class="side-count">${n}</span>` : ""; })()}</a>
       <a href="photos.html"${tip("Turn a day's photos into named, watermarked zips")}>${ICON_CAM} Photo Tool</a>
       <a href="dictate.html"${tip("Phone notes by voice, room by room")}>${ICON_MIC} Dictation</a>
       <a href="decisions.html" class="side-dec"${tip("Your decisions: swipe right yes, left no, up later")}>${ICON_CHECK} Decisions${state.auWaiting ? ` <span class="side-count">${state.auWaiting}</span>` : ""}</a>
@@ -5707,6 +5914,12 @@ function renderPageHead(){
     <div class="pr-hm">${renderPerfTop()}</div>
     <div class="pr-hr">${renderBuildTop()}${renderWxLine()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button></div>`}`;
+  }
+  if (state.view === "growth"){
+    return `<div class="page-head page-head-rp">
+    <div><h1 class="page-title">Growth</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
+    <div class="page-right">${renderBuildTop()}</div>
+  </div>`;
   }
   if (state.view === "reports"){
     const s = state.cloudStatus || "idle", bad = s === "error" || s === "conflict";
@@ -5810,7 +6023,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "23 Oct 2026 (#125)";
+const BUILD = "3 Nov 2026 (#127)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -7288,7 +7501,7 @@ window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (stat
 // ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
 // (merging if another device saved first), load other devices' changes, read the queue, amendments and signings.
 function safeRender(){
-  if (state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox) return;
+  if (state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox || state.gwEdit) return;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   const y = window.scrollY; render(); window.scrollTo(0, y);
@@ -7608,7 +7821,7 @@ function navHashFor(){
     const unique = no && state.jobs.filter(j => (j.jobNo || "").trim() === no).length === 1;
     return "#job=" + encodeURIComponent(unique ? no : saved.id);
   }
-  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : state.view === "reports" ? "#reports" : state.view === "processing" ? "#processing" : "";
+  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : state.view === "reports" ? "#reports" : state.view === "processing" ? "#processing" : state.view === "growth" ? "#growth" : "";
 }
 function navSame(a, b){ const n = h => (!h || h === "#" || h === "#today") ? "" : h; return n(a) === n(b); }
 function navParse(hash){
@@ -7620,6 +7833,7 @@ function navParse(hash){
   if (h === "board") return { view: "board" };
   if (h === "reports") return { view: "reports" };
   if (h === "processing") return { view: "processing" };
+  if (h === "growth") return { view: "growth" };
   if (h === "new") return { view: (st && st.view) || "table", isNew: true };
   if (h.indexOf("job=") === 0) return { view: (st && st.view) || "table", jobKey: h.slice(4) };
   return null;   // not ours: leave the page as it is
