@@ -1041,6 +1041,132 @@
   .ro-ask p{ margin:6px 0; font-size:14px; overflow-wrap:anywhere; }
   @media (max-width:640px){ .ro-line .ro-when{ min-width:0; } .ro-acts .d-mv{ padding:6px 10px; font-size:13px; } }
   /* Invoices (Lex, 4 Nov): drafted by the script, sent from the dashboard */
+  /* Accounts page (Lex, 4-5 Nov 2026): the money page. Follows the dashboard theme (Classic / Light / Night). */
+  .ac-page{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .ac-card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; min-width:0; }
+  .ac-h2{ margin:0 0 10px; font-family:'Cormorant Garamond', Georgia, serif; font-style:italic; font-weight:700; font-size:26px; color:var(--brand-text); }
+  html[data-theme="night"] .ac-h2{ color:#fff; }
+  .ac-top2{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
+  .ac-owe{ display:grid; grid-template-columns:minmax(0,1fr) 70px 110px 150px; gap:10px; padding:10px 4px; border:0; border-bottom:1px solid var(--line-soft); background:none; color:inherit; font:inherit; font-size:14px; text-align:left; width:100%; cursor:pointer; align-items:center; }
+  .ac-owe:hover{ background:var(--line-soft); }
+  .ac-owe > span:nth-child(2), .ac-owe > span:nth-child(3){ text-align:right; }
+  .ac-owe-h{ cursor:default; font-size:12px; letter-spacing:1px; color:var(--ink-soft); border-bottom:1px solid var(--line); padding:4px; }
+  .ac-owe-h:hover, .ac-owe-t:hover{ background:none; }
+  .ac-owe-t{ cursor:default; border-bottom:0; font-weight:600; }
+  .ac-owe-n{ font-weight:600; overflow-wrap:anywhere; }
+  .ac-b{ font-weight:600; }
+  .ac-bad{ color:var(--coral-dark); }
+  html[data-theme="night"] .ac-bad{ color:#F2937D; }
+  .ac-good{ color:var(--green); }
+  html[data-theme="night"] .ac-good{ color:#7FD3A5; }
+  .ac-chart{ height:178px; display:flex; align-items:flex-end; gap:6px; justify-content:space-around; border-bottom:1px solid var(--line); padding:0 4px; }
+  .ac-mon{ display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; min-width:0; }
+  .ac-bars{ display:flex; gap:4px; align-items:flex-end; height:154px; }
+  .ac-bar{ width:16px; border-radius:3px 3px 0 0; }
+  .ac-bi{ background:#8FA0D6; } .ac-bp{ background:#3FA56E; }
+  html[data-theme="night"] .ac-bp{ background:#7FD3A5; }
+  .ac-ml{ font-size:12px; color:var(--ink-soft); }
+  .ac-key{ margin-top:8px; font-size:13px; color:var(--ink-soft); display:flex; gap:8px; align-items:center; }
+  .ac-dot{ display:inline-block; width:11px; height:11px; border-radius:2px; }
+  .ac-tiles{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+  .ac-tile{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:0; }
+  .ac-tile-bad{ border-color:var(--coral); }
+  .ac-tl{ font-size:12px; letter-spacing:1px; color:var(--ink-soft); }
+  .ac-tile-bad .ac-tl, .ac-tile-bad .ac-tv{ color:var(--coral-dark); }
+  html[data-theme="night"] .ac-tile-bad .ac-tl, html[data-theme="night"] .ac-tile-bad .ac-tv{ color:#F2937D; }
+  .ac-tv{ font-family:'Cormorant Garamond', Georgia, serif; font-style:italic; font-weight:700; font-size:32px; line-height:1.2; color:var(--brand-text); }
+  html[data-theme="night"] .ac-tv{ color:#fff; }
+  .ac-ts{ font-size:13px; color:var(--ink-soft); }
+  .ac-counts{ display:flex; gap:8px; flex-wrap:wrap; }
+  .ac-count{ padding:7px 13px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:inherit; font:inherit; font-size:13px; text-decoration:none; cursor:pointer; }
+  span.ac-count{ cursor:default; }
+  .ac-count b{ margin-left:4px; }
+  .ac-dim{ color:var(--ink-soft); }
+  .ac-lh{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .ac-lh .ac-h2{ margin:0; }
+  .ac-filt{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .ac-filt input[type=search]{ height:36px; width:220px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:inherit; padding:0 10px; font:inherit; font-size:14px; }
+  .ac-sl{ font-size:13px; color:var(--ink-soft); }
+  .ac-pills{ display:flex; gap:6px; flex-wrap:wrap; }
+  .ac-pill{ height:36px; padding:0 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit; font-size:13px; cursor:pointer; }
+  .ac-pill.on{ border-color:var(--coral); background:var(--coral-bg); color:var(--ink); font-weight:600; }
+  html[data-theme="night"] .ac-pill.on{ background:#3A2D4F; color:#fff; }
+  .ac-row{ display:grid; grid-template-columns:118px 64px 130px 92px minmax(0,1fr) 88px 64px 116px minmax(150px,auto); gap:10px; padding:10px 6px; border-bottom:1px solid var(--line-soft); font-size:14px; align-items:center; }
+  .ac-head{ font-size:12px; letter-spacing:1px; color:var(--ink-soft); border-bottom:1px solid var(--line); padding:6px; }
+  .ac-no{ font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ac-src{ font-size:11px; font-weight:500; border:1px solid var(--line); border-radius:6px; padding:0 5px; color:var(--ink-soft); }
+  .ac-prop{ color:var(--ink-soft); overflow-wrap:anywhere; min-width:0; }
+  .ac-why{ display:block; font-size:12.5px; color:var(--coral-dark); }
+  html[data-theme="night"] .ac-why{ color:#F2937D; }
+  .ac-amt{ text-align:right; font-weight:600; }
+  .ac-chip{ display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; background:var(--peri-bg); color:var(--brand-text); white-space:nowrap; }
+  .ac-overdue{ background:var(--coral); color:#141d3d; }
+  .ac-paid{ background:var(--green-bg); color:var(--green); }
+  .ac-needs, .ac-sending{ background:var(--amber-bg); color:var(--amber); }
+  .ac-ready{ background:var(--coral-bg); color:var(--coral-dark); }
+  .ac-void{ background:var(--stone-bg); color:var(--stone); text-decoration:line-through; }
+  .ac-acts{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .ac-act{ display:inline-flex; align-items:center; min-height:32px; padding:0 10px; border-radius:7px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit; font-size:13px; text-decoration:none; cursor:pointer; white-space:nowrap; }
+  .ac-act:hover{ border-color:var(--coral); }
+  .ac-go{ border-color:var(--coral); background:var(--coral); color:#fff; }
+  .ac-res{ grid-column:1 / -1; font-size:13px; color:var(--green); }
+  .ac-res.bad{ color:var(--red); }
+  .ac-r-void{ opacity:.65; }
+  .ac-foot{ margin-top:8px; font-size:13px; color:var(--ink-soft); }
+  .ac-pay{ display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line-soft); font-size:14px; align-items:center; flex-wrap:wrap; }
+  .ac-pay-bad{ border-left:3px solid var(--coral); padding-left:10px; }
+  .ac-pay-acts{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .ac-sum{ cursor:pointer; list-style-position:inside; }
+  .ac-head-btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  /* edit / new invoice */
+  .mt-box.ac-edit{ max-width:760px; display:flex; flex-direction:column; gap:12px; }
+  .ac-et{ font-family:'Cormorant Garamond', Georgia, serif; font-style:italic; font-size:28px; }
+  .ac-es{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .ac-f{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .ac-f > span{ font-size:12px; letter-spacing:1px; color:var(--ink-soft); }
+  .ac-f input, .ac-f textarea, .ac-lr input{ min-height:40px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:inherit; padding:6px 10px; font:inherit; font-size:15px; width:100%; min-width:0; }
+  .ac-f textarea{ resize:vertical; }
+  .ac-g2{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+  .ac-g12{ display:grid; grid-template-columns:1fr 2fr; gap:12px; }
+  .ac-g3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
+  .ac-lines{ display:flex; flex-direction:column; gap:8px; }
+  .ac-lr{ display:grid; grid-template-columns:minmax(0,1fr) 64px 100px 90px 40px; gap:8px; align-items:center; }
+  .ac-lhd{ font-size:12px; color:var(--ink-soft); }
+  .ac-x{ min-height:40px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink-soft); cursor:pointer; }
+  .ac-addb{ display:flex; gap:8px; flex-wrap:wrap; }
+  .ac-addbox{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:10px; border:1px dashed var(--line); border-radius:8px; }
+  .ac-ck{ display:inline-flex; gap:6px; align-items:center; font-size:14px; }
+  .ac-ck input{ width:auto; min-height:32px; border-radius:6px; border:1px solid var(--line); background:var(--paper); color:inherit; padding:2px 6px; font:inherit; }
+  .ac-hint{ font-size:12.5px; color:var(--ink-soft); }
+  .ac-totrow{ display:flex; justify-content:flex-end; align-items:baseline; gap:14px; padding-top:8px; border-top:1px solid var(--line); }
+  .ac-totrow span{ font-size:13px; letter-spacing:1px; color:var(--ink-soft); }
+  .ac-totrow b{ font-family:'Cormorant Garamond', Georgia, serif; font-style:italic; font-size:34px; }
+  .ac-warn{ background:var(--coral-bg); border:1px solid var(--coral); border-radius:10px; padding:10px 14px; font-size:14px; color:var(--ink); }
+  .ac-frame{ width:100%; height:560px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .ac-eb{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center; }
+  .ac-eb-r{ display:flex; gap:8px; flex-wrap:wrap; }
+  @media (max-width:1560px){ .ac-row{ grid-template-columns:112px 60px 124px 90px minmax(0,1fr) 86px 62px 112px; } .ac-acts{ grid-column:5 / -1; justify-content:flex-end; } .ac-head > span:last-child{ display:none; } }
+  @media (max-width:1100px){ .ac-row{ grid-template-columns:104px 56px 110px 84px minmax(0,1fr) 80px 104px; } .ac-row > .ac-due, .ac-head > span:nth-child(7){ display:none; } .ac-acts{ grid-column:1 / -1; } }
+  @media (max-width:760px){
+    .ac-top2, .ac-g2, .ac-g12{ grid-template-columns:minmax(0,1fr); }
+    .ac-tiles{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+    .ac-tv{ font-size:26px; }
+    .ac-owe{ grid-template-columns:minmax(0,1fr) 34px 92px; }
+    .ac-owe > span:nth-child(4){ grid-column:1 / -1; font-size:12.5px; color:var(--ink-soft); padding-top:0; }
+    .ac-owe-h > span:nth-child(4){ display:none; }
+    .ac-filt{ width:100%; } .ac-filt input[type=search]{ flex:1 1 100%; width:auto; } .ac-sl{ display:none; }
+    .ac-pills{ flex-wrap:nowrap; overflow-x:auto; width:100%; padding-bottom:2px; } .ac-pill{ flex:none; height:40px; }
+    .ac-row.ac-head{ display:none; }
+    .ac-row{ display:flex; flex-wrap:wrap; gap:4px 10px; padding:12px 4px; }
+    .ac-row > .ac-no{ order:1; flex:1 1 auto; } .ac-row > .ac-amt{ order:2; } .ac-row > .ac-cl{ order:3; flex:1 1 100%; font-size:13px; }
+    .ac-row > .ac-job{ order:4; font-size:13px; color:var(--ink-soft); } .ac-row > .ac-prop{ order:5; flex:1 1 100%; font-size:13px; }
+    .ac-row > .ac-date{ order:6; font-size:12.5px; color:var(--ink-soft); } .ac-row > .ac-due{ display:inline; order:7; font-size:12.5px; color:var(--ink-soft); } .ac-row > .ac-due:not(:empty)::before{ content:"due "; }
+    .ac-row > .ac-st{ order:8; } .ac-row > .ac-acts{ order:9; flex:1 1 100%; justify-content:flex-start; } .ac-row > .ac-res{ order:10; flex:1 1 100%; }
+    .ac-act{ min-height:40px; }
+    .ac-g3{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .ac-lr{ grid-template-columns:minmax(0,1fr) 52px 78px 36px; } .ac-lr > .ac-amt{ display:none; }
+    .ac-frame{ height:460px; }
+  }
   .iv-top{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:2px 0 6px; }
   .iv-all{ font-weight:700; }
   .iv-sws{ display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
@@ -2057,7 +2183,7 @@ function setView(v){
   if (state.editing){ if (!confirmLeaveForm()) return; dropForm(); }   // 17 Oct: don't leave a half-edited form open behind another page
   navSetView(v); state.menuOpen = false; render();
 }
-function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : v === "reports" ? "WPS Reports" : v === "processing" ? "WPS Processing" : v === "growth" ? "WPS Growth" : "Wellington Property Services — Job Log"; if (v === "processing") procLoad(); if (v === "growth" && keyMode() && !state.gwBusy) gwLoad(); }
+function navSetView(v){ state.view = v; document.title = v === "today" ? "WPS Dashboard" : v === "reports" ? "WPS Reports" : v === "processing" ? "WPS Processing" : v === "growth" ? "WPS Growth" : v === "accounts" ? "WPS Accounts" : "Wellington Property Services — Job Log"; if (v === "processing") procLoad(); if (v === "growth" && keyMode() && !state.gwBusy) gwLoad(); if (v === "accounts" && keyMode()){ acLoad(); if (!state.iv) loadIv(); } }
 function calNav(delta){
   state.calMonth += delta;
   if (state.calMonth>12){ state.calMonth=1; state.calYear++; }
@@ -4528,6 +4654,7 @@ const GW_ALIASES = { "track":"Track", "agency":"Agency", "name":"Agency", "landl
   "phone":"Phone", "tel":"Phone", "mobile":"Phone", "email":"Email", "e-mail":"Email", "stage":"Stage", "order":"Order", "order in the plan":"Order",
   "next follow-up":"Next follow-up", "follow-up":"Next follow-up", "notes":"Notes", "note":"Notes", "type":"Type", "first name":"First name", "firstname":"First name",
   "postcode":"Postcode", "post code":"Postcode", "source":"Source", "batch":"Batch", "do not contact":"Do not contact", "dnc":"Do not contact" };
+const ICON_GBP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 6.5A4 4 0 0 0 9.5 8v4.5c0 3-1.5 5.5-3.5 6.5h12"/><path d="M6.5 12.5h8"/></svg>';
 const ICON_GROW = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>';
 function gwRowsToObjs(head, rows){
   return (rows || []).map(r => { const o = {}; (head || []).forEach((h, i) => { o[h] = r[i] == null ? "" : String(r[i]); });
@@ -5427,24 +5554,26 @@ function renderInner(app){
     <div class="shell">
     ${renderSidebar()}
     <main class="main">
-    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" || state.view === "growth" ? " wrap-wide" : ""}">
+    <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" || state.view === "growth" || state.view === "accounts" ? " wrap-wide" : ""}">
       ${renderBackToDecisions()}
       ${renderPageHead()}
       ${renderUrlAction()}
-      ${state.view === "today" || state.view === "processing" ? "" : state.view === "growth" ? helpBox(`The agents and landlords we're trying to win: <b>Grays</b> (local relaunch) and <b>London</b> (old clients). <b>Due this week</b> lists everyone whose follow-up date has come round. <b>Log contact</b> records a call, email, reply or visit and moves the stage on; the next follow-up is set two weeks ahead unless you change it. The tiles show progress against the plan's checkpoints. <b>Log contact</b> also edits the details or <b>deletes</b> a contact (it goes to <b>Deleted</b> at the bottom and can be restored). <b>Bulk add</b> takes a pasted list or a CSV file. <b>Email…</b> lets you tick contacts and send them an email: you always see a preview and who will and won't get it first; each person gets their own copy from hello@ with a line to opt out, and anyone marked <b>Do not contact</b> is never emailed. <b>The mailbox check</b> (every 15 minutes, or <b>Check replies</b> now) puts what happens on each card by itself: a reply goes to <b>Needs answering</b> at the top with their words and an <b>Open in Gmail</b> link; "no thanks" sets <b>Do not contact</b>; a bounce shows <b>Email bounced</b>; your own reply from Gmail takes the flag off; a job booked in the Job Log for them moves the card to <b>First job</b>. <b>Send sample</b> emails the sample report, the photo set link and how the service works (preview first). Lines it added say <b>(auto)</b>. The list is kept in the Job Log Sheet (tab Growth) and the Monday growth check reads it.`) : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
-      ${state.view === "processing" || state.view === "growth" ? "" : renderQueueTray()}
+      ${state.view === "today" || state.view === "processing" ? "" : state.view === "accounts" ? helpBox(`Everything about money in one place. <b>Who owes what</b> is at the top (click a client to see only their unpaid invoices), with invoiced and paid by month beside it. The tiles count this month, what's outstanding and what's overdue. <b>Invoices</b> lists every invoice: search, the filter buttons, client and month. Each row has <b>Edit</b>, <b>PDF</b>, <b>Mark paid</b> and <b>Send reminder</b> where they apply. <b>New invoice</b> makes one: pick a job to fill it from the job and the price list, or leave Job blank for a one-off. <b>Edit</b> changes anything on an invoice. A sent invoice keeps its number: you get a corrected PDF and then choose <b>Send the corrected copy</b> or <b>Just keep it</b>. <b>Cancel this invoice</b> voids it; the number is never used again and nothing is emailed. Invoices made in Tide show <b>Tide</b>; Edit on one brings it onto this page under its own number. Nothing is emailed without a confirm box first.`) : state.view === "growth" ? helpBox(`The agents and landlords we're trying to win: <b>Grays</b> (local relaunch) and <b>London</b> (old clients). <b>Due this week</b> lists everyone whose follow-up date has come round. <b>Log contact</b> records a call, email, reply or visit and moves the stage on; the next follow-up is set two weeks ahead unless you change it. The tiles show progress against the plan's checkpoints. <b>Log contact</b> also edits the details or <b>deletes</b> a contact (it goes to <b>Deleted</b> at the bottom and can be restored). <b>Bulk add</b> takes a pasted list or a CSV file. <b>Email…</b> lets you tick contacts and send them an email: you always see a preview and who will and won't get it first; each person gets their own copy from hello@ with a line to opt out, and anyone marked <b>Do not contact</b> is never emailed. <b>The mailbox check</b> (every 15 minutes, or <b>Check replies</b> now) puts what happens on each card by itself: a reply goes to <b>Needs answering</b> at the top with their words and an <b>Open in Gmail</b> link; "no thanks" sets <b>Do not contact</b>; a bounce shows <b>Email bounced</b>; your own reply from Gmail takes the flag off; a job booked in the Job Log for them moves the card to <b>First job</b>. <b>Send sample</b> emails the sample report, the photo set link and how the service works (preview first). Lines it added say <b>(auto)</b>. The list is kept in the Job Log Sheet (tab Growth) and the Monday growth check reads it.`) : state.view === "reports" ? helpBox(`Every job as a <b>photo tile</b>, like the old portal. <b>Tick boxes</b> on the left (under <b>Filters</b> on the phone) narrow the tiles (ticks in the same group add together). The <b>coloured dot</b> is the status, in workflow order: Time to agree (no visit time agreed yet), Upcoming, Today, Report due, Out for signing (with days left in the comment window), Amendments (tenants' comments not dealt with yet) and Completed. Under the address: beds, extra areas and furnished, from the job or the report's front page. <b>Click a tile</b> to open the report PDF in a viewer on this page (Previous / Next or the arrow keys go through the reports you've filtered, Esc closes it); if there's no PDF yet the job opens. The <b>Job</b> button opens the job. The <b>front photo</b> comes from the Photo Tool for new jobs and from the report's cover once it's sent (needs the device key); until then the WPS logo stands in. <b>Report</b> opens the PDF in Google Drive (the signed copy once everyone has signed) and <b>Photos</b> downloads the photo set. <b>Older reports</b> (Wellington Parker, copied from Dropbox) show as tiles too: tick <b>Reports</b> on the left for only WPS jobs or only Wellington Parker, and <b>Year</b> for a year. They open in the same viewer; they aren't jobs, so they have no Job button. Tiles come in batches: <b>Show more</b> at the bottom.`) : helpBox(state.view === "board" ? `<b>Board</b> shows one column per stage. To move a job on a PC, <b>drag its card</b> to another column. On the phone, <b>pick the stage</b> from the box on the card. <b>Click the address</b> to open the job. Red cards are overdue. <b>Undo</b> shows for a few seconds after each move. The cards above count jobs at each stage; click one to show only those.` : `The cards count jobs at each stage. <b>Click a card</b> to show only those jobs, click it again to show all. In each row, <b>pick the stage</b> and <b>the invoice state</b> from their boxes, and use the <b>pencil</b> to open the job. Rows in red are overdue. <b>List</b>, <b>Board</b> and <b>Calendar</b> are three ways to see the same jobs.`) + renderStatusStrip()}
+      ${state.view === "processing" || state.view === "growth" || state.view === "accounts" ? "" : renderQueueTray()}
       ${state.editing ? renderForm() : ""}
-      ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : state.view === "processing" ? renderProcessing() : state.view === "growth" ? renderGrowth() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
+      ${state.view === "today" ? renderToday() : state.view === "reports" ? renderReports() : state.view === "processing" ? renderProcessing() : state.view === "growth" ? renderGrowth() : state.view === "accounts" ? renderAccounts() : renderToolbar() + `<div id="jobResults">${state.view === "calendar" ? renderCalendar() : state.view === "board" ? renderBoard() : renderTable()}</div>`}
       ${state.view === "today" ? "" : `<div class="footer-line">${state.jobs.length} job${state.jobs.length===1?"":"s"} logged &middot; pick a job's stage or invoice state from its box &middot; data is kept in this browser and saved to the "WPS Job Log" Google Sheet when Sync is on</div>`}
     </div>
     </main>
     </div>
-    ${state.editing || state.mtBox || state.ciBox || state.view === "processing" || state.view === "growth" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
+    ${state.editing || state.mtBox || state.ciBox || state.view === "processing" || state.view === "growth" || state.view === "accounts" ? "" : `<button class="fab-new" onclick="openNew()" aria-label="New job" title="New job: log a job by hand"><svg class="door-mark" viewBox="29 470 300 300" aria-hidden="true"><g fill="none" stroke="#1f2d5a" stroke-width="5.5" vector-effect="non-scaling-stroke"><path d="M88 722 V612 A91 91 0 0 1 270 612 V722" vector-effect="non-scaling-stroke"/><path d="M120 722 V614 A59 59 0 0 1 238 614 V722" vector-effect="non-scaling-stroke"/><line x1="58" y1="722" x2="300" y2="722" vector-effect="non-scaling-stroke"/></g><circle cx="221" cy="678" r="6.5" fill="#1f2d5a"/></svg></button>`}
     ${renderMtBox()}
     ${renderMsBox()}
     ${renderCiBox()}
     ${renderRoAsk()}
     ${renderIvAsk()}
+    ${renderAcEdit()}
+    ${renderAcAsk()}
   `;
 }
 
@@ -6255,9 +6384,10 @@ function renderSidebar(){
     ${WPS_LOGO}
     <nav class="side-nav">
       <a href="#" class="${state.view==='today'?'active':''}" onclick="setView('today');return false;"${tip("Today's overview: what needs doing")}>${ICON_HOME} Dashboard</a>
-      <a href="#" class="${state.view!=='today'&&state.view!=='reports'&&state.view!=='processing'&&state.view!=='growth'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
+      <a href="#" class="${state.view!=='today'&&state.view!=='reports'&&state.view!=='processing'&&state.view!=='growth'&&state.view!=='accounts'?'active':''}" onclick="setView('table');return false;"${tip("Every job, as a list or a calendar")}>${ICON_CAL} Job Log</a>
       <a href="#" class="${state.view==='processing'?'active':''}" onclick="setView('processing');return false;"${tip("Reports to write: open in Word, photos, dictation, checks, send to PDF")}>${ICON_DOC} Processing${(() => { const n = procJobs().length; return n ? ` <span class="side-count">${n}</span>` : ""; })()}</a>
       <a href="#" class="${state.view==='reports'?'active':''}" onclick="setView('reports');return false;"${tip("Every report as a photo tile, with filters")}>${ICON_GRID} Reports</a>
+      <a href="#" class="${state.view==='accounts'?'active':''}" onclick="setView('accounts');return false;"${tip("Invoices, payments and who owes what")}>${ICON_GBP} Accounts${(() => { const v = state.iv; if (!v) return ""; const n = (v.invoices||[]).filter(x => x.state === "overdue" || x.state === "needs" || x.state === "ready").length; return n ? ` <span class="side-count">${n}</span>` : ""; })()}</a>
       <a href="#" class="${state.view==='growth'?'active':''}" onclick="setView('growth');return false;"${tip("Agents and landlords to win: Grays and London, who to call, follow-ups due")}>${ICON_GROW} Growth${(() => { const n = gwDueCount(); return n ? ` <span class="side-count">${n}</span>` : ""; })()}</a>
       <a href="photos.html"${tip("Turn a day's photos into named, watermarked zips")}>${ICON_CAM} Photo Tool</a>
       <a href="dictate.html"${tip("Phone notes by voice, room by room")}>${ICON_MIC} Dictation</a>
@@ -6315,6 +6445,13 @@ function renderPageHead(){
     <div class="pr-hm">${renderPerfTop()}</div>
     <div class="pr-hr">${renderBuildTop()}${renderWxLine()}${bad ? `<div class="page-actions">${renderSyncBtn()}</div>` : ""}</div>
   </div>${state.jobs.length ? "" : `<div class="empty-device">No jobs on this device yet. <button class="btn btn-coral btn-sm" onclick="cloudSyncNow()"${hint("First time on this device: brings your jobs over from Google")}>Load my jobs from Google</button></div>`}`;
+  }
+  if (state.view === "accounts"){
+    const rd = ((state.iv && state.iv.invoices) || []).filter(x => x.state === "ready").length;
+    return `<div class="page-head page-head-rp">
+    <div><h1 class="page-title">Accounts</h1><div class="page-sub">${today} · <span id="liveClock" class="live-clock">${clockText()}</span></div></div>
+    <div class="page-right">${renderBuildTop()}<div class="page-actions ac-head-btns">${rd ? `<button class="btn btn-coral" onclick="ivAskOpen('all','')"${tip("Send every ready invoice (you confirm first)")}>Send all ready (${rd})</button>` : ""}<button class="btn btn-ghost" onclick="acEditOpen('')"${keyMode() ? "" : " disabled"}${tip("Make an invoice: for a job, or a one-off")}>New invoice</button></div></div>
+  </div>`;
   }
   if (state.view === "growth"){
     return `<div class="page-head page-head-rp">
@@ -6424,7 +6561,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "4 Nov 2026 (Invoices)";
+const BUILD = "5 Nov 2026 (Accounts)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -7903,7 +8040,7 @@ window.addEventListener("focus", function(){ if (keyMode() && Date.now() - (stat
 // ---- Device key sync (19 Oct). Every 3 minutes, on open and on return to the tab: save this device's changes
 // (merging if another device saved first), load other devices' changes, read the queue, amendments and signings.
 function safeRender(){
-  if (state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox || state.gwEdit) return;
+  if (state.editing || state.rearrangeId || state.mtBox || state.msBox || state.ciBox || state.gwEdit || state.acEdit || (state.acAsk && state.acAsk.busy)) return;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   const y = window.scrollY; render(); window.scrollTo(0, y);
@@ -7974,6 +8111,7 @@ async function dashCycle(opt){
     loadKp();
     loadRo();
     loadIv();
+    if (state.view === "accounts") acLoad(true);
     loadDecisionCount();
     if (!light) autoDeem();
     state.lastCycleOk = new Date();
@@ -8412,6 +8550,460 @@ function renderIvPreview(){
     <div class="rr-b mt-b">${d.pdfUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(d.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>` : ""}${d.ok && !s.kind && (ivByNo(s.ref)||{}).state === "ready" ? `<button class="btn btn-coral btn-sm" onclick="ivAskOpen('send','${esc(s.ref)}')">Send</button>` : ""}${d.ok && s.kind ? `<button class="btn btn-coral btn-sm" onclick="ivAskOpen('${esc(s.kind)}','${esc(s.ref)}')">Send ${esc(s.kind)}</button>` : ""}<button class="btn btn-ghost btn-sm" onclick="ivAskClose()">Close</button></div>
   </div></div>`;
 }
+// ---- Accounts page (Lex, 4 Nov 2026 22:5x, mock-up agreed; built 5 Nov). The money page: who owes what (and the chart)
+// on top, then totals and counters, every invoice with filters and search, History (old Wellington Parker / QuickBooks
+// numbers), Payments in and the Accountant pack. New invoice and full Edit of any invoice: client, email, billing address,
+// job, property line, dates, lines (price list, extra area, parking / congestion into the main line, blank), note.
+// A sent invoice keeps its number: Save makes a corrected PDF, then Lex picks "Send the corrected copy" or "Just keep it".
+// Cancel = void, the number is never used again. Invoices made in Tide (INV-0006 to 0031) come from the jobs; Edit on one
+// brings it in under its own number. Ops: invRead {all}, invEdit {full|create|dryRun}, invSend {resend}, invHold {keep},
+// invVoid {sentToo}, invPaid, invRemind (script file InvoiceMake, 5 Nov). Nothing is emailed without a confirm tap here.
+const AC_FILTERS = [["all","All"],["unpaid","Unpaid"],["overdue","Overdue"],["paid","Paid"],["draft","Drafts"],["void","Cancelled"]];
+const AC_LABEL = { needs:"Needs info", ready:"Ready", sending:"Check Sent mail", sent:"Sent", overdue:"Overdue", paid:"Paid", void:"Cancelled" };
+function acState(){ if (!state.ac) state.ac = { filter:"all", client:"", month:"", q:"", more:false }; return state.ac; }
+async function acLoad(quiet){
+  if (!keyMode() || state.acBusy) return;
+  state.acBusy = true; if (!quiet) safeRender();
+  try {
+    const d = await dashCall("invRead", { all:true });
+    if (d && d.ok){ state.acData = Object.assign({ at:new Date() }, d); state.acErr = d.edit ? "" : "The script's Invoices part is the older one (no Accounts page yet): paste the new InvoiceMake and deploy."; }
+    else state.acErr = (d && d.error === "Unknown request.") ? "The script hasn't got the Invoices part yet." : ((d && d.error) || "No answer");
+  } catch(e){ state.acErr = String(e && e.message || e); }
+  finally { state.acBusy = false; }
+  if (state.view === "accounts") safeRender();
+}
+function acNum(no){ const m = /^INV\s*-\s*(\d{3,6})$/i.exec(String(no||"").trim()); return m ? parseInt(m[1],10) : 0; }
+function acNorm(no){ const n = acNum(no); if (!n) return ""; const s = String(n); return "INV-" + (s.length < 4 ? "0000".slice(s.length) + s : s); }
+function acAddDays(ds, n){ const d = new Date(ds+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function acDays(a, b){ return Math.round((new Date(b+"T12:00:00Z") - new Date(a+"T12:00:00Z")) / 864e5); }
+function acShort(ds){ if (!ds) return ""; const d = new Date(ds.slice(0,10)+"T12:00:00"); return isNaN(d) ? ds : d.toLocaleDateString("en-GB",{ day:"numeric", month:"short" }); }
+function acCust(c){ return String(c||"").replace(/\s+-\s+/g," ").replace(/\s{2,}/g," ").trim(); }
+function acAddr(j){ return [j.address, j.town, j.postcode].map(s => String(s||"").trim()).filter(Boolean).join(", "); }
+// One row per invoice: the dashboard's own (script), plus Tide-era and older ones recorded on the jobs.
+function acRows(){
+  const today = isoToday(0), d = state.acData, out = [], seen = {};
+  ((d && d.invoices) || []).forEach(x => {
+    const j = x.jobId ? state.jobs.find(k => k.id === x.jobId) : null;
+    if (x.no) seen[x.no] = true;
+    out.push({ src:"iv", id:"iv:"+(x.no || x.key), no:x.no, key:x.key, x, j, date:x.date || (x.createdAt||"").slice(0,10), customer:x.customer || acCust(x.client), jobNo:x.jobNo || "", jobId:x.jobId || "",
+      property:x.property || x.jobLine || "", total:x.total, due:x.due, state:x.state, paidDate:x.paidDate || "", paidRef:x.paidRef || "", pdfUrl:x.pdfUrl || "" });
+  });
+  state.jobs.forEach(j => {
+    if (j.status === "archived" && !j.invoiceNo) return;
+    if (j.invoice !== "invoiced" && j.invoice !== "paid") return;
+    const no = acNorm(j.invoiceNo);
+    if (no && seen[no]) return;
+    const date = String(j.invoicedAt || "").slice(0,10), due = j.invoiceDue || (date ? acAddDays(date, 28) : "");
+    const st = j.invoice === "paid" ? "paid" : (due && today > due ? "overdue" : "sent");
+    out.push({ src: acNum(no) >= 1000 ? "old" : "job", id:"job:"+j.id, no, j, date, customer:acCust(j.client), jobNo:j.jobNo || "", jobId:j.id, property:acAddr(j),
+      total:moneyAmount(j.invoiceAmount), due, state:st, paidDate:String(j.paidAt || "").slice(0,10), paidRef:"", pdfUrl: j.invoicePdfId ? "https://drive.google.com/file/d/"+j.invoicePdfId+"/view" : "" });
+  });
+  return out.sort((a,b) => (b.date||"").localeCompare(a.date||"") || acNum(b.no) - acNum(a.no));
+}
+function acOpen(r){ return r.state === "sent" || r.state === "overdue" || r.state === "sending"; }
+function acCounted(r){ return r.state === "sent" || r.state === "overdue" || r.state === "sending" || r.state === "paid"; }
+function acFiltered(rows){
+  const a = acState(), q = a.q.trim().toLowerCase();
+  return rows.filter(r => {
+    if (r.src === "old") return false;
+    if (a.filter === "unpaid" && !acOpen(r)) return false;
+    if (a.filter === "overdue" && r.state !== "overdue") return false;
+    if (a.filter === "paid" && r.state !== "paid") return false;
+    if (a.filter === "draft" && r.state !== "needs" && r.state !== "ready") return false;
+    if (a.filter === "void" && r.state !== "void") return false;
+    if (a.filter === "all" && r.state === "void") return false;
+    if (a.client && r.customer !== a.client) return false;
+    if (a.month && (r.date||"").slice(0,7) !== a.month) return false;
+    if (q && ![r.no, r.customer, r.jobNo, r.property, r.x && r.x.jobLine].join(" ").toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function acMonthName(m){ const d = new Date(m+"-01T12:00:00"); return d.toLocaleDateString("en-GB",{ month:"long", year:"numeric" }); }
+function acChip(st, r){
+  const today = isoToday(0);
+  let t = AC_LABEL[st] || st;
+  if (st === "overdue" && r.due) t = "Overdue " + acDays(r.due, today) + "d";
+  if (st === "paid" && r.paidDate) t = "Paid " + acShort(r.paidDate);
+  return `<span class="ac-chip ac-${esc(st)}">${esc(t)}</span>`;
+}
+function acActions(r){
+  const b = [], x = r.x;
+  if (r.src === "iv"){
+    if (r.state !== "void") b.push(`<button class="ac-act" onclick="acEditOpen('${esc(r.id)}')">Edit</button>`);
+    if (r.pdfUrl) b.push(`<a class="ac-act" href="${esc(r.pdfUrl)}" target="_blank" rel="noopener">PDF</a>`);
+    if (r.state === "ready") b.push(`<button class="ac-act ac-go" onclick="acAskOpen('send','${esc(r.id)}')">Send</button>`);
+    if (r.state === "sent" && x.pendingChoice) b.push(`<button class="ac-act ac-go" onclick="acAskOpen('choose','${esc(r.id)}')"${tip("You corrected it: send the corrected copy, or keep it for your records")}>Corrected: send or keep</button>`);
+    if (acOpen(r)) b.push(`<button class="ac-act" onclick="acAskOpen('paid','${esc(r.id)}')">Mark paid</button>`);
+    if (r.state === "sent" || r.state === "overdue") b.push(`<button class="ac-act" onclick="acAskOpen('remind','${esc(r.id)}')">Send reminder</button>`);
+  } else if (r.src === "job"){
+    if (r.no) b.push(`<button class="ac-act" onclick="acEditOpen('${esc(r.id)}')"${tip("Made in Tide. Edit brings it onto this page under the same number, with a PDF in the new design.")}>Edit</button>`);
+    if (r.pdfUrl) b.push(`<a class="ac-act" href="${esc(r.pdfUrl)}" target="_blank" rel="noopener">PDF</a>`);
+    if (acOpen(r) && r.no && r.total != null) b.push(`<button class="ac-act" onclick="acAskOpen('paid','${esc(r.id)}')">Mark paid</button>`);
+  }
+  if (r.j) b.push(`<button class="ac-act" onclick="openEdit('${esc(r.j.id)}')">Job</button>`);
+  return b.join("");
+}
+function acRowHtml(r){
+  const res = (state.acRes || {})[r.id];
+  return `<div class="ac-row ac-r-${esc(r.state)}">
+    <span class="ac-no">${esc(r.no || "(no number yet)")}${r.src === "job" ? `<span class="ac-src"${tip("Made in Tide")}>Tide</span>` : ""}${r.x && r.x.kind === "oneoff" ? `<span class="ac-src">One-off</span>` : ""}</span>
+    <span class="ac-date">${esc(acShort(r.date))}</span>
+    <span class="ac-cl">${esc(r.customer || "–")}</span>
+    <span class="ac-job">${esc(r.jobNo || "–")}</span>
+    <span class="ac-prop">${esc(r.property || (r.x && r.x.jobLine) || "")}${r.state === "needs" && r.x ? `<span class="ac-why">${esc((r.x.problems||[])[0] || "")}</span>` : ""}${r.state === "void" && r.x && r.x.voidWhy ? `<span class="ac-why">${esc(r.x.voidWhy)}</span>` : ""}</span>
+    <span class="ac-amt">${r.total != null ? ivMoney(r.total) : "–"}</span>
+    <span class="ac-due">${esc(r.due ? acShort(r.due) : "")}</span>
+    <span class="ac-st">${acChip(r.state, r)}</span>
+    <span class="ac-acts">${acActions(r)}</span>
+    ${res ? `<div class="ac-res${res.ok ? "" : " bad"}">${esc(res.text)}</div>` : ""}
+  </div>`;
+}
+function acChart(rows){
+  const now = new Date(), ms = [];
+  for (let i = 5; i >= 0; i--){ const d = new Date(now.getFullYear(), now.getMonth()-i, 1); ms.push({ k: d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"), lbl: d.toLocaleDateString("en-GB",{ month:"short" }), inv:0, paid:0 }); }
+  rows.forEach(r => {
+    if (r.total == null) return;
+    if (acCounted(r)){ const m = ms.find(x => x.k === (r.date||"").slice(0,7)); if (m) m.inv += r.total; }
+    if (r.state === "paid"){ const m = ms.find(x => x.k === (r.paidDate||"").slice(0,7)); if (m) m.paid += r.total; }
+  });
+  const top = Math.max(1, ...ms.map(m => Math.max(m.inv, m.paid)));
+  const desc = ms.map(m => m.lbl+": invoiced "+ivMoney(m.inv)+", paid "+ivMoney(m.paid)).join("; ");
+  return `<div class="ac-chart" role="img" aria-label="${esc("Invoiced and paid by month. "+desc)}">${ms.map(m => `<div class="ac-mon"${tip(m.lbl+": invoiced "+ivMoney(m.inv)+", paid "+ivMoney(m.paid))}><div class="ac-bars"><div class="ac-bar ac-bi" style="height:${Math.max(2, Math.round(m.inv/top*150))}px"></div><div class="ac-bar ac-bp" style="height:${Math.max(2, Math.round(m.paid/top*150))}px"></div></div><div class="ac-ml">${esc(m.lbl)}</div></div>`).join("")}</div>
+    <div class="ac-key"><span class="ac-dot ac-bi"></span>Invoiced <span class="ac-dot ac-bp"></span>Paid</div>`;
+}
+function renderAccounts(){
+  const d = state.acData, a = acState();
+  if (!keyMode()) return `<div class="t-card">Needs the device key (More > Device key).</div>`;
+  if (!d) return `<div class="t-card">${state.acErr ? esc(state.acErr) : "Loading the invoices…"}</div>`;
+  const today = isoToday(0), month = today.slice(0,7), lastM = acAddDays(month+"-01", -1).slice(0,7), year = today.slice(0,4);
+  const rows = acRows(), live = rows.filter(r => r.src !== "old");
+  const open = live.filter(acOpen), over = open.filter(r => r.state === "overdue");
+  const sum = l => l.reduce((s,r) => s + (r.total || 0), 0);
+  const invM = live.filter(r => acCounted(r) && (r.date||"").slice(0,7) === month), invY = live.filter(r => acCounted(r) && (r.date||"").slice(0,4) === year);
+  const paidM = live.filter(r => r.state === "paid" && (r.paidDate||"").slice(0,7) === month), paidL = live.filter(r => r.state === "paid" && (r.paidDate||"").slice(0,7) === lastM);
+  const clients = {}; open.forEach(r => { const c = clients[r.customer || "–"] || (clients[r.customer || "–"] = { n:0, sum:0, oldest:0, over:0 }); c.n++; c.sum += r.total || 0; if (r.date) c.oldest = Math.max(c.oldest, acDays(r.date, today)); if (r.state === "overdue") c.over++; });
+  const owe = Object.keys(clients).sort((x,y) => clients[y].sum - clients[x].sum);
+  const oldestOver = over.reduce((m,r) => Math.max(m, r.due ? acDays(r.due, today) : 0), 0);
+  const needs = live.filter(r => r.state === "needs").length, ready = live.filter(r => r.state === "ready"), chase = live.filter(r => r.x && r.x.chase).length, um = d.unmatched || [];
+  const set = d.settings || {};
+  const list = acFiltered(rows), shown = a.more ? list : list.slice(0, 25);
+  const custs = Array.from(new Set(live.map(r => r.customer).filter(Boolean))).sort();
+  const months = Array.from(new Set(live.map(r => (r.date||"").slice(0,7)).filter(Boolean))).sort().reverse();
+  const hist = rows.filter(r => r.src === "old");
+  const pays = live.filter(r => r.state === "paid" && r.paidDate).sort((x,y) => y.paidDate.localeCompare(x.paidDate)).slice(0, 8);
+  const openOpts = open.filter(r => r.no).map(r => `<option value="${esc(r.no)}">${esc(r.no)} · ${esc(r.customer)} · ${ivMoney(r.total)}</option>`).join("");
+  const warn = [];
+  if (state.acErr) warn.push(state.acErr);
+  if (!d.companyNoSet) warn.push("Company number isn't set (Script Property INV_COMPANY_NO): invoices wait as Needs info.");
+  if (d.aliasOk === false) warn.push("Gmail can't send as "+(d.from||"finance@")+" yet: nothing can be sent until it can.");
+  return `<div class="ac-page">
+    ${warn.map(w => `<div class="ro-res bad">${esc(w)}</div>`).join("")}
+    <div class="ac-top2">
+      <section class="ac-card"><h2 class="ac-h2">Who owes what</h2>
+        ${owe.length ? `<div class="ac-owe ac-owe-h"><span>CLIENT</span><span>UNPAID</span><span>OWED</span><span>OLDEST</span></div>${owe.map(k => { const c = clients[k]; return `<button class="ac-owe" onclick="acPickClient('${esc(k)}')"${tip("Show only "+k+"'s unpaid invoices")}><span class="ac-owe-n">${esc(k)}</span><span>${c.n}</span><span class="ac-b">${ivMoney(c.sum)}</span><span class="${c.over ? "ac-bad" : ""}">${c.oldest} day${c.oldest===1?"":"s"}${c.over ? " · "+c.over+" overdue" : ""}</span></button>`; }).join("")}
+          <div class="ac-owe ac-owe-t"><span>Total</span><span>${open.length}</span><span class="ac-b">${ivMoney(sum(open))}</span><span></span></div>` : `<div class="t-empty">Nobody owes anything. Everything sent has been paid.</div>`}
+      </section>
+      <section class="ac-card"><h2 class="ac-h2">Invoiced and paid, by month</h2>${acChart(live)}</section>
+    </div>
+    <div class="ac-tiles">
+      <div class="ac-tile"><div class="ac-tl">INVOICED IN ${esc(acMonthName(month).split(" ")[0].toUpperCase())}</div><div class="ac-tv">${ivMoney(sum(invM))}</div><div class="ac-ts">${invM.length} invoice${invM.length===1?"":"s"} · ${ivMoney(sum(invY))} this year</div></div>
+      <div class="ac-tile"><div class="ac-tl">PAID IN ${esc(acMonthName(month).split(" ")[0].toUpperCase())}</div><div class="ac-tv ac-good">${ivMoney(sum(paidM))}</div><div class="ac-ts">${ivMoney(sum(paidL))} paid in ${esc(acMonthName(lastM).split(" ")[0])}</div></div>
+      <div class="ac-tile"><div class="ac-tl">OUTSTANDING</div><div class="ac-tv">${ivMoney(sum(open))}</div><div class="ac-ts">${open.length} invoice${open.length===1?"":"s"} · ${owe.length} client${owe.length===1?"":"s"}</div></div>
+      <div class="ac-tile${over.length ? " ac-tile-bad" : ""}"><div class="ac-tl">OVERDUE</div><div class="ac-tv">${ivMoney(sum(over))}</div><div class="ac-ts">${over.length} invoice${over.length===1?"":"s"}${over.length ? " · oldest "+oldestOver+" days late" : ""}</div></div>
+    </div>
+    <div class="ac-counts">
+      <button class="ac-count" onclick="acSetFilter('draft')">Needs info <b>${needs}</b></button>
+      <button class="ac-count" onclick="acSetFilter('draft')">Ready to send <b>${ready.length}</b></button>
+      <span class="ac-count">Reminders due <b>${chase}</b></span>
+      <a class="ac-count" href="#acpay">Money in to look at <b>${um.length}</b></a>
+      <span class="ac-count ac-dim">Auto-send ${set.autoSend ? "ON" : "OFF"} · Auto-chase ${set.autoChase ? "ON" : "OFF"}</span>
+    </div>
+    <section class="ac-card">
+      <div class="ac-lh"><h2 class="ac-h2">Invoices</h2>
+        <div class="ac-filt">
+          <label class="ac-sl" for="ac_q">Search</label><input id="ac_q" type="search" value="${esc(a.q)}" placeholder="Job, address or INV" oninput="acSearch(this.value)" />
+          <span class="ac-pills" role="group" aria-label="Show">${AC_FILTERS.map(f => `<button class="ac-pill${a.filter === f[0] ? " on" : ""}" aria-pressed="${a.filter === f[0]}" onclick="acSetFilter('${f[0]}')">${f[1]}</button>`).join("")}</span>
+          <select class="sel-box" aria-label="Client" onchange="acState().client=this.value;render()"><option value="">All clients</option>${custs.map(c => `<option${a.client === c ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
+          <select class="sel-box" aria-label="Month" onchange="acState().month=this.value;render()"><option value="">Any month</option>${months.map(m => `<option value="${m}"${a.month === m ? " selected" : ""}>${esc(acMonthName(m))}</option>`).join("")}</select>
+        </div>
+      </div>
+      <div class="ac-row ac-head"><span>INVOICE</span><span>DATE</span><span>CLIENT</span><span>JOB</span><span>PROPERTY</span><span class="ac-amt">AMOUNT</span><span>DUE</span><span>STATUS</span><span></span></div>
+      <div id="ac_list">${shown.length ? shown.map(acRowHtml).join("") : `<div class="t-empty">No invoices match.</div>`}</div>
+      <div class="ac-foot">Showing ${shown.length} of ${list.length}.${list.length > shown.length ? ` <button class="t-link" onclick="acState().more=true;render()">Show all</button>` : ""} Old Wellington Parker / QuickBooks invoices (INV-1000 and up) are under History. Invoices made in Tide show <span class="ac-src">Tide</span>.</div>
+    </section>
+    <div class="ac-top2">
+      <section class="ac-card" id="acpay"><h2 class="ac-h2">Payments in</h2>
+        ${um.map(c => `<div class="ac-pay ac-pay-bad"><div><b>${ivMoney(c.amount)}</b> on ${esc(acShort(c.date))} · ${esc(c.text)}<div class="ac-why">${esc(c.why || "")}</div></div>
+          <div class="ac-pay-acts"><select class="sel-box" id="ivp_${esc(c.key.replace(/[^A-Za-z0-9]/g,"_"))}" aria-label="Invoice this pays"><option value="">Pick the invoice…</option>${openOpts}</select><button class="ac-act" onclick="acCreditPaid('${esc(c.key)}')">Paid</button><button class="ac-act" onclick="acDismiss('${esc(c.key)}')">Not an invoice</button></div></div>`).join("")}
+        ${pays.map(r => `<div class="ac-pay"><span>${esc(acShort(r.paidDate))} · ${esc(r.customer)}${r.paidRef ? " · "+esc(r.paidRef) : ""}</span><span class="ac-good">${esc(r.no || r.jobNo)} ${ivMoney(r.total)}</span></div>`).join("") || (um.length ? "" : `<div class="t-empty">No payments recorded yet.</div>`)}
+        <div class="ac-foot">Winkworth remittances to finance@ mark invoices paid by themselves. A Tide statement CSV dropped in Drive > WPS Bank statements is read by itself.</div>
+      </section>
+      <section class="ac-card"><h2 class="ac-h2">Accountant pack</h2>
+        ${(d.packs||[]).map(p => `<div class="ac-pay"><span>${esc(acMonthName(p.month))} · ${p.count} invoice${p.count===1?"":"s"} · ${ivMoney(p.total)}</span><span class="ac-pay-acts"><a class="ac-act" href="${esc(p.sales)}" target="_blank" rel="noopener">Sales CSV</a><a class="ac-act" href="${esc(p.xero)}" target="_blank" rel="noopener">Xero CSV</a><a class="ac-act" href="${esc(p.folder)}" target="_blank" rel="noopener">PDFs</a></span></div>`).join("") || `<div class="t-empty">No packs made yet.</div>`}
+        <div class="ac-pay"><span>${esc(acMonthName(month))} so far</span><button class="ac-act" onclick="acAskOpen('pack','${month}')">Make now</button></div>
+        <div class="ac-foot">Saved by itself on the 1st of each month, for the month before.</div>
+      </section>
+    </div>
+    <section class="ac-card"><details${hist.length ? "" : " open"}><summary class="ac-h2 ac-sum">History (${hist.length})</summary>
+      <div class="ac-foot">Old Wellington Parker / QuickBooks invoices recorded on WPS jobs. Kept for reference; they can't be edited here.</div>
+      ${hist.map(r => `<div class="ac-pay"><span><b>${esc(r.no)}</b> · ${esc(acShort(r.date))} · ${esc(r.customer)} · ${esc(r.jobNo)} ${esc(r.property)}</span><span>${r.total != null ? ivMoney(r.total) : ""} ${acChip(r.state, r)} ${r.j ? `<button class="ac-act" onclick="openEdit('${esc(r.j.id)}')">Job</button>` : ""}</span></div>`).join("") || `<div class="t-empty">None.</div>`}
+    </details></section>
+    <div class="ac-foot">Updated ${esc(roShortWhen(d.at.toISOString()))} · <button class="t-link" onclick="acLoad()"${state.acBusy ? " disabled" : ""}>${state.acBusy ? "Loading…" : "Refresh"}</button> · Next number ${esc(d.nextNo || "")} · sent from ${esc(d.from || "finance@")}</div>
+  </div>`;
+}
+function acSetFilter(f){ const a = acState(); a.filter = f; a.more = false; render(); }
+function acPickClient(c){ const a = acState(); a.client = c; a.filter = "unpaid"; a.more = false; render(); setTimeout(() => { const el = document.getElementById("ac_list"); if (el) el.scrollIntoView({ behavior:"smooth", block:"start" }); }, 0); }
+let acSearchT = 0;
+function acSearch(v){ acState().q = v; clearTimeout(acSearchT); acSearchT = setTimeout(() => { const box = document.getElementById("ac_list"); if (!box) return; const l = acFiltered(acRows()); box.innerHTML = (acState().more ? l : l.slice(0, 25)).map(acRowHtml).join("") || `<div class="t-empty">No invoices match.</div>`; }, 150); }
+function acRow(id){ return acRows().find(r => r.id === id) || null; }
+function acRefresh(){ setTimeout(() => { acLoad(true); loadIv(); }, 600); }
+async function acCreditPaid(key){
+  const el = document.getElementById("ivp_"+key.replace(/[^A-Za-z0-9]/g,"_")), no = el && el.value;
+  if (!no){ if (el) el.focus(); return; }
+  const c = ((state.acData && state.acData.unmatched) || []).find(k => k.key === key) || {};
+  const d = await ivCall("invPaid", { no, date:c.date, ref:(c.text||"").slice(0,60), creditKey:key });
+  if (!d.ok) state.acErr = d.error; acRefresh();
+}
+async function acDismiss(key){ const d = await ivCall("invDismiss", { creditKey:key }); if (!d.ok) state.acErr = d.error; acRefresh(); }
+
+// ---- confirm box (send, paid, reminder, corrected copy, cancel, pack)
+function acAskOpen(act, ref){ state.acAsk = { act, ref, busy:false, done:false, msg:"", ok:false }; render(); setTimeout(() => { const b = document.getElementById("ac_box"); if (b) b.focus(); }, 0); }
+function acAskClose(){ if (state.acAsk && state.acAsk.busy) return; state.acAsk = null; render(); }
+function acAskText(s){
+  const r = acRow(s.ref), x = r && r.x;
+  switch (s.act){
+    case "send": return r ? { title:"Send "+r.no, go:"Send", body:`<p>Send <b>${esc(r.no)}</b> for <b>${ivMoney(r.total)}</b> to <b>${esc(x.email)}</b> now, from finance@ with the PDF (copy to finance@)?</p><p class="c-dim">${esc(x.jobLine)}</p>` } : null;
+    case "choose": return r ? { title:"Corrected "+r.no, go:"Send the corrected copy", alt:"Just keep it", body:`<p>${esc(r.no)} was sent on ${esc(acShort((x.sentAt||"").slice(0,10)))}. You've corrected it (now <b>${ivMoney(r.total)}</b>).</p><p><b>Send the corrected copy</b> emails ${esc(x.email)} the new PDF: "Please find attached a corrected copy of invoice ${esc(r.no)} for ${ivMoney(r.total)}. It replaces the copy we sent on…".</p><p><b>Just keep it</b> keeps the corrected PDF for your records and sends nothing.</p>` } : null;
+    case "paid": return r ? { title:"Mark "+(r.no || r.jobNo)+" paid", go:"Mark paid", body:`<p>Mark <b>${esc(r.no)}</b> (${esc(r.customer)}, ${ivMoney(r.total)}) paid?</p><label class="field">Paid on <input id="ac_pd" type="date" value="${isoToday(0)}" max="${isoToday(0)}" /></label><p class="c-dim">Nothing is emailed.</p>` } : null;
+    case "remind": { if (!r) return null; const late = r.due && isoToday(0) > r.due; const kind = late ? "chaser" : "reminder";
+      return { title:"Send "+kind+" for "+r.no, go:"Send "+kind, body:`<p>Send the polite ${kind} for <b>${esc(r.no)}</b> (${ivMoney(r.total)}, due ${esc(acShort(r.due))}) to <b>${esc(x.email)}</b>, with the PDF?</p>${(late ? x.chaserAt : x.reminderAt) ? `<p class="ac-bad">A ${kind} already went for this invoice; it won't go twice.</p>` : ""}` }; }
+    case "void": return r ? { title:"Cancel "+(r.no || "this invoice"), go:"Cancel the invoice", body:`<p>Cancel <b>${esc(r.no || "this draft")}</b> (${esc(r.customer)}, ${ivMoney(r.total)})?${r.no ? " The number is never used again." : ""}</p>${r.state === "sent" || r.state === "overdue" ? `<p>It has been sent to ${esc(x.email)}. Nothing is emailed now: tell them yourself if needed. Its PDF stays in Drive.${r.jobNo ? " "+esc(r.jobNo)+" stops asking for an invoice; make a new one with New invoice if it needs one." : ""}</p>` : ""}<label class="field">Why (for your records) <input id="ac_why" maxlength="120" placeholder="e.g. wrong agent" /></label>` } : null;
+    case "pack": return { title:"Accountant pack", go:"Make it", body:`<p>Save the sales list and Xero import CSVs for ${esc(acMonthName(s.ref))} into Drive > WPS Invoices > ${esc(s.ref)} now? Any older copy there goes to the Bin.</p>` };
+  }
+  return null;
+}
+function renderAcAsk(){
+  const s = state.acAsk; if (!s) return "";
+  const t = acAskText(s); if (!t){ state.acAsk = null; return ""; }
+  const dis = s.busy ? " disabled" : "";
+  return `<div class="mt-back" onclick="if(event.target===this)acAskClose()"><div class="mt-box ro-ask" id="ac_box" tabindex="-1" role="dialog" aria-label="${esc(t.title)}">
+    <div class="mt-h"><div><b>${esc(t.title)}</b></div><button class="undo-x" onclick="acAskClose()" aria-label="Close"${dis}>✕</button></div>
+    ${s.done ? `<div class="ro-res${s.ok ? "" : " bad"}">${esc(s.msg)}</div>` : t.body}
+    ${s.busy ? `<div class="mt-msg">Working…</div>` : ""}
+    <div class="rr-b mt-b">${s.done ? `<button class="btn btn-ghost btn-sm" onclick="acAskClose()">Close</button>` : `<button class="btn btn-coral btn-sm" onclick="acGo(false)"${dis}>${esc(t.go)}</button>${t.alt ? `<button class="btn btn-ghost btn-sm" onclick="acGo(true)"${dis}>${esc(t.alt)}</button>` : ""}<button class="btn btn-ghost btn-sm" onclick="acAskClose()"${dis}>${t.alt ? "Decide later" : "Back"}</button>`}</div>
+  </div></div>`;
+}
+async function acGo(alt){
+  const s = state.acAsk; if (!s || s.busy || s.done) return;
+  const r = acRow(s.ref), x = r && r.x;
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+  const pd = v("ac_pd"), why = v("ac_why");
+  s.busy = true; render();
+  let d, msg;
+  if (s.act === "send"){ d = await ivCall("invSend", { nos:[r.no], confirm:true }); const q = (d.results||[])[0]; msg = q ? (q.ok ? q.text : q.error) : "Not sent: "+(d.error || "no answer"); if (q) d.ok = q.ok; }
+  else if (s.act === "choose" && !alt){ d = await ivCall("invSend", { nos:[r.no], confirm:true, resend:true }); const q = (d.results||[])[0]; msg = q ? (q.ok ? q.text : q.error) : "Not sent: "+(d.error || "no answer"); if (q) d.ok = q.ok; }
+  else if (s.act === "choose" && alt){ d = await ivCall("invHold", { no:r.no, keep:true }); msg = d.ok ? "Kept. The corrected PDF is on the invoice; nothing was sent." : "Not changed: "+d.error; }
+  else if (s.act === "paid"){ d = await ivCall("invPaid", { no:r.no, date:pd }); msg = d.ok ? r.no+" marked paid "+acShort(pd || isoToday(0))+". No email sent." : "Not changed: "+d.error; }
+  else if (s.act === "remind"){ const kind = r.due && isoToday(0) > r.due ? "chaser" : "reminder"; d = await ivCall("invRemind", { no:r.no, kind, confirm:true }); msg = d.ok ? (d.text || "Sent") : "Not sent: "+d.error; }
+  else if (s.act === "void"){ d = await ivCall("invVoid", r.no ? { no:r.no, sentToo:true, why: why || "Cancelled on the Accounts page" } : { key:r.key, why: why || "Cancelled on the Accounts page" }); msg = d.ok ? (r.no || "The draft")+" cancelled."+(r.no ? " The number won't be used again." : "") : "Not cancelled: "+d.error; if (d.ok) state.acEdit = null; }
+  else if (s.act === "pack"){ d = await ivCall("invPack", { month:s.ref }); msg = d.ok ? "Saved: "+d.count+" invoice"+(d.count===1?"":"s")+", "+ivMoney(d.total)+"." : "Not made: "+d.error; }
+  s.busy = false; s.done = true; s.ok = !!(d && d.ok); s.msg = msg;
+  if (r){ state.acRes = state.acRes || {}; state.acRes[r.id] = { ok:s.ok, text:msg }; }
+  render(); acRefresh();
+}
+
+// ---- New invoice / full edit
+function acInfo(){ return (state.acData && state.acData.edit) || null; }
+function acClientInfo(name){ const e = acInfo(); if (!e || !name) return null; const want = acCust(name).toLowerCase(); const k = Object.keys(e.clients||{}).find(n => acCust(n).toLowerCase() === want); return k ? Object.assign({ name:k }, e.clients[k]) : null; }
+function acPrice(client, type, beds, house){
+  const e = acInfo(); if (!e) return null;
+  const ci = acClientInfo(client), p = ci && ci.prices ? (ci.prices[type] || (type === "SOC" ? ci.prices.CO : null)) : null;
+  if (p){ const hv = house ? moneyAmount(p["h"+beds]) : null; if (hv != null) return hv; const v = moneyAmount(p[beds]); if (v != null) return v; }
+  const b = (e.base[type] || {})[beds]; return b != null ? b : null;
+}
+function acExtra(client){ const e = acInfo(), ci = acClientInfo(client); return ci && ci.extra != null ? ci.extra : (e ? e.extra : 10); }
+function acBedKey(b){ const s = String(b == null ? "" : b).trim(); if (/^studio$/i.test(s) || s === "0") return "0"; return /^[1-6]$/.test(s) ? s : ""; }
+function acLabels(){ return (acInfo() && acInfo().labels) || { CO:"Check Out", ICI:"Inventory & Check In", MTI:"Mid-Term Inspection", SOC:"Schedule of Condition" }; }
+// Fill the form from a job (New invoice, job picked): client, email, address, property line, inspected date, the main line.
+function acFromJob(f, j){
+  const L = acLabels(), ci = acClientInfo(j.client), bk = acBedKey(j.bedrooms);
+  f.jobNo = j.jobNo || ""; f.customer = acCust(j.client); f.email = ci && ci.email ? ci.email : (/winkworth/i.test(j.client||"") ? "bowpropman@winkworth.co.uk" : String(j.agentEmail||"").split(/[,;\s]+/)[0] || "");
+  f.billAddress = ci && ci.address ? ci.address : ""; f.jobLine = [j.jobNo, L[j.type] || j.type, acAddr(j)].filter(Boolean).join(" - "); f.service = L[j.type] || "";
+  f.visitDate = /^\d{4}-\d{2}-\d{2}$/.test(j.date||"") ? j.date : "";
+  const lines = [];
+  if (L[j.type] && bk !== ""){
+    const pr = acPrice(j.client, j.type, bk, j.propertyType === "House");
+    const travel = (moneyAmount(j.parkingExtra) || 0) + (j.congestion && ci && ci.congestion != null ? ci.congestion : 0);
+    lines.push({ desc: L[j.type]+" - "+(bk === "0" ? "Studio" : bk+" bed"), qty:"1", unit: pr != null ? String(Math.round((pr + travel)*100)/100) : "" });
+  }
+  const nEx = parseInt(j.extraAreas, 10) || 0;
+  if (nEx > 0) lines.push({ desc:"Extra area", qty:String(nEx), unit:String(acExtra(j.client)) });
+  f.lines = lines.length ? lines : [{ desc:"", qty:"1", unit:"" }];
+}
+function acEditOpen(id){
+  const r = id ? acRow(id) : null, f = { customer:"", email:"", billAddress:"", jobNo:"", jobLine:"", service:"", visitDate:"", date:"", due:"", note:"", lines:[{ desc:"", qty:"1", unit:"" }] };
+  let mode = "new", importNo = "";
+  if (r && r.src === "iv"){
+    const x = r.x; mode = "edit";
+    Object.assign(f, { customer:x.customer || "", email:x.email || "", billAddress:x.billAddress || "", jobNo:x.jobNo || "", jobLine:x.jobLine || "", service:x.service || "", visitDate:x.visitDate || "", date:x.date || "", due:x.due || "", note:x.note || "",
+      lines:(x.lines && x.lines.length ? x.lines : [{ desc:"", qty:1, unit:"" }]).map(l => ({ desc:l.desc, qty:String(l.qty), unit:String(l.unit) })) });
+    if (!f.billAddress){ const ci = acClientInfo(x.client || x.customer); if (ci && ci.address) f.billAddress = ci.address; }
+  } else if (r && r.src === "job"){
+    mode = "import"; importNo = r.no; acFromJob(f, r.j);
+    f.date = r.date || ""; f.due = r.due || "";
+    f.lines = [{ desc: f.lines[0] && f.lines[0].desc || (acLabels()[r.j.type] || "Inspection"), qty:"1", unit: r.total != null ? String(r.total) : "" }];
+  }
+  state.acEdit = { id: r ? r.id : "", mode, importNo, f, busy:false, msg:"", ok:false, saved:null, problems:[], preview:null, add:"" };
+  render();
+  setTimeout(() => { const el = document.getElementById(mode === "new" ? "ace_job" : "ace_cust"); if (el) el.focus(); }, 0);
+}
+function acEditClose(){ const e = state.acEdit; if (e && e.busy) return; if (e && e.dirty && !e.saved && !confirm("Close without saving?")) return; state.acEdit = null; render(); }
+function acLineTotal(l){ const q = moneyAmount(l.qty), u = acSignedAmount(l.unit); return q != null && u != null ? Math.round(q*u*100)/100 : null; }
+function acSignedAmount(t){ const s = String(t == null ? "" : t).replace(/[£,\s]/g,""); if (!/^-?\d+(\.\d{1,2})?$/.test(s)) return null; return parseFloat(s); }
+function acTotal(f){ return f.lines.reduce((s,l) => s + (acLineTotal(l) || 0), 0); }
+function acSet(field, v){ const e = state.acEdit; if (!e) return; e.f[field] = v; e.dirty = true; e.preview = null; if (field === "customer") acMaybeClient(v); }
+function acMaybeClient(v){ const e = state.acEdit, ci = acClientInfo(v); if (!ci) return; if (!e.f.email && ci.email){ e.f.email = ci.email; const el = document.getElementById("ace_email"); if (el) el.value = ci.email; } if (!e.f.billAddress && ci.address){ e.f.billAddress = ci.address; const el = document.getElementById("ace_addr"); if (el) el.value = ci.address; } }
+function acSetLine(i, field, v){ const e = state.acEdit; if (!e || !e.f.lines[i]) return; e.f.lines[i][field] = v; e.dirty = true; e.preview = null; acPaintTotals(); }
+function acPaintTotals(){
+  const e = state.acEdit; if (!e) return;
+  e.f.lines.forEach((l, i) => { const el = document.getElementById("ace_amt"+i); if (el){ const a = acLineTotal(l); el.textContent = a == null ? "–" : ivMoney(a); } });
+  const t = document.getElementById("ace_total"); if (t) t.textContent = ivMoney(acTotal(e.f));
+}
+function acPickJob(v){
+  const e = state.acEdit; if (!e) return;
+  e.f.jobNo = v; e.dirty = true;
+  const j = state.jobs.find(k => normJobNo(k.jobNo) === normJobNo(v) && k.status !== "archived") || state.jobs.find(k => normJobNo(k.jobNo) === normJobNo(v));
+  if (j && e.mode === "new"){ acFromJob(e.f, j); render(); }
+}
+function acAddLine(kind){
+  const e = state.acEdit; if (!e) return; const f = e.f;
+  if (kind === "blank") f.lines.push({ desc:"", qty:"1", unit:"" });
+  else if (kind === "extra") f.lines.push({ desc:"Extra area - ", qty:"1", unit:String(acExtra(f.customer)) });
+  else { e.add = e.add === kind ? "" : kind; }
+  if (f.lines.length > 20) f.lines.length = 20;
+  e.dirty = true; e.preview = null; render();
+}
+function acAddFromList(){
+  const e = state.acEdit, L = acLabels(), t = (document.getElementById("ace_pt")||{}).value, b = (document.getElementById("ace_pb")||{}).value, house = (document.getElementById("ace_ph")||{}).checked;
+  if (!t || b === "") return;
+  const pr = acPrice(e.f.customer, t, b, house);
+  e.f.lines.push({ desc: L[t]+" - "+(b === "0" ? "Studio" : b+" bed"), qty:"1", unit: pr != null ? String(pr) : "" });
+  e.add = ""; e.dirty = true; e.preview = null; render();
+}
+// Parking and congestion go into the main (first) line, never a line of their own (Lex's rule).
+function acAddTravel(){
+  const e = state.acEdit, p = acSignedAmount((document.getElementById("ace_park")||{}).value || "0"), c = acSignedAmount((document.getElementById("ace_cong")||{}).value || "0");
+  if (p == null || c == null || p < 0 || c < 0){ alert("Type the amounts in pounds, e.g. 12.50"); return; }
+  const l = e.f.lines[0]; if (!l) return;
+  const u = acSignedAmount(l.unit) || 0; l.unit = String(Math.round((u + p + c)*100)/100);
+  e.add = ""; e.dirty = true; e.preview = null; e.msg = "Added "+ivMoney(p + c)+" into the first line ("+l.desc+")."; e.ok = true; render();
+}
+function acDelLine(i){ const e = state.acEdit; if (!e) return; e.f.lines.splice(i, 1); if (!e.f.lines.length) e.f.lines.push({ desc:"", qty:"1", unit:"" }); e.dirty = true; e.preview = null; render(); }
+function acPayload(e){
+  const f = e.f;
+  return { customer:f.customer, email:f.email, billAddress:f.billAddress, jobNo:f.jobNo, jobLine:f.jobLine, service:f.service, visitDate:f.visitDate, date:f.date, due:f.due, note:f.note,
+    lines: f.lines.filter(l => String(l.desc||"").trim() || String(l.unit||"").trim()).map(l => ({ desc:l.desc, qty:l.qty, unit:String(l.unit||"").replace(/[£,\s]/g,"") })) };
+}
+function acReq(e, extra){
+  const r = e.id ? acRow(e.id) : null, b = Object.assign({ fields: acPayload(e) }, extra || {});
+  if (e.mode === "edit"){ b.full = true; if (r && r.no) b.no = r.no; else if (r) b.key = r.key; }
+  else { b.create = true; if (e.mode === "import") b.importNo = e.importNo; }
+  return b;
+}
+async function acPreview(){
+  const e = state.acEdit; if (!e || e.busy) return;
+  e.busy = true; e.msg = ""; render();
+  const d = await ivCall("invEdit", acReq(e, { dryRun:true, html:true }));
+  e.busy = false;
+  if (d.ok){ e.preview = d.html || ""; e.problems = d.problems || []; e.msg = e.problems.length ? "Still to fill in: "+e.problems.join(" · ") : ""; e.ok = !e.problems.length; }
+  else { e.msg = "No preview: "+(d.error || "no answer"); e.ok = false; }
+  render();
+  setTimeout(() => { const fr = document.getElementById("ace_frame"); if (fr) fr.scrollIntoView({ behavior:"smooth", block:"nearest" }); }, 0);
+}
+async function acSave(){
+  const e = state.acEdit; if (!e || e.busy) return;
+  e.busy = true; e.msg = ""; render();
+  const d = await ivCall("invEdit", acReq(e));
+  e.busy = false;
+  if (d.ok && d.invoice){
+    const x = d.invoice;
+    e.saved = x; e.dirty = false; e.ok = true; e.problems = x.problems || [];
+    // the edit continues on the saved invoice (a new one now has its number or key)
+    e.mode = "edit"; e.id = "iv:" + (x.no || x.key);
+    if (state.acData){ const L = state.acData.invoices || (state.acData.invoices = []); const i = L.findIndex(k => (x.no && k.no === x.no) || (x.key && k.key === x.key)); if (i >= 0) L[i] = x; else L.unshift(x); }
+    e.msg = x.state === "needs" ? "Saved as a draft. Still to fill in: "+e.problems.join(" · ") : d.choose ? "Saved. "+x.no+" now "+ivMoney(x.total)+" with a corrected PDF. Send the corrected copy, or just keep it?" : "Saved. "+x.no+" "+ivMoney(x.total)+" is ready"+(x.pdfUrl ? " and its PDF is made" : "")+".";
+    e.choose = !!d.choose;
+  } else { e.ok = false; e.msg = "Not saved: "+(d.error || "no answer"); }
+  render(); acRefresh();
+}
+function renderAcEdit(){
+  const e = state.acEdit; if (!e) return "";
+  const f = e.f, r = e.id ? acRow(e.id) : null, x = r && r.x, dis = e.busy ? " disabled" : "";
+  const sentish = e.mode === "import" || (x && (x.state === "sent" || x.state === "overdue" || x.state === "paid"));
+  const title = e.mode === "new" ? "New invoice" : e.mode === "import" ? "Edit "+e.importNo+" (made in Tide)" : "Edit "+(x && x.no ? x.no : "invoice");
+  const sub = e.mode === "new" ? "Pick a job to fill it in from the job and the price list, or leave Job blank for a one-off. A number is given when it's complete."
+    : e.mode === "import" ? "This one was made in Tide. Saving brings it onto this page under the same number with a PDF in the new design; you then choose to send it or keep it."
+    : sentish ? "Sent "+acShort((x.sentAt||"").slice(0,10))+". Saving keeps the same number and makes a corrected PDF." : "Not sent yet. Saving remakes its PDF.";
+  const custs = Object.keys((acInfo() && acInfo().clients) || {}).map(acCust);
+  const jobOpts = state.jobs.filter(j => j.jobNo && j.status !== "archived").slice().sort((a,b) => String(b.jobNo).localeCompare(String(a.jobNo))).slice(0, 300);
+  const L = acLabels(), types = Object.keys(L);
+  const inp = (id, field, label, extra) => `<label class="ac-f" for="${id}"><span>${label}</span><input id="${id}" value="${esc(f[field])}" oninput="acSet('${field}', this.value)"${extra || ""}${dis} /></label>`;
+  return `<div class="mt-back" onclick="if(event.target===this)acEditClose()"><div class="mt-box ac-edit" id="ac_edit" tabindex="-1" role="dialog" aria-label="${esc(title)}">
+    <div class="mt-h"><div><b class="ac-et">${esc(title)}</b><div class="ac-es">${esc(sub)}</div></div><button class="undo-x" onclick="acEditClose()" aria-label="Close"${dis}>✕</button></div>
+    ${acInfo() ? "" : `<div class="ro-res bad">The script's Invoices part is the older one: the price list isn't available and saving may be refused until the new InvoiceMake is pasted and deployed.</div>`}
+    <div class="ac-g2">
+      ${inp("ace_cust", "customer", "CLIENT", ` list="ace_custs" autocomplete="off"`)}<datalist id="ace_custs">${custs.map(c => `<option value="${esc(c)}"></option>`).join("")}</datalist>
+      ${inp("ace_email", "email", "SEND TO", ` type="email" autocomplete="off"`)}
+    </div>
+    <label class="ac-f" for="ace_addr"><span>BILLING ADDRESS</span><textarea id="ace_addr" rows="2" oninput="acSet('billAddress', this.value)"${dis}>${esc(f.billAddress)}</textarea></label>
+    <div class="ac-g12">
+      <label class="ac-f" for="ace_job"><span>JOB</span><input id="ace_job" value="${esc(f.jobNo)}" list="ace_jobs" autocomplete="off" placeholder="${e.mode === "new" ? "WPS… or blank" : ""}" onchange="acPickJob(this.value)" oninput="acSet('jobNo', this.value)"${sentish ? " readonly" : ""}${dis} /></label>
+      <datalist id="ace_jobs">${jobOpts.map(j => `<option value="${esc(j.jobNo)}">${esc(acCust(j.client))} · ${esc(j.address || "")}</option>`).join("")}</datalist>
+      ${inp("ace_line", "jobLine", "PROPERTY LINE")}
+    </div>
+    <div class="ac-g3">
+      ${inp("ace_vd", "visitDate", "INSPECTED", ` type="date"`)}
+      ${inp("ace_d", "date", "INVOICE DATE", ` type="date" placeholder="the day it's numbered"`)}
+      ${inp("ace_due", "due", "DUE", ` type="date"`)}
+    </div>
+    <div class="ac-lines">
+      <div class="ac-lr ac-lhd"><span>Description</span><span>Qty</span><span>Price</span><span class="ac-amt">Amount</span><span></span></div>
+      ${f.lines.map((l, i) => `<div class="ac-lr">
+        <input aria-label="Line ${i+1} description" value="${esc(l.desc)}" oninput="acSetLine(${i},'desc',this.value)"${dis} />
+        <input aria-label="Line ${i+1} quantity" inputmode="decimal" value="${esc(l.qty)}" oninput="acSetLine(${i},'qty',this.value)"${dis} />
+        <input aria-label="Line ${i+1} price" inputmode="decimal" value="${esc(l.unit)}" placeholder="£" oninput="acSetLine(${i},'unit',this.value)"${dis} />
+        <span class="ac-amt" id="ace_amt${i}">${acLineTotal(l) == null ? "–" : ivMoney(acLineTotal(l))}</span>
+        <button class="ac-x" onclick="acDelLine(${i})" aria-label="Remove line ${i+1}"${dis}>✕</button></div>`).join("")}
+      <div class="ac-addb">
+        <button class="ac-act" onclick="acAddLine('list')"${dis}>+ Line from price list</button>
+        <button class="ac-act" onclick="acAddLine('extra')"${dis}>+ Extra area</button>
+        <button class="ac-act" onclick="acAddLine('travel')"${dis}>+ Parking / congestion</button>
+        <button class="ac-act" onclick="acAddLine('blank')"${dis}>+ Blank line</button>
+      </div>
+      ${e.add === "list" ? `<div class="ac-addbox"><select id="ace_pt" class="sel-box" aria-label="Type">${types.map(k => `<option value="${k}">${esc(L[k])}</option>`).join("")}</select>
+        <select id="ace_pb" class="sel-box" aria-label="Bedrooms">${["0","1","2","3","4","5","6"].map(b => `<option value="${b}">${b === "0" ? "Studio" : b+" bed"}</option>`).join("")}</select>
+        <label class="ac-ck"><input type="checkbox" id="ace_ph" /> House</label><button class="ac-act ac-go" onclick="acAddFromList()">Add</button>
+        <span class="ac-hint">${acClientInfo(f.customer) && acClientInfo(f.customer).prices ? esc(acClientInfo(f.customer).name)+"'s price list" : "Winkworth list (no price list for this client)"}</span></div>` : ""}
+      ${e.add === "travel" ? `<div class="ac-addbox"><label class="ac-ck">Parking £ <input id="ace_park" inputmode="decimal" size="6" /></label><label class="ac-ck">Congestion £ <input id="ace_cong" inputmode="decimal" size="6" value="${esc(String((acClientInfo(f.customer)||{}).congestion || ""))}" /></label><button class="ac-act ac-go" onclick="acAddTravel()">Add into line 1</button><span class="ac-hint">Goes into the first line's price, never a line of its own.</span></div>` : ""}
+    </div>
+    <div class="ac-totrow"><span>TOTAL</span><b id="ace_total">${ivMoney(acTotal(f))}</b></div>
+    ${inp("ace_note", "note", "NOTE ON THE INVOICE (OPTIONAL)", ` placeholder="e.g. Purchase order 4471" maxlength="200"`)}
+    ${sentish && !e.saved ? `<div class="ac-warn">${e.mode === "import" ? "After saving you choose: send this copy to "+esc(f.customer || "the client")+", or just keep it." : "This invoice has already been sent. After saving you choose: send the corrected copy to "+esc(f.customer || "the client")+", or just keep it for your records."}</div>` : ""}
+    ${e.msg ? `<div class="ro-res${e.ok ? "" : " bad"}">${esc(e.msg)}</div>` : ""}
+    ${e.busy ? `<div class="mt-msg">Working…</div>` : ""}
+    ${e.preview != null && e.preview !== "" ? `<iframe class="ac-frame" id="ace_frame" title="Invoice preview" sandbox="" srcdoc="${esc(e.preview)}"></iframe><div class="ac-hint">Preview of the invoice page. The PDF itself is made when you save.</div>` : ""}
+    <div class="ac-eb">
+      <span>${e.mode === "edit" && x && x.state !== "paid" && x.state !== "void" ? `<button class="btn btn-ghost btn-sm ac-cancel" onclick="acAskOpen('void','${esc(e.id)}')"${dis}>Cancel this invoice</button>` : ""}</span>
+      <span class="ac-eb-r">
+        ${e.saved && e.saved.pdfUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(e.saved.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>` : ""}
+        ${e.saved && e.choose ? `<button class="btn btn-coral btn-sm" onclick="acAskOpen('choose','${esc(e.id)}')">Send or keep…</button>` : ""}
+        ${e.saved && e.saved.state === "ready" && !e.dirty ? `<button class="btn btn-coral btn-sm" onclick="acAskOpen('send','${esc(e.id)}')">Send…</button>` : ""}
+        <button class="btn btn-ghost btn-sm" onclick="acPreview()"${dis}>Preview</button>
+        <button class="btn btn-coral btn-sm" onclick="acSave()"${dis}>${e.saved && !e.dirty ? "Saved" : "Save"}</button>
+      </span>
+    </div>
+  </div></div>`;
+}
 function vrRowsFor(jobNo){ const k = normJobNo(jobNo||""); return ((state.kp && state.kp.reminders) || []).filter(r => k && normJobNo(r.job) === k); }
 function renderVrBox(f){
   const rows = vrRowsFor(f.jobNo); if (!rows.length) return "";
@@ -8651,7 +9243,7 @@ function navHashFor(){
     const unique = no && state.jobs.filter(j => (j.jobNo || "").trim() === no).length === 1;
     return "#job=" + encodeURIComponent(unique ? no : saved.id);
   }
-  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : state.view === "reports" ? "#reports" : state.view === "processing" ? "#processing" : state.view === "growth" ? "#growth" : "";
+  return state.view === "table" ? "#log" : state.view === "calendar" ? "#calendar" : state.view === "board" ? "#board" : state.view === "reports" ? "#reports" : state.view === "processing" ? "#processing" : state.view === "growth" ? "#growth" : state.view === "accounts" ? "#accounts" : "";
 }
 function navSame(a, b){ const n = h => (!h || h === "#" || h === "#today") ? "" : h; return n(a) === n(b); }
 function navParse(hash){
@@ -8664,6 +9256,7 @@ function navParse(hash){
   if (h === "reports") return { view: "reports" };
   if (h === "processing") return { view: "processing" };
   if (h === "growth") return { view: "growth" };
+  if (h === "accounts") return { view: "accounts" };
   if (h === "new") return { view: (st && st.view) || "table", isNew: true };
   if (h.indexOf("job=") === 0) return { view: (st && st.view) || "table", jobKey: h.slice(4) };
   return null;   // not ours: leave the page as it is
