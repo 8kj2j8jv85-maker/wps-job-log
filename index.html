@@ -1040,6 +1040,40 @@
   .ro-ask{ min-width:0; overflow-wrap:anywhere; }
   .ro-ask p{ margin:6px 0; font-size:14px; overflow-wrap:anywhere; }
   @media (max-width:640px){ .ro-line .ro-when{ min-width:0; } .ro-acts .d-mv{ padding:6px 10px; font-size:13px; } }
+  /* Invoices (Lex, 4 Nov): drafted by the script, sent from the dashboard */
+  .iv-top{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:2px 0 6px; }
+  .iv-all{ font-weight:700; }
+  .iv-sws{ display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+  .iv-sw{ display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:18px; padding:5px 11px 5px 6px; font:inherit; font-size:13px; cursor:pointer; }
+  .iv-sw .iv-knob{ width:28px; height:16px; border-radius:9px; background:var(--stone-bg); border:1px solid var(--line); position:relative; flex:none; }
+  .iv-sw .iv-knob::after{ content:""; position:absolute; top:1px; left:1px; width:12px; height:12px; border-radius:50%; background:var(--stone); transition:left .15s; }
+  .iv-sw.on{ border-color:var(--green); }
+  .iv-sw.on .iv-knob{ background:var(--green-bg); border-color:var(--green); }
+  .iv-sw.on .iv-knob::after{ left:13px; background:var(--green); }
+  .iv-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--red); margin:0 6px 1px 2px; vertical-align:middle; }
+  .iv-item{ border-left-color:var(--line); }
+  .iv-b-needs, .iv-b-sending, .iv-b-overdue{ border-left-color:var(--red); }
+  .iv-b-ready{ border-left-color:var(--coral); }
+  .iv-b-sent{ border-left-color:var(--brand); }
+  .iv-lines{ width:100%; border-collapse:collapse; margin:8px 0 4px; font-size:13.5px; }
+  .iv-lines td{ padding:4px 6px; border-top:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere; }
+  .iv-lines .iv-q{ color:var(--ink-soft); white-space:nowrap; text-align:right; font-size:12.5px; }
+  .iv-lines .iv-a{ text-align:right; white-space:nowrap; width:1%; }
+  .iv-lines .iv-tot td{ font-weight:700; border-top:2px solid var(--line); }
+  .iv-go{ border-color:var(--coral-dark); color:var(--coral-dark); font-weight:700; }
+  .iv-chip{ display:inline-block; font-size:11.5px; font-weight:600; padding:1px 7px; border-radius:10px; white-space:nowrap; }
+  .iv-none{ background:var(--coral-bg); color:var(--coral-dark); }
+  .iv-needs, .iv-over{ background:var(--red-bg); color:var(--red); }
+  .iv-ready{ background:var(--amber-bg); color:var(--amber); }
+  .iv-sent{ background:var(--sky); color:var(--brand-text); }
+  .iv-paid{ background:var(--green-bg); color:var(--green); }
+  .iv-sum{ display:grid; gap:6px; margin:8px 0; font-size:13.5px; max-height:42vh; overflow-y:auto; }
+  .iv-sum > div{ border-top:1px solid var(--line); padding-top:5px; overflow-wrap:anywhere; }
+  .iv-form{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 12px; margin-top:8px; }
+  .iv-form .field{ min-width:0; }
+  .iv-pick{ max-width:100%; min-width:0; }
+  .iv-pre{ white-space:pre-wrap; font:inherit; font-size:13px; margin:0; overflow-wrap:anywhere; }
+  @media (max-width:640px){ .iv-sws{ margin-left:0; } .iv-form{ grid-template-columns:minmax(0,1fr); } .iv-all{ width:100%; } }
   .mt-msg.bad{ color:var(--red); }
   .mt-who{ margin:10px 0 6px; font-size:13px; display:grid; gap:2px; word-break:break-word; }
   .ci-edit{ margin:10px 0 4px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
@@ -5410,6 +5444,7 @@ function renderInner(app){
     ${renderMsBox()}
     ${renderCiBox()}
     ${renderRoAsk()}
+    ${renderIvAsk()}
   `;
 }
 
@@ -6102,7 +6137,19 @@ function renderToday(){
     const slotAct = j.type === "MTI" && !j.date && state.slots && state.slots.loaded && !slotFor(j) ? `<button class="d-mv" onclick="slotSend('${j.id}')"${tip("Shows the navy email with the tenant's own slot link (from hello@), then you press Send")}>Send slot link</button>` : "";
     dnAdd(80, "", j.rearrangePending ? "New date to agree" : j.date ? "Time to agree" : (j.type === "MTI" && slotFor(j) ? "Slot link sent, no pick yet" : "No date yet"), j, slotAct); });
   active.filter(needsTenantAgree).forEach(j => dnAdd(76, "", "Suggested "+j.tenantArrival+", waiting for tenants to agree (they asked "+j.tenantAsked+")", j, ciArrivalBtn(j, "dn")));
-  if (toInvoice.length) dnAdd(90, "coral", toInvoice.length+" report"+(toInvoice.length===1?"":"s")+" sent, not invoiced", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
+  // 4 Nov (Invoices): once the InvoiceMake read is in, Do next says what the invoices need (the red dot on the Invoices card too)
+  if (state.iv){ const ivs = ivList(), ivGo = `<button class="d-mv" onclick="ivScroll()">Invoices</button>`;
+    const nN = ivs.filter(x => x.state === "needs").length, nR = ivs.filter(x => x.state === "ready").length, nO = ivs.filter(x => x.state === "overdue").length, nC = ivs.filter(x => x.chase).length, nS = ivs.filter(x => x.state === "sending").length, nU = (state.iv.unmatched||[]).length;
+    if (nS) dnAdd(12, "late", nS+" invoice send"+(nS===1?"":"s")+" didn't finish: check Sent mail", null, ivGo);
+    if (nN) dnAdd(40, "late", nN+" invoice"+(nN===1?"":"s")+" need"+(nN===1?"s":"")+" something from you", null, ivGo);
+    if (nR) dnAdd(45, "warn", nR+" invoice"+(nR===1?"":"s")+" ready to send", null, `<button class="d-mv" onclick="ivAskOpen('all','')">Send all (${nR})</button>`);
+    if (nO) dnAdd(50, "late", nO+" invoice"+(nO===1?"":"s")+" overdue", null, ivGo);
+    if (nC) dnAdd(55, "", nC+" polite reminder"+(nC===1?"":"s")+" / chaser"+(nC===1?"":"s")+" due", null, ivGo);
+    if (nU) dnAdd(60, "", nU+" payment"+(nU===1?"":"s")+" in the bank to match", null, ivGo);
+    const noInv = toInvoice.filter(j => ivJobState(j).st === "none");
+    if (noInv.length) dnAdd(90, "coral", noInv.length+" report"+(noInv.length===1?"":"s")+" sent, no invoice yet", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
+  }
+  else if (toInvoice.length) dnAdd(90, "coral", toInvoice.length+" report"+(toInvoice.length===1?"":"s")+" sent, not invoiced", null, `<button class="d-mv" onclick="setDashPanel('inv')">See list</button>`);
   const unpaidOldest = moneyByClient(unpaid, j => j.invoicedAt).reduce((m,r) => Math.max(m, r.oldest), 0);
   if (unpaid.length) dnAdd(95, unpaidOldest > 30 ? "late" : "", unpaid.length+" invoice"+(unpaid.length===1?"":"s")+" awaiting payment"+(unpaidOldest ? ", oldest "+unpaidOldest+"d" : ""), null, `<button class="d-mv" onclick="setDashPanel('paid')">See who owes</button>`);
   dn.sort((a,b) => a.rank - b.rank || a.i - b.i);
@@ -6155,8 +6202,8 @@ function renderToday(){
       body += note("Add the date and time once the tenant or agent confirms."); break; }
     case "mid": title = "Mid-terms to book"; body = renderMidPanel(mids); break;
     case "photos": title = "Photos not done"; body = rows(photosMissing, j => cRow(j), "Every visited job has its photo link.") + note("Visited in the last 30 days, report not sent, no photo link saved. Run the Photo Tool for these."); break;
-    case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j), "Nothing to invoice.") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
-    case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: (j.invoiceNo ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
+    case "inv": title = "To invoice"; body = moneySummary(toInvoice, j => j.sentAt, "report", "sent") + rows(toInvoice, j => cRow(j, {extra: ivChip(j)}), "Nothing to invoice.") + (state.iv ? `<button class="t-link d-more" onclick="setDashPanel(null);ivScroll()">Invoices card</button> ` : "") + `<button class="t-link d-more" onclick="goFilter('toinvoice')">Open in Job Log</button>`; break;
+    case "paid": title = "Awaiting payment"; body = moneySummary(unpaid, j => j.invoicedAt, "invoice", "invoiced") + rows(unpaid, j => cRow(j, {extra: ivChip(j) + (j.invoiceNo && !ivOfJob(j) ? `<span class="c-dim" style="white-space:nowrap">${esc(j.invoiceNo)}${j.invoiceAmount ? " · "+esc(j.invoiceAmount) : ""}</span>` : "") + `<span class="d-acts"><button class="d-mv" onclick="markPaid('${j.id}')"${tip("Marks this invoice Paid with today's date. Undo shows for a few seconds.")}>Paid</button></span>`}), "Nothing awaiting payment.") + `<button class="t-link d-more" onclick="goFilter('unpaid')">Open in Job Log</button>`; break;
     case "health": title = "System health"; body = renderHealthPanel(); break;
     case "prices": title = "Price list"; body = renderPricePanel(); break;
     case "turn": title = "Performance";
@@ -6190,6 +6237,7 @@ function renderToday(){
       </div>
     </div>
     ${renderReportsOut()}
+    ${renderInvoicing()}
     <div class="t-card d-card d-week">
       <h3>${state.weekMode === "map" ? "Map" : "Next 7 days"} <span class="count"><span class="view-toggle wm-toggle"><button class="${state.weekMode!=='map'?'active':''}" onclick="setWeekMode('days')"${tip("Day by day")}>Days</button><button class="${state.weekMode==='map'?'active':''}" onclick="setWeekMode('map')"${tip("Upcoming jobs on a map, to see which visits are near each other")}>Map</button></span>${state.weekMode === "map" ? "" : coming.length+" job"+(coming.length===1?"":"s")}${timesToAgree.some(j => !j.date) ? ` · <button class="t-link wk-nodate" onclick="setDashPanel('times')"${tip("Booked jobs with no date yet. Click to see them.")}>${timesToAgree.filter(j => !j.date).length} with no date</button>` : ""}</span></h3>
       ${state.weekMode === "map" ? renderWeekMapBox() : `<div class="wk-strip">${week}</div>${freeLine}`}
@@ -6376,7 +6424,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "4 Nov 2026 (#131 Reports out)";
+const BUILD = "4 Nov 2026 (Invoices)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -7627,6 +7675,7 @@ function renderForm(){
         <select id="f_invoice">
           ${INVOICE_STATES.map(s=>`<option value="${s.code}" ${(f.invoice||"")===s.code?"selected":""}>${s.label}</option>`).join("")}
         </select>
+        ${!isNew && state.iv && (REPORT_OUT.includes(f.status) || f.invoice) ? (() => { const st = ivJobState(f), x = ivOfJob(f); return `<span class="field-hint">${ivChip(f)}${st.due ? " due "+esc(ivDay(st.due)) : ""}${st.why ? " · "+esc(st.why) : ""}${x && x.pdfUrl ? ` · <a class="t-link" href="${esc(x.pdfUrl)}" target="_blank" rel="noopener">Invoice PDF</a>` : ""}</span>`; })() : ""}
       </label>
       <label class="field">Invoice number
         <input type="text" id="f_invoiceNo" value="${esc(f.invoiceNo||"")}" placeholder="From Tide (optional)" />
@@ -7780,7 +7829,7 @@ function renderTable(){
             <td class="jt-time">${esc(j.time)||"—"}</td>
             <td class="jt-status">${stageSelect(j)}${di ? `<span class="due ${di.cls}">${di.text}</span>` : ""}</td>
             <td class="jt-inv">${(()=>{ const im = invoiceMeta(j.invoice), need = needsInvoice(j);
-                return `${invoiceSelect(j)}${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}`; })()}</td>
+                return `${invoiceSelect(j)}${j.invoiceNo?`<span class="due">${esc(j.invoiceNo)}</span>`:""}${state.iv && ivOfJob(j) && !j.invoice ? " "+ivChip(j) : ""}`; })()}</td>
             <td class="jt-act">
               <div class="row-actions">
                 <button class="icon-btn" title="Open and edit this job" onclick="openEdit('${j.id}')" data-jid="${j.id}">
@@ -7924,6 +7973,7 @@ async function dashCycle(opt){
     loadAmendments(true);
     loadKp();
     loadRo();
+    loadIv();
     loadDecisionCount();
     if (!light) autoDeem();
     state.lastCycleOk = new Date();
@@ -8087,6 +8137,280 @@ function roEdit(id){
     box.scrollIntoView({ behavior:"smooth", block:"center" });
     if (el.focus && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) el.focus({ preventScroll:true });
   }, 120);
+}
+// ---- Invoices (Lex, 4 Nov 2026, 21:17-21:26): made and sent by the dashboard, not Tide (Tide stays the bank).
+// The script (file InvoiceMake, timer every 15 min) drafts each invoice by itself once the report has gone out: priced,
+// numbered, PDF filed in Drive > WPS Invoices. This card shows them: Needs info (held, nothing guessed), Ready (one tap
+// Send all, or per invoice), Awaiting payment, chasers due, bank credits it couldn't match and the accountant pack.
+// Ops: invRead, invPreview (read); invEdit, invMake, invSend, invHold, invVoid, invRemind, invPaid, invDismiss,
+// invSettings, invScan, invPack (write, device key). Every send asks first in the page and says what went.
+const IV_STATE = {
+  none:{ label:"Not invoiced", cls:"iv-none" }, needs:{ label:"Needs info", cls:"iv-needs" }, ready:{ label:"Ready", cls:"iv-ready" },
+  sending:{ label:"Check Sent mail", cls:"iv-needs" }, sent:{ label:"Sent", cls:"iv-sent" }, overdue:{ label:"Overdue", cls:"iv-over" }, paid:{ label:"Paid", cls:"iv-paid" }
+};
+async function loadIv(){
+  if (!keyMode() || state.ivBusy) return;
+  state.ivBusy = true;
+  try {
+    const d = await dashCall("invRead");
+    if (d && d.ok){ state.iv = Object.assign({ at: new Date() }, d); state.ivErr = ""; }
+    else state.ivErr = (d && d.error === "Unknown request.") ? "The script hasn't got the Invoices part yet (paste InvoiceMake and deploy)." : ((d && d.error) || "No answer");
+  } catch(e){ state.ivErr = String(e && e.message || e); }
+  finally { state.ivBusy = false; }
+  if (!state.ivAsk || !state.ivAsk.busy) safeRender();
+}
+function ivScroll(){ const el = document.getElementById("invoicing"); if (el) el.scrollIntoView({ behavior:"smooth", block:"start" }); }
+function ivList(){ return (state.iv && state.iv.invoices) || []; }
+function ivOfJob(j){ if (!j) return null; return ivList().find(x => x.jobId === j.id) || null; }
+function ivByNo(no){ return ivList().find(x => x.no === no) || null; }
+function ivMoney(n){ return n == null || isNaN(n) ? "–" : "£"+Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+function ivDay(ds){ if (!ds) return ""; const d = new Date(ds+"T12:00:00"); return isNaN(d) ? ds : d.toLocaleDateString("en-GB",{ weekday:"short", day:"numeric", month:"short" }); }
+// One state per job, everywhere (job form, To invoice, Awaiting payment): Not invoiced / Needs info / Ready / Sent / Overdue / Paid.
+function ivJobState(j){
+  const x = ivOfJob(j), today = isoToday(0);
+  if (j.invoice === "paid") return { st:"paid", no: j.invoiceNo || (x && x.no) || "" };
+  if (x && (x.state === "sent" || x.state === "overdue" || x.state === "sending")) return { st:x.state, no:x.no, due:x.due };
+  if (j.invoice === "invoiced"){ const due = j.invoiceDue || ""; return { st: due && today > due ? "overdue" : "sent", no: j.invoiceNo || "", due }; }
+  if (x && (x.state === "ready" || x.state === "needs")) return { st:x.state, no:x.no, why:(x.problems||[])[0] || "" };
+  return { st:"none", no:"" };
+}
+function ivChip(j){
+  if (!j || (!REPORT_OUT.includes(j.status) && !j.invoice)) return "";
+  const s = ivJobState(j), m = IV_STATE[s.st] || IV_STATE.none;
+  return `<span class="iv-chip ${m.cls}"${s.why ? tip(s.why) : ""}>${esc(m.label)}${s.no && s.st !== "needs" ? " "+esc(s.no) : ""}</span>`;
+}
+function ivLineText(x){
+  const bits = [];
+  bits.push((x.beds === "0" ? "Studio" : x.beds ? x.beds+" bed" : "beds not set") + (x.bedsFrom === "report cover" ? " (report cover)" : ""));
+  bits.push(x.extras ? x.extras+" extra area"+(x.extras===1?"":"s")+(x.extraNames && x.extraNames.length ? ": "+x.extraNames.join(", ") : "")+(x.extrasFrom === "report cover" ? " (report cover)" : "") : "no extra areas");
+  if (x.parking) bits.push("parking "+ivMoney(x.parking));
+  if (x.congestion) bits.push("congestion "+ivMoney(x.congestion));
+  return bits.join(" · ");
+}
+function ivBuildUp(x){
+  if (!x.lines || !x.lines.length) return "";
+  return `<table class="iv-lines"><tbody>${x.lines.map(l => `<tr><td>${esc(l.desc)}</td><td class="iv-q">${l.qty > 1 ? l.qty+" × "+ivMoney(l.unit) : ""}</td><td class="iv-a">${ivMoney(l.amount)}</td></tr>`).join("")}
+    <tr class="iv-tot"><td>Total${x.override != null ? " (set by you)" : ""}</td><td></td><td class="iv-a">${ivMoney(x.total)}</td></tr></tbody></table>`;
+}
+function ivAutoLine(x){
+  const s = state.iv && state.iv.settings;
+  if (x.hold) return "Held: it won't go by itself. Send it, or tap Release.";
+  if (!s || !s.autoSend) return "What to do: check it, then Send (or Send all ready).";
+  if (x.coverOnly) return "Beds or extra areas came from the report cover: check them (Edit) or tap Send. It won't go by itself.";
+  return "Goes by itself at 9:00 on "+esc(ivDay(x.autoDate))+" unless you tap Hold.";
+}
+function renderIvItem(x){
+  const res = (state.ivRes || {})[x.no || x.jobId];
+  const j = state.jobs.find(k => k.id === x.jobId);
+  const head = `<div class="ro-top"><span class="ro-name">${x.no ? esc(x.no)+" · " : ""}${esc(x.customer || "No agent")}</span><span class="c-dim">${esc(x.jobLine || x.jobNo)}</span></div>`;
+  let body = "", acts = "";
+  if (x.state === "needs"){
+    body = `<div class="ro-why"><span class="ro-src">Needs info</span>${esc((x.problems||[]).join(" · "))}</div>
+      <div class="ro-fix">What to do: ${x.tideNo ? "it's already in Tide: tap Already in Tide." : "tap Edit and fill in what's missing. Nothing is numbered or sent until it's complete."}</div>
+      <div class="ro-word">${esc(ivLineText(x))}${x.email ? " · to "+esc(x.email) : ""}</div>`;
+    acts = `<button class="d-mv" onclick="ivEditOpen('${esc(x.jobId)}')"${tip("Beds, extra areas, parking, congestion, total or the invoice email")}>Edit</button>`
+      + `<button class="d-mv" onclick="ivAskOpen('tide','${esc(x.jobId)}')"${tip("Lex sent this one from Tide already: saves the Tide number on the job and drops this draft")}>Already in Tide</button>`
+      + `<button class="d-mv ro-danger" onclick="ivAskOpen('void','${esc(x.jobId)}')"${tip("No invoice for this job (for example a free re-visit). The job stops asking.")}>No invoice</button>`;
+  } else if (x.state === "ready"){
+    body = ivBuildUp(x) + `<div class="ro-word">${esc(ivLineText(x))} · ${esc(x.priceFrom || "")} · to <b>${esc(x.email)}</b>${x.emailFrom && x.emailFrom !== "Winkworth rule" ? " ("+esc(x.emailFrom)+")" : ""} · due ${esc(ivDay(x.due))}</div>
+      ${(x.notes||[]).length ? `<div class="ro-word">${esc(x.notes.join(" · "))}</div>` : ""}
+      <div class="ro-fix">${ivAutoLine(x)}</div>`;
+    acts = `<button class="d-mv" onclick="ivPreviewOpen('${esc(x.no)}','')"${tip("The email exactly as it will go, and the PDF")}>Preview</button>`
+      + `<button class="d-mv" onclick="ivEditOpen('${esc(x.jobId)}')">Edit</button>`
+      + `<button class="d-mv" onclick="ivHold('${esc(x.no)}',${x.hold ? "false" : "true"})"${tip(x.hold ? "Let it go by itself again (when Auto-send is on)" : "Stops it going by itself. You can still send it")}>${x.hold ? "Release" : "Hold"}</button>`
+      + `<button class="d-mv iv-go" onclick="ivAskOpen('send','${esc(x.no)}')">Send</button>`;
+  } else if (x.state === "sending"){
+    body = `<div class="ro-why"><span class="ro-src">Check</span>A send didn't finish. It may have gone.</div><div class="ro-fix">What to do: look in finance@ Sent mail for ${esc(x.no)}. If it isn't there, tap Send again.</div>`;
+    acts = `<button class="d-mv" onclick="ivAskOpen('again','${esc(x.no)}')">Send again</button>`;
+  } else {
+    const ch = x.chase;
+    body = `<div class="ro-word">${ivMoney(x.total)} · sent ${esc(ivDay((x.sentAt||"").slice(0,10)))} to ${esc(x.email)} · due ${esc(ivDay(x.due))}${x.reminderAt ? " · reminder sent" : ""}${x.chaserAt ? " · chaser sent" : ""}</div>
+      ${ch ? `<div class="ro-fix">What to do: ${ch === "reminder" ? "a polite reminder is due (3 days before)." : "a polite chaser is due (7 days late)."} Preview, then Send${state.iv.settings.autoChase ? ", or leave it: Auto-chase sends it at 9:00" : ""}.</div>` : `<div class="ro-fix">What to do: nothing until it's paid. Remittances and bank statements mark it Paid by themselves.</div>`}`;
+    acts = (x.pdfUrl ? `<a class="d-mv" href="${esc(x.pdfUrl)}" target="_blank" rel="noopener">PDF</a>` : "")
+      + (ch ? `<button class="d-mv" onclick="ivPreviewOpen('${esc(x.no)}','${ch}')">Preview ${ch}</button><button class="d-mv iv-go" onclick="ivAskOpen('${ch}','${esc(x.no)}')">Send ${ch}</button>` : "")
+      + `<button class="d-mv" onclick="ivAskOpen('paid','${esc(x.no)}')"${tip("Mark it paid by hand (no email goes to anyone)")}>Paid</button>`;
+  }
+  return `<div class="ro-item iv-item iv-b-${esc(x.state)}">${head}${body}<div class="ro-acts">${acts}${j ? `<button class="d-mv" onclick="openEdit('${j.id}')">Job</button>` : ""}</div>${res ? `<div class="ro-res${res.ok ? "" : " bad"}">${esc(res.text)}</div>` : ""}</div>`;
+}
+function ivDotCount(){
+  const v = state.iv; if (!v) return 0;
+  return ivList().filter(x => ["needs","ready","sending","overdue"].includes(x.state) || x.chase).length + (v.unmatched||[]).length + (v.noInvoice||[]).length;
+}
+function ivSwitch(key, label, help){
+  const on = !!(state.iv && state.iv.settings && state.iv.settings[key]);
+  return `<button class="iv-sw${on ? " on" : ""}" role="switch" aria-checked="${on}" onclick="ivAskOpen('${key}','${on ? "off" : "on"}')"${tip(help)}><span class="iv-knob"></span>${esc(label)}: <b>${on ? "ON" : "OFF"}</b></button>`;
+}
+function renderInvoicing(){
+  const v = state.iv;
+  const head = `<h3>Invoices ${ivDotCount() ? `<span class="iv-dot" title="Something to do"></span>` : ""}<span class="count">${v ? "updated "+esc(roShortWhen(v.at.toISOString())) : ""} <button class="d-mv" onclick="loadIv()"${state.ivBusy ? " disabled" : ""}${tip("Read the invoices again now (the script also checks every 15 minutes)")}>${state.ivBusy ? "Loading…" : "Refresh"}</button></span></h3>`;
+  if (!v) return `<div class="t-card d-card ro-card" id="invoicing">${head}<div class="t-empty">${state.ivErr ? esc(state.ivErr) : keyMode() ? "Loading…" : "Needs the device key (More > Device key)."}</div></div>`;
+  const all = ivList(), by = s => all.filter(x => x.state === s);
+  const needs = by("needs"), ready = by("ready"), sending = by("sending"), open = all.filter(x => x.state === "sent" || x.state === "overdue").sort((a,b) => (a.due||"").localeCompare(b.due||""));
+  const chase = open.filter(x => x.chase), over = open.filter(x => x.state === "overdue");
+  const sendable = ready.length;
+  const warn = [];
+  if (!v.companyNoSet) warn.push("Company number isn't set yet (Script Property INV_COMPANY_NO). Invoices wait as Needs info until it is.");
+  if (!v.aliasOk) warn.push("Gmail can't send as "+v.from+" yet (Gmail settings > Accounts > Send mail as). Nothing can be sent until it can.");
+  if (!v.timerOn) warn.push("The invoices timer is off (run ivStart in the script editor). Nothing drafts by itself.");
+  const um = v.unmatched || [];
+  const openOpts = open.map(x => `<option value="${esc(x.no)}">${esc(x.no)} · ${esc(x.customer)} · ${ivMoney(x.total)}</option>`).join("");
+  return `<div class="t-card d-card ro-card iv-card" id="invoicing">${head}
+    ${state.ivErr ? `<div class="ro-res bad">Last refresh failed: ${esc(state.ivErr)}</div>` : ""}
+    ${warn.map(w => `<div class="ro-res bad">${esc(w)}</div>`).join("")}
+    <div class="iv-top">
+      ${sendable ? `<button class="btn btn-coral iv-all" onclick="ivAskOpen('all','')"${v.aliasOk ? "" : " disabled"}>Send all ready (${sendable})</button>` : `<span class="c-dim">Nothing ready to send.</span>`}
+      <span class="iv-sws">${ivSwitch("autoSend", "Auto-send invoices", "When ON, a ready invoice sends itself at 9:00 the next working day unless you tap Hold. A push at 8:30 lists them.")}${ivSwitch("autoChase", "Auto-chase", "When ON, the polite reminder (3 days before due) and chaser (7 days late) send themselves at 9:00.")}</span>
+    </div>
+    ${(v.noInvoice||[]).length ? `<div class="ro-res bad">Report sent over a day ago, no invoice yet: ${esc(v.noInvoice.join(", "))}. The next check (within 15 minutes) drafts it, or tap Check now.</div>` : ""}
+    <div class="ro-sect${needs.length ? " ro-bad" : ""}">Needs info (${needs.length})</div>
+    ${needs.length ? needs.map(renderIvItem).join("") : `<div class="t-empty">Nothing waiting on you.</div>`}
+    <div class="ro-sect">Ready to send (${ready.length})</div>
+    ${ready.length ? ready.map(renderIvItem).join("") : `<div class="t-empty">No invoices waiting to go.</div>`}
+    ${sending.length ? `<div class="ro-sect ro-bad">Check Sent mail (${sending.length})</div>` + sending.map(renderIvItem).join("") : ""}
+    ${chase.length ? `<div class="ro-sect${over.length ? " ro-bad" : ""}">Reminders and chasers due (${chase.length})</div>` + chase.map(renderIvItem).join("") : ""}
+    ${um.length ? `<div class="ro-sect ro-bad">Money in to look at (${um.length})</div>` + um.map(c => `<div class="ro-item iv-item"><div class="ro-top"><span class="ro-name">${ivMoney(c.amount)} on ${esc(ivDay(c.date))}</span><span class="c-dim">${esc(c.text)}</span></div>
+        <div class="ro-why">${esc(c.why || "")}</div><div class="ro-fix">What to do: pick the invoice it pays and tap Paid, or Not an invoice.</div>
+        <div class="ro-acts"><select class="sel-box iv-pick" id="ivp_${esc(c.key.replace(/[^A-Za-z0-9]/g,"_"))}" aria-label="Invoice this pays"><option value="">Pick the invoice…</option>${openOpts}</select>
+        <button class="d-mv" onclick="ivCreditPaid('${esc(c.key)}')">Paid</button><button class="d-mv" onclick="ivDismiss('${esc(c.key)}')">Not an invoice</button></div></div>`).join("") : ""}
+    <div class="ro-sect">Awaiting payment (${open.length}${over.length ? ", "+over.length+" overdue" : ""})</div>
+    ${open.filter(x => !x.chase).length ? `<div>${open.filter(x => !x.chase).map(x => `<div class="ro-line"><span class="ro-when">${esc(x.no)}</span><span class="ro-what">${esc(x.customer)} · ${ivMoney(x.total)} <span class="c-dim">${esc(x.jobNo)} · due ${esc(ivDay(x.due))}</span></span><span class="iv-chip ${IV_STATE[x.state].cls}">${esc(IV_STATE[x.state].label)}</span><button class="d-mv" onclick="ivAskOpen('paid','${esc(x.no)}')">Paid</button></div>`).join("")}</div>` : (open.length ? "" : `<div class="t-empty">Nothing sent from here is waiting for payment.</div>`)}
+    <div class="ro-sect">Accountant pack</div>
+    <div class="ro-fix">On the 1st the script saves last month's sales list and a Xero import file with that month's PDFs.</div>
+    <div>${(v.packs||[]).map(p => `<div class="ro-line"><span class="ro-when">${esc(p.month)}</span><span class="ro-what">${p.count} invoice${p.count===1?"":"s"} · ${ivMoney(p.total)}</span><a class="d-mv" href="${esc(p.folder)}" target="_blank" rel="noopener">Folder</a><a class="d-mv" href="${esc(p.sales)}" target="_blank" rel="noopener">Sales CSV</a><a class="d-mv" href="${esc(p.xero)}" target="_blank" rel="noopener">Xero CSV</a></div>`).join("")}</div>
+    <div class="ro-acts"><button class="d-mv" onclick="ivAskOpen('pack','${esc(isoToday(0).slice(0,7))}')"${tip("Make this month's pack now (it's made again on the 1st)")}>Make now</button><button class="d-mv" onclick="ivScan()"${tip("Draft new invoices and read remittances and bank statements now")}>Check now</button></div>
+    <div class="ro-fix" style="margin-top:10px">Next number ${esc(v.nextNo || "")}. Sent from ${esc(v.from || "finance@")} with a copy to finance@. Drop the Tide statement CSV in Drive > WPS Bank statements and it's read by itself. No receipts go to anyone. Invoices already in Tide (INV-0006 to 0031) stay on their Tide cards.</div>
+  </div>`;
+}
+// ---- confirm box (in the page)
+function ivAskOpen(act, ref){ state.ivAsk = { act, ref, busy:false, done:false, msg:"", ok:false }; render(); setTimeout(() => { const b = document.getElementById("iv_box"); if (b) b.focus(); }, 0); }
+function ivAskClose(){ if (state.ivAsk && state.ivAsk.busy) return; state.ivAsk = null; render(); }
+function ivAskText(s){
+  const x = ivByNo(s.ref) || ivList().find(k => k.jobId === s.ref);
+  const ready = ivList().filter(k => k.state === "ready");
+  switch (s.act){
+    case "all": return { title:"Send all ready ("+ready.length+")", go:"Send "+ready.length, body:`<p>Send these ${ready.length} invoice${ready.length===1?"":"s"} now, each in your wording with its PDF, from finance@ (copy to finance@)?</p><div class="iv-sum">${ready.map(k => `<div><b>${esc(k.no)}</b> ${esc(k.customer)} · ${ivMoney(k.total)} · to ${esc(k.email)}<div class="c-dim">${esc(k.jobLine)}</div></div>`).join("")}</div><p class="c-dim">Use Preview on any one first if you want to see it.</p>` };
+    case "send": case "again": return x ? { title:(s.act === "again" ? "Send again " : "Send ")+x.no, go:"Send", body:`<p>Send <b>${esc(x.no)}</b> for <b>${ivMoney(x.total)}</b> to <b>${esc(x.email)}</b> now?</p><p class="c-dim">${esc(x.jobLine)}</p>${s.act === "again" ? "<p>Only if it isn't in finance@ Sent mail.</p>" : ""}` } : null;
+    case "reminder": case "chaser": return x ? { title:"Send "+s.act+" for "+x.no, go:"Send "+s.act, body:`<p>Send the polite ${s.act} for <b>${esc(x.no)}</b> (${ivMoney(x.total)}, due ${esc(ivDay(x.due))}) to <b>${esc(x.email)}</b>, with the PDF?</p>` } : null;
+    case "paid": return x ? { title:"Mark "+x.no+" paid", go:"Mark paid", body:`<p>Mark <b>${esc(x.no)}</b> (${esc(x.customer)}, ${ivMoney(x.total)}) paid today? Nothing is emailed.</p>` } : null;
+    case "tide": return x ? { title:"Already in Tide", go:"Save", body:`<p>${esc(x.jobNo)} was invoiced in Tide. Which number?</p><label class="field">Tide invoice no <input id="iv_tide" value="${esc(x.tideNo || "INV-00")}" /></label><p class="c-dim">Saves it on the job (Invoiced) and drops this draft. Its Tide card works as before.</p>` } : null;
+    case "void": return x ? { title:"No invoice for "+x.jobNo, go:"No invoice", body:`<p>Drop this draft${x.no ? " ("+esc(x.no)+", the number isn't used again)" : ""} and stop asking about ${esc(x.jobNo)}?</p>` } : null;
+    case "autoSend": case "autoChase": { const on = s.ref === "on"; const what = s.act === "autoSend" ? "Auto-send invoices" : "Auto-chase";
+      return { title: what+(on ? " ON" : " OFF"), go: on ? "Turn on" : "Turn off", body: on ? (s.act === "autoSend" ? "<p>Ready invoices will send themselves at 9:00 the next working day unless you tap Hold. You get a push at 8:30 listing them. Invoices with beds from the report cover still wait for you.</p>" : "<p>Reminders (3 days before due) and chasers (7 days late) will send themselves at 9:00 on working days, in your wording.</p>") : "<p>Nothing will send by itself. You tap Send.</p>" }; }
+    case "pack": return { title:"Accountant pack "+s.ref, go:"Make it", body:`<p>Save the sales list and Xero import CSVs for ${esc(s.ref)} into Drive > WPS Invoices > ${esc(s.ref)} now? Any older copy there goes to the Bin.</p>` };
+  }
+  return null;
+}
+function renderIvAsk(){
+  const s = state.ivAsk; if (!s) return "";
+  if (s.act === "edit") return renderIvEdit();
+  if (s.act === "preview") return renderIvPreview();
+  const t = ivAskText(s); if (!t){ state.ivAsk = null; return ""; }
+  const dis = s.busy ? " disabled" : "";
+  return `<div class="mt-back" onclick="if(event.target===this)ivAskClose()"><div class="mt-box ro-ask" id="iv_box" tabindex="-1" role="dialog" aria-label="${esc(t.title)}">
+    <div class="mt-h"><div><b>${esc(t.title)}</b></div><button class="undo-x" onclick="ivAskClose()" aria-label="Close"${dis}>✕</button></div>
+    ${s.done ? `<div class="ro-res${s.ok ? "" : " bad"}">${esc(s.msg)}</div>` : t.body}
+    ${s.busy ? `<div class="mt-msg">Working…</div>` : ""}
+    <div class="rr-b mt-b">${s.done ? `<button class="btn btn-ghost btn-sm" onclick="ivAskClose()">Close</button>` : `<button class="btn btn-coral btn-sm" id="iv_go" onclick="ivGo()"${dis}>${esc(t.go)}</button><button class="btn btn-ghost btn-sm" onclick="ivAskClose()"${dis}>Cancel</button>`}</div>
+  </div></div>`;
+}
+async function ivCall(op, body){
+  let d = null;
+  try { d = await dashCall(op, body); } catch(e){ d = { ok:false, error:String(e && e.message || e) }; }
+  if (d && d.error === "Unknown request.") d.error = "The script hasn't got the Invoices part yet (paste InvoiceMake and deploy).";
+  return d || { ok:false, error:"No answer" };
+}
+async function ivGo(){
+  const s = state.ivAsk; if (!s || s.busy || s.done) return;
+  const x = ivByNo(s.ref) || ivList().find(k => k.jobId === s.ref);
+  s.busy = true; render();
+  let d, msg;
+  if (s.act === "all" || s.act === "send" || s.act === "again"){
+    const nos = s.act === "all" ? ivList().filter(k => k.state === "ready").map(k => k.no) : [x.no];
+    d = await ivCall("invSend", { nos, confirm:true, again: s.act === "again" });
+    const rs = (d && d.results) || [];
+    msg = rs.length ? rs.map(r => r.ok ? r.text : r.error).join("\n") : ("Not sent: "+(d.error || "no answer"));
+    state.ivRes = state.ivRes || {}; rs.forEach(r => { state.ivRes[r.no] = { ok:r.ok, text:r.ok ? r.text : r.error }; });
+  } else if (s.act === "reminder" || s.act === "chaser"){
+    d = await ivCall("invRemind", { no:x.no, kind:s.act, confirm:true }); msg = d.ok ? (d.text || "Sent") : "Not sent: "+d.error;
+  } else if (s.act === "paid"){
+    d = await ivCall("invPaid", { no:x.no }); msg = d.ok ? x.no+" marked paid. No email sent." : "Not changed: "+d.error;
+  } else if (s.act === "tide"){
+    const v = (document.getElementById("iv_tide") || {}).value || "";
+    d = await ivCall("invVoid", { jobId:x.jobId, no:x.no, tideNo:v.trim() }); msg = d.ok ? x.jobNo+" saved as "+v.trim()+" (Tide). Draft dropped." : "Not changed: "+d.error;
+  } else if (s.act === "void"){
+    d = await ivCall("invVoid", { jobId:x.jobId, no:x.no, why:"No invoice for this job" }); msg = d.ok ? "Draft dropped. "+x.jobNo+" won't ask again." : "Not changed: "+d.error;
+  } else if (s.act === "autoSend" || s.act === "autoChase"){
+    const b = {}; b[s.act] = s.ref === "on"; d = await ivCall("invSettings", b); msg = d.ok ? (s.act === "autoSend" ? "Auto-send invoices" : "Auto-chase")+" is now "+(s.ref === "on" ? "ON" : "OFF")+"." : "Not changed: "+d.error;
+  } else if (s.act === "pack"){
+    d = await ivCall("invPack", { month:s.ref }); msg = d.ok ? "Saved: "+d.count+" invoice"+(d.count===1?"":"s")+", "+ivMoney(d.total)+". Links are in the Accountant pack list." : "Not made: "+d.error;
+  }
+  s.busy = false; s.done = true; s.ok = !!(d && d.ok); s.msg = msg;
+  render();
+  setTimeout(loadIv, 800);
+}
+async function ivHold(no, hold){ const d = await ivCall("invHold", { no, hold }); state.ivRes = state.ivRes || {}; state.ivRes[no] = { ok:d.ok, text:d.ok ? (hold ? no+" held: it won't go by itself." : no+" released.") : d.error }; loadIv(); }
+async function ivScan(){ state.ivBusy = false; const d = await ivCall("invScan", {}); state.ivErr = d.ok ? "" : d.error; loadIv(); }
+async function ivDismiss(key){ const d = await ivCall("invDismiss", { creditKey:key }); if (!d.ok) state.ivErr = d.error; loadIv(); }
+async function ivCreditPaid(key){
+  const el = document.getElementById("ivp_"+key.replace(/[^A-Za-z0-9]/g,"_")), no = el && el.value;
+  if (!no){ if (el) el.focus(); return; }
+  const c = ((state.iv && state.iv.unmatched) || []).find(k => k.key === key) || {};
+  const d = await ivCall("invPaid", { no, date:c.date, ref:(c.text||"").slice(0,60), creditKey:key });
+  if (!d.ok) state.ivErr = d.error; loadIv();
+}
+// ---- edit (beds, extras, parking, congestion, total, email)
+function ivEditOpen(jobId){ const x = ivList().find(k => k.jobId === jobId); if (!x) return; state.ivAsk = { act:"edit", ref:jobId, busy:false, done:false, msg:"" }; render(); }
+function renderIvEdit(){
+  const s = state.ivAsk, x = ivList().find(k => k.jobId === s.ref); if (!x){ state.ivAsk = null; return ""; }
+  const e = x.edits || {}, dis = s.busy ? " disabled" : "";
+  const bedOpts = [["","From the job"+(x.bedsFrom !== "edited" && x.beds ? " ("+(x.beds === "0" ? "studio" : x.beds+" bed")+")" : "")],["0","Studio"],["1","1 bed"],["2","2 bed"],["3","3 bed"],["4","4 bed"],["5","5 bed"],["6","6 bed"]];
+  return `<div class="mt-back" onclick="if(event.target===this)ivAskClose()"><div class="mt-box ro-ask" id="iv_box" tabindex="-1" role="dialog" aria-label="Edit invoice">
+    <div class="mt-h"><div><b>Edit ${esc(x.no || "invoice")}</b> <span class="c-dim">${esc(x.jobLine)}</span></div><button class="undo-x" onclick="ivAskClose()" aria-label="Close"${dis}>✕</button></div>
+    ${ivBuildUp(x)}
+    <div class="mt-f iv-form">
+      <label class="field">Bedrooms <select id="ive_beds">${bedOpts.map(o => `<option value="${o[0]}"${String(e.beds||"")===o[0] ? " selected" : ""}>${esc(o[1])}</option>`).join("")}</select></label>
+      <label class="field">Extra areas, named <input id="ive_names" value="${esc((e.extraNames||[]).join(", "))}" placeholder="e.g. Balcony, En-suite" /><span class="field-hint">Each name is one extra area at ${ivMoney(x.extraUnit)}. Leave blank to use the count.</span></label>
+      <label class="field">Extra areas, count <input id="ive_extras" inputmode="numeric" value="${esc(e.extras != null ? e.extras : "")}" placeholder="${esc(String(x.extras))}" /></label>
+      <label class="field">Parking £ <input id="ive_parking" inputmode="decimal" value="${esc(e.parking != null ? e.parking : "")}" placeholder="${esc(x.parking ? String(x.parking) : "0")}" /><span class="field-hint">Added into the main line, never its own line.</span></label>
+      <label class="field">Congestion £ <input id="ive_cong" inputmode="decimal" value="${esc(e.congestion != null ? e.congestion : "")}" placeholder="${esc(x.congestion ? String(x.congestion) : "0")}" /></label>
+      <label class="field">Total £ (your figure) <input id="ive_total" inputmode="decimal" value="${esc(e.total != null ? e.total : "")}" placeholder="${esc(String(x.total || ""))}" /><span class="field-hint">Leave blank to use the price list.</span></label>
+      <label class="field">Invoice email <input id="ive_email" type="email" value="${esc(e.email || "")}" placeholder="${esc(x.email || "agent's accounts email")}" ${/winkworth/i.test(x.customer) ? "disabled" : ""}/>${/winkworth/i.test(x.customer) ? `<span class="field-hint">Winkworth invoices always go to bowpropman@winkworth.co.uk.</span>` : `<span class="field-hint"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="ive_save" style="width:auto" /> Use for ${esc(x.customer)} from now on</label></span>`}</label>
+    </div>
+    ${s.done ? `<div class="ro-res${s.ok ? "" : " bad"}">${esc(s.msg)}</div>` : ""}
+    ${s.busy ? `<div class="mt-msg">Saving…</div>` : ""}
+    <div class="rr-b mt-b">${s.done && s.ok ? `<button class="btn btn-ghost btn-sm" onclick="ivAskClose()">Close</button>` : `<button class="btn btn-coral btn-sm" onclick="ivEditSave()"${dis}>Save and remake PDF</button><button class="btn btn-ghost btn-sm" onclick="ivAskClose()"${dis}>Cancel</button>`}</div>
+  </div></div>`;
+}
+async function ivEditSave(){
+  const s = state.ivAsk; if (!s || s.busy) return;
+  const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+  const changes = { beds:g("ive_beds"), extraNames:g("ive_names"), extras:g("ive_extras"), parking:g("ive_parking"), congestion:g("ive_cong"), total:g("ive_total") };
+  const em = document.getElementById("ive_email"); if (em && !em.disabled){ changes.email = em.value.trim(); const sv = document.getElementById("ive_save"); if (sv && sv.checked) changes.saveEmail = true; }
+  s.busy = true; render();
+  const d = await ivCall("invEdit", { jobId:s.ref, changes });
+  s.busy = false; s.done = true; s.ok = !!d.ok;
+  if (d.ok && d.invoice){
+    const i = state.iv.invoices.findIndex(k => k.jobId === s.ref); if (i >= 0) state.iv.invoices[i] = d.invoice;
+    s.msg = d.invoice.state === "ready" ? "Saved. "+d.invoice.no+" is "+ivMoney(d.invoice.total)+" and its PDF is made again." : "Saved. Still needs: "+(d.invoice.problems||[]).join(" · ");
+  } else s.msg = "Not saved: "+(d.error || "no answer");
+  render();
+}
+// ---- preview: the exact email (subject, to, text) and the PDF link
+async function ivPreviewOpen(no, kind){
+  state.ivAsk = { act:"preview", ref:no, kind, busy:true, done:false, msg:"" }; render();
+  const d = await ivCall("invPreview", { no, kind });
+  const s = state.ivAsk; if (!s || s.act !== "preview") return;
+  s.busy = false; s.data = d; render();
+}
+function renderIvPreview(){
+  const s = state.ivAsk, d = s.data || {};
+  return `<div class="mt-back" onclick="if(event.target===this)ivAskClose()"><div class="mt-box ro-ask" id="iv_box" tabindex="-1" role="dialog" aria-label="Preview">
+    <div class="mt-h"><div><b>Preview ${esc(s.ref)}${s.kind ? " "+esc(s.kind) : ""}</b></div><button class="undo-x" onclick="ivAskClose()" aria-label="Close">✕</button></div>
+    ${s.busy ? `<div class="mt-msg">Loading…</div>` : d.ok ? `<div class="mt-who"><div><span class="c-dim">To</span> ${esc(d.to)}</div><div><span class="c-dim">From</span> ${esc(d.from)} · <span class="c-dim">copy</span> ${esc(d.bcc)}</div><div><span class="c-dim">Subject</span> ${esc(d.subject)}</div></div>
+      <iframe class="mt-frame" id="iv_frame" title="Email preview" sandbox="" srcdoc="${esc(d.html || "")}"></iframe>
+      <details class="ci-edit"><summary>Plain-text copy</summary><pre class="iv-pre">${esc(d.text)}</pre></details>` : `<div class="ro-res bad">${esc(d.error || "No preview")}</div>`}
+    <div class="rr-b mt-b">${d.pdfUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(d.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>` : ""}${d.ok && !s.kind && (ivByNo(s.ref)||{}).state === "ready" ? `<button class="btn btn-coral btn-sm" onclick="ivAskOpen('send','${esc(s.ref)}')">Send</button>` : ""}${d.ok && s.kind ? `<button class="btn btn-coral btn-sm" onclick="ivAskOpen('${esc(s.kind)}','${esc(s.ref)}')">Send ${esc(s.kind)}</button>` : ""}<button class="btn btn-ghost btn-sm" onclick="ivAskClose()">Close</button></div>
+  </div></div>`;
 }
 function vrRowsFor(jobNo){ const k = normJobNo(jobNo||""); return ((state.kp && state.kp.reminders) || []).filter(r => k && normJobNo(r.job) === k); }
 function renderVrBox(f){
