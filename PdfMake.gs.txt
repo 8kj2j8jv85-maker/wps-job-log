@@ -1,0 +1,656 @@
+// PdfMake — finished Word reports turned into PDFs with no PC, Chrome or Claude (Lex, 21 Oct 2026).
+// New file in the WPS Amendments script.
+//
+// How it works
+//  1. Lex (or Claude) saves the finished Word report into Dropbox > WELLINGTON PROPERTY SERVICES > Reports > To PDF.
+//  2. Every 10 minutes pmRun looks in that folder (read only, through the Archive script's Dropbox link).
+//     A file saved in the last 3 minutes is left for the next run (Dropbox may still be syncing).
+//  3. If the report doesn't carry Cormorant Garamond Bold Italic inside it, the script puts it in (same method as
+//     embedfont.py), so the PDF keeps the font.
+//  4. The Word file goes to Adobe PDF Services (the API behind Adobe's Word-to-PDF; EU servers) and the PDF comes back.
+//  5. Page check: the PDF must have the same number of pages Word saved in the file. If it does, the PDF goes into
+//     Drive > WPS Ready to send and the existing auto-send / signing page takes over. If not, or anything else goes
+//     wrong, the PDF (if any) goes to Ready to send > Held and info@ gets an email. Nothing is ever guessed.
+//  6. Every file is logged in the WPS Amendments Sheet, tab "PDF makes". The Word file stays in To PDF (read-only
+//     Dropbox, Lex 21 Oct); the script remembers each file by its Dropbox version, so it is never made twice. Saving
+//     the same file again (a new version) makes a new PDF.
+//
+// PDF name: the Word name without " - final", " - draft v3" and the like (everything after the first " - "),
+// so "WPS260923.SE192HZ.09.10.26.ICI - final v3.docx" -> "WPS260923.SE192HZ.09.10.26.ICI.pdf". RESEND in the
+// Word name is kept, so the auto-send still sees it.
+//
+// Script Properties (Lex adds them; never put them in chat): ADOBE_CLIENT_ID, ADOBE_CLIENT_SECRET.
+// pmSetup finds the font file in Drive by name (CormorantGaramond-BoldItalic.ttf) and keeps its id as PM_FONT_ID.
+//
+// Needs: Archive (arToken_, arApiArg_, AR), ReportSend (RS, rsNotify_), Code (prop_, ensureSetup_, safeCell_,
+// wpsEditorOnly_, wpsTriggerOrEditor_), pdf-lib (PDFLib).
+// Editor: pmSetup, pmTest (two real reports into Drive > WPS PDF tests, never sent), pmStart, pmStop, pmRunNow,
+// pmStatus, pmBookmarkTest (4 Nov: room bookmarks on a copy of one PDF).
+
+const PM = {
+  DROP: '/WELLINGTON PROPERTY SERVICES/Reports/To PDF',
+  ADOBE: 'https://pdf-services-ew1.adobe.io',            // Adobe's EU servers
+  DOCX: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  TAB: 'PDF makes',
+  HEAD: ['Time', 'Word file', 'Version', 'Size', 'Status', 'Detail', 'Adobe job', 'PDF file', 'Word pages', 'PDF pages', 'Done', 'Tries', 'Started', 'Adobe file'],
+  EVERY_MIN: 10,
+  SETTLE_MIN: 3,
+  MAX_BYTES: 45 * 1024 * 1024,                           // UrlFetch answers are capped at 50 MB
+  POLL_MS: 5000,
+  BUDGET_MS: 4.5 * 60 * 1000,                            // Apps Script stops a run at 6 minutes
+  TRIES: 3,
+  STUCK_MIN: 180,                                       // an Adobe job still not done after 3 hours is tried again
+  FONT_FILE: 'CormorantGaramond-BoldItalic.ttf',
+  FONT_NAME: 'Cormorant Garamond',
+  FONT_SLOT: 'embedBoldItalic',
+  TEST_FOLDER: 'WPS PDF tests',
+  TEST_FILES: [
+    '/WELLINGTON PROPERTY SERVICES/Reports/Word Docs/WPS260914.E35NF.23.09.26.ICI.docx',      // 32A Driffield: font already in, PDF made on Adobe's site 19 Oct (27 pages)
+    '/WELLINGTON PROPERTY SERVICES/Reports/Word Docs/WPS261011.E35NE.07.10.2026.MTI.docx'     // from before 19 Oct: likely no font inside, so the script adds it
+  ],
+  NOTIFY: 'info@wellingtonparker.com'
+};
+const PM_COL = {}; PM.HEAD.forEach(function (h, i) { PM_COL[h] = i; });
+
+// ================================================================
+// 1. PURE RULES (tested offline)
+// ================================================================
+// "WPS260923.SE192HZ.09.10.26.ICI - final v3.docx" -> "WPS260923.SE192HZ.09.10.26.ICI.pdf"; RESEND kept.
+function pmPdfName_(wordName) {
+  const n = String(wordName || '').replace(/\.docx$/i, '');
+  let base = n.split(/\s+-\s+/)[0].trim();
+  if (/resend/i.test(n) && !/resend/i.test(base)) base += ' RESEND';
+  return base + '.pdf';
+}
+// Which files in the folder to look at: .docx only, no Word lock files, not saved in the last few minutes.
+function pmWanted_(entry, nowMs) {
+  if (entry['.tag'] !== 'file') return false;
+  const name = String(entry.name || '');
+  if (!/\.docx$/i.test(name) || /^~\$/.test(name)) return false;
+  const t = Date.parse(entry.server_modified || entry.client_modified || '') || 0;
+  return nowMs - t >= PM.SETTLE_MIN * 60000;
+}
+function pmKey_(path, rev) { return String(path).toLowerCase() + '|' + rev; }
+// Pages Word saved in docProps/app.xml (Word updates it on every save). '' if not there.
+function pmWordPages_(appXml) {
+  const m = /<Pages>\s*(\d+)\s*<\/Pages>/.exec(String(appXml || ''));
+  return m ? Number(m[1]) : '';
+}
+// Send or hold, from the two page counts.
+function pmPageCheck_(wordPages, pdfPages) {
+  if (!pdfPages) return { ok: false, why: 'Adobe sent back a PDF with no pages.' };
+  // 22 Oct: a count of 1 (or none) means Word never updated it (file last built by a script), so it isn't trusted.
+  if (wordPages === '' || wordPages == null || Number(wordPages) <= 1) return { ok: true, note: 'Word page count not usable in the file (' + (wordPages === '' || wordPages == null ? 'none' : wordPages) + '); PDF has ' + pdfPages + ' pages.' };
+  if (Number(wordPages) !== Number(pdfPages)) return { ok: false, why: 'Page count differs: Word saved ' + wordPages + ' pages, the PDF has ' + pdfPages + '. The layout may have shifted.' };
+  return { ok: true, note: pdfPages + ' pages, same as Word.' };
+}
+// Things that must never reach a tenant or agent: tracked changes, Word comments, the yellow [CO: ...] notes
+// and XXX placeholders. Returns the reason to stop, or ''. (parts: names in the Word file; text(name): its XML)
+function pmContentStop_(parts, text) {
+  const doc = text('word/document.xml');
+  if (/<w:(ins|del|moveFrom|moveTo)\b/.test(doc)) return 'The report still has tracked changes. Accept or reject them in Word (Review > Accept All), save, and drop it in again.';
+  if (/<w:comment\b/.test(text('word/comments.xml'))) return 'The report still has Word comments in it. Delete them in Word (Review > Delete All Comments), save, and drop it in again.';
+  const names = Object.keys(parts).filter(function (n) { return /^word\/(document|header\d*|footer\d*)\.xml$/.test(n); });
+  const words = names.map(function (n) { return text(n).replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, ''); }).join(' ');
+  if (words.indexOf('[CO:') !== -1) return 'The report still has a [CO: ...] note in it. Fold it in or delete it, save, and drop it in again.';
+  if (/\bXXX\b/.test(words)) return 'The report still has an XXX placeholder in it. Fill it in, save, and drop it in again.';
+  return '';
+}
+// Is the font already inside the report?
+function pmHasFont_(fontTableXml) {
+  const re = new RegExp('<w:font\\s+w:name="' + PM.FONT_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[^>]*>([\\s\\S]*?)</w:font>');
+  const m = re.exec(String(fontTableXml || ''));
+  return !!(m && new RegExp('<w:' + PM.FONT_SLOT + '\\b').test(m[1]));
+}
+// Obfuscation key from the font GUID (ECMA-376: GUID hex read from the end), same as embedfont.py.
+function pmFontKey_(guid) {
+  const hex = String(guid).replace(/[{}-]/g, '').toUpperCase();
+  const key = [];
+  for (let i = 0; i < 16; i++) key.push(parseInt(hex.substr(30 - 2 * i, 2), 16));
+  return key;
+}
+// Font bytes (signed or unsigned) -> obfuscated bytes (signed, as Apps Script blobs want).
+function pmObfuscate_(bytes, guid) {
+  const key = pmFontKey_(guid), out = new Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    let b = bytes[i] & 255;
+    if (i < 32) b ^= key[i % 16];
+    out[i] = b > 127 ? b - 256 : b;
+  }
+  return out;
+}
+// The four XML edits (same as embedfont.py, but keeps any fonts already embedded).
+function pmEditFontTable_(xml, guid, relId) {
+  let s = String(xml);
+  if (s.slice(0, 600).indexOf('xmlns:r=') === -1) s = s.replace('<w:fonts ', '<w:fonts xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+  const tag = '<w:' + PM.FONT_SLOT + ' r:id="' + relId + '" w:fontKey="{' + guid + '}"/>';
+  const re = new RegExp('(<w:font\\s+w:name="' + PM.FONT_NAME + '"[^>]*>)([\\s\\S]*?)(</w:font>)');
+  const m = re.exec(s);
+  if (m) return s.slice(0, m.index) + m[1] + m[2] + tag + m[3] + s.slice(m.index + m[0].length);
+  return s.replace('</w:fonts>', '<w:font w:name="' + PM.FONT_NAME + '">' + tag + '</w:font></w:fonts>');
+}
+function pmEditSettings_(xml) {
+  let s = String(xml);
+  if (s.indexOf('embedTrueTypeFonts') !== -1) return s;
+  if (s.indexOf('<w:embedSystemFonts') !== -1) return s.replace('<w:embedSystemFonts', '<w:embedTrueTypeFonts/><w:embedSystemFonts');
+  if (/<w:zoom[^>]*\/>/.test(s)) return s.replace(/(<w:zoom[^>]*\/>)/, '$1<w:embedTrueTypeFonts/>');
+  return s.replace(/(<w:settings[^>]*>)/, '$1<w:embedTrueTypeFonts/>');
+}
+function pmEditTypes_(xml) {
+  const s = String(xml);
+  if (s.indexOf('Extension="odttf"') !== -1) return s;
+  return s.replace('<Default ', '<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/><Default ');
+}
+function pmEditFontRels_(xml, relId, target) {
+  const rel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="' + target + '"/>';
+  if (!xml) return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rel + '</Relationships>';
+  return String(xml).replace('</Relationships>', rel + '</Relationships>');
+}
+
+// ================================================================
+// 2. THE WORD FILE: unzip, read, put the font in
+// ================================================================
+function pmUnzip_(bytes, name) {
+  const parts = Utilities.unzip(Utilities.newBlob(bytes, 'application/zip', name || 'report.docx'));
+  const map = {};
+  parts.forEach(function (b) { map[b.getName()] = b; });
+  return map;
+}
+// Returns { bytes, embedded: true/false (whether the script added the font), wordPages }.
+function pmPrepare_(bytes, name, fontBytes) {
+  const parts = pmUnzip_(bytes, name);
+  const text = function (n) { return parts[n] ? parts[n].getDataAsString('UTF-8') : ''; };
+  if (!parts['word/document.xml'] || !parts['[Content_Types].xml']) throw new Error('Not a Word file (no document inside).');
+  const stop = pmContentStop_(parts, text);
+  if (stop) { const e = new Error(stop); e.pmStop = true; throw e; }
+  const wordPages = pmWordPages_(text('docProps/app.xml'));
+  const ft = text('word/fontTable.xml');
+  if (!ft) throw new Error('Word file has no font table.');
+  if (pmHasFont_(ft)) return { bytes: bytes, embedded: false, wordPages: wordPages };
+  if (!fontBytes) { const e = new Error('The report does not carry Cormorant Garamond and the font file is not set up (run pmSetup).'); e.pmStop = true; throw e; }
+  const guid = Utilities.getUuid().toUpperCase();
+  let n = 1;
+  while (parts['word/fonts/wpsfont' + n + '.odttf']) n++;
+  const relId = 'rIdWpsFont' + n, target = 'fonts/wpsfont' + n + '.odttf';
+  const put = function (path, str) { parts[path] = Utilities.newBlob(str, 'application/xml', path); };
+  put('word/fontTable.xml', pmEditFontTable_(ft, guid, relId));
+  put('word/settings.xml', pmEditSettings_(text('word/settings.xml')));
+  put('[Content_Types].xml', pmEditTypes_(text('[Content_Types].xml')));
+  put('word/_rels/fontTable.xml.rels', pmEditFontRels_(text('word/_rels/fontTable.xml.rels'), relId, target));
+  parts['word/' + target] = Utilities.newBlob(pmObfuscate_(fontBytes, guid), 'application/vnd.openxmlformats-officedocument.obfuscatedFont', 'word/' + target);
+  const order = Object.keys(parts).sort(function (a, b) { return a === '[Content_Types].xml' ? -1 : b === '[Content_Types].xml' ? 1 : 0; });
+  const zipped = Utilities.zip(order.map(function (k) { return parts[k]; }), name || 'report.docx');
+  return { bytes: zipped.getBytes(), embedded: true, wordPages: wordPages };
+}
+
+// ================================================================
+// 3. ADOBE PDF SERVICES (REST)
+// ================================================================
+function pmProps_() { return PropertiesService.getScriptProperties(); }
+function pmAdobeId_() { return pmProps_().getProperty('ADOBE_CLIENT_ID') || ''; }
+function pmToken_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get('pm_adobe_token');
+  if (hit) return hit;
+  const p = pmProps_(), id = p.getProperty('ADOBE_CLIENT_ID'), secret = p.getProperty('ADOBE_CLIENT_SECRET');
+  if (!id || !secret) throw new Error('Adobe keys not set: add ADOBE_CLIENT_ID and ADOBE_CLIENT_SECRET in Project Settings > Script properties.');
+  const r = UrlFetchApp.fetch(PM.ADOBE + '/token', { method: 'post', muteHttpExceptions: true, payload: { client_id: id, client_secret: secret } });
+  if (r.getResponseCode() !== 200) throw new Error('Adobe refused the keys (' + r.getResponseCode() + '): ' + r.getContentText().slice(0, 150));
+  const j = JSON.parse(r.getContentText());
+  cache.put('pm_adobe_token', j.access_token, Math.max(60, Math.min(21000, Number(j.expires_in || 3600) - 300)));
+  return j.access_token;
+}
+function pmHead_() { return { 'X-API-Key': pmAdobeId_(), Authorization: 'Bearer ' + pmToken_() }; }
+// Adobe call with the key and token; if Adobe says the token has run out (401), gets a fresh one and tries once more.
+function pmAdobe_(url, o) {
+  const go = function () { return UrlFetchApp.fetch(url, Object.assign({}, o || {}, { headers: pmHead_(), muteHttpExceptions: true })); };
+  let r = go();
+  if (r.getResponseCode() === 401) { CacheService.getScriptCache().remove('pm_adobe_token'); r = go(); }
+  return r;
+}
+// Removes our copies from Adobe straight away (they would otherwise stay 24 hours). Never stops the run.
+function pmAdobeDelete_(ids) {
+  let n = 0;
+  (ids || []).filter(Boolean).forEach(function (id) {
+    try { const r = pmAdobe_(PM.ADOBE + '/assets/' + encodeURIComponent(id), { method: 'delete' }); if (r.getResponseCode() < 300) n++; } catch (e) {}
+  });
+  return n;
+}
+// Uploads the Word file and starts the conversion. Returns { loc: the job's status address, asset: Adobe's id for the upload }.
+function pmAdobeStart_(bytes) {
+  const a = pmAdobe_(PM.ADOBE + '/assets', { method: 'post', contentType: 'application/json', payload: JSON.stringify({ mediaType: PM.DOCX }) });
+  if (a.getResponseCode() !== 200) throw new Error('Adobe upload slot refused (' + a.getResponseCode() + '): ' + a.getContentText().slice(0, 150));
+  const asset = JSON.parse(a.getContentText());
+  const u = UrlFetchApp.fetch(asset.uploadUri, { method: 'put', contentType: PM.DOCX, payload: bytes, muteHttpExceptions: true });
+  if (u.getResponseCode() !== 200) throw new Error('Upload to Adobe failed (' + u.getResponseCode() + '): ' + u.getContentText().slice(0, 150));
+  const j = pmAdobe_(PM.ADOBE + '/operation/createpdf', { method: 'post', contentType: 'application/json', payload: JSON.stringify({ assetID: asset.assetID }) });
+  if (j.getResponseCode() !== 201) throw new Error('Adobe would not start the PDF (' + j.getResponseCode() + '): ' + j.getContentText().slice(0, 150));
+  const h = j.getAllHeaders(), loc = h.location || h.Location;
+  if (!loc) throw new Error('Adobe started the PDF but gave no status address.');
+  return { loc: String(loc), asset: String(asset.assetID) };
+}
+// { state: 'busy' } | { state: 'done', bytes, result } | { state: 'failed', why }
+function pmAdobeCheck_(loc) {
+  const r = pmAdobe_(loc, {});
+  if (r.getResponseCode() === 404) return { state: 'failed', why: 'Adobe no longer has this job (expired).' };
+  if (r.getResponseCode() !== 200) return { state: 'busy', note: 'status ' + r.getResponseCode() };
+  const s = JSON.parse(r.getContentText()), st = String(s.status || '').toLowerCase();
+  if (st === 'done') {
+    const uri = (s.asset && s.asset.downloadUri) || s.downloadUri;
+    if (!uri) return { state: 'failed', why: 'Adobe finished but gave no download address.' };
+    const d = UrlFetchApp.fetch(uri, { muteHttpExceptions: true });            // pre-signed: no extra headers
+    if (d.getResponseCode() !== 200) return { state: 'failed', why: 'PDF download failed (' + d.getResponseCode() + ').' };
+    return { state: 'done', bytes: d.getBlob().getBytes(), result: s.asset && s.asset.assetID ? String(s.asset.assetID) : '' };
+  }
+  if (st === 'failed' || st === 'fail') return { state: 'failed', why: 'Adobe could not make the PDF: ' + JSON.stringify(s.error || s).slice(0, 200) };
+  return { state: 'busy' };
+}
+function pmPdfPages_(bytes) {
+  return PDFLib.PDFDocument.load(new Uint8Array(bytes.map(function (b) { return b & 255; })), { ignoreEncryption: true, updateMetadata: false })
+    .then(function (doc) { return doc.getPageCount(); });
+}
+function pmIsPdf_(bytes) { return bytes && bytes.length > 100 && (bytes[0] & 255) === 0x25 && (bytes[1] & 255) === 0x50 && (bytes[2] & 255) === 0x44 && (bytes[3] & 255) === 0x46; }
+
+// ================================================================
+// 4. DROPBOX (read only, Archive's link) AND THE LOG
+// ================================================================
+function pmList_() {
+  const r = UrlFetchApp.fetch(AR.LIST_URL, { method: 'post', muteHttpExceptions: true, contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + arToken_() }, payload: JSON.stringify({ path: PM.DROP, recursive: false, limit: 200 }) });
+  if (r.getResponseCode() === 409 && /not_found/.test(r.getContentText())) throw new Error('Dropbox folder not found: ' + PM.DROP + ' (make it first).');
+  if (r.getResponseCode() !== 200) throw new Error('Dropbox list answered ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 150));
+  return JSON.parse(r.getContentText()).entries || [];
+}
+function pmDownload_(pathOrRev) {
+  const r = UrlFetchApp.fetch(AR.DL_URL, { method: 'post', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + arToken_(), 'Dropbox-API-Arg': arApiArg_({ path: pathOrRev }) } });
+  if (r.getResponseCode() !== 200) throw new Error('Dropbox download answered ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 120));
+  return r.getBlob().getBytes();
+}
+function pmSheet_() {
+  ensureSetup_();
+  const ss = SpreadsheetApp.openById(prop_('SHEET_ID'));
+  let sh = ss.getSheetByName(PM.TAB);
+  if (!sh) {
+    sh = ss.insertSheet(PM.TAB);
+    sh.getRange(1, 1, 1, PM.HEAD.length).setValues([PM.HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function pmRows_(sh) {
+  const n = sh.getLastRow() - 1;
+  return n > 0 ? sh.getRange(2, 1, n, PM.HEAD.length).getValues() : [];
+}
+function pmPut_(sh, i, r) { sh.getRange(i + 2, 1, 1, PM.HEAD.length).setValues([r.map(safeCell_)]); }
+function pmFont_() {
+  const id = pmProps_().getProperty('PM_FONT_ID');
+  if (!id) return null;
+  try { return DriveApp.getFileById(id).getBlob().getBytes(); } catch (e) { return null; }
+}
+function pmTell_(subject, body) {
+  if (typeof rsNotify_ === 'function') rsNotify_(PM.NOTIFY, subject, body);
+  else GmailApp.sendEmail(PM.NOTIFY, subject, body, { name: 'WPS PDF maker' });
+}
+
+// ================================================================
+// 5. THE RUN (every 10 minutes)
+// ================================================================
+async function pmRun(e) { if (!wpsTriggerOrEditor_(e)) return; return pmRun_(); }
+async function pmRun_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('pm_running')) return { busy: true };
+  cache.put('pm_running', '1', 400);
+  const t0 = Date.now(), res = { started: 0, made: 0, held: 0, failed: 0, waiting: 0 };
+  try {
+    // No Adobe keys yet: stop quietly, so files wait in To PDF instead of all failing.
+    if (!pmProps_().getProperty('ADOBE_CLIENT_ID') || !pmProps_().getProperty('ADOBE_CLIENT_SECRET')) { res.notReady = 'Adobe keys not set'; return res; }
+    const sh = pmSheet_(), rows = pmRows_(sh), known = {};
+    rows.forEach(function (r, i) { known[pmKey_(r[PM_COL['Word file']], r[PM_COL.Version])] = i; });
+    // a. new files in To PDF
+    // Oldest first, so when two copies of the same report are waiting the newest one is added last and wins.
+    pmList_().sort(function (a, b) { return String(a.server_modified).localeCompare(String(b.server_modified)); }).forEach(function (en) {
+      if (!pmWanted_(en, Date.now()) || known[pmKey_(en.path_display, 'rev:' + en.rev)] != null) return;
+      const pdfName = pmPdfName_(en.name);
+      rows.forEach(function (o, k) {                     // an older copy of the same report not made yet: this one replaces it
+        if ((o[PM_COL.Status] === 'Waiting' || o[PM_COL.Status] === 'Converting') && pmPdfName_(String(o[PM_COL['Word file']]).split('/').pop()) === pdfName) {
+          o[PM_COL.Status] = 'Replaced'; o[PM_COL.Detail] = 'A newer save of the same report came in (' + en.name + '); that one is used.'; pmPut_(sh, k, o);
+        }
+      });
+      const r = new Array(PM.HEAD.length).fill('');
+      r[PM_COL.Time] = new Date(); r[PM_COL['Word file']] = en.path_display; r[PM_COL.Version] = 'rev:' + en.rev;   // stored with 'rev:' so the Sheet never turns it into a number
+      r[PM_COL.Size] = Number(en.size) || ''; r[PM_COL.Status] = 'Waiting'; r[PM_COL.Tries] = 0;
+      rows.push(r); known[pmKey_(en.path_display, r[PM_COL.Version])] = rows.length - 1;
+      pmPut_(sh, rows.length - 1, r);
+    });
+    // b. start waiting ones, check converting ones
+    const font = pmFont_();
+    for (let i = 0; i < rows.length; i++) {
+      if (Date.now() - t0 > PM.BUDGET_MS) break;
+      const r = rows[i], st = r[PM_COL.Status];
+      if (st !== 'Waiting' && st !== 'Converting') continue;
+      try {
+        if (st === 'Waiting') { await pmBegin_(r, font); res.started++; pmPut_(sh, i, r); }
+        const out = await pmWait_(r, t0);
+        if (out === 'done') res.made++; else if (out === 'held') res.held++; else if (out === 'failed') res.failed++; else res.waiting++;
+      } catch (err) {
+        const why = String(err && err.message || err);
+        if (err && err.pmStop) { pmFail_(r, why, 'Stopped'); res.failed++; }                       // the report needs fixing first
+        else if (Number(r[PM_COL.Tries] || 0) < PM.TRIES) { r[PM_COL.Status] = 'Waiting'; r[PM_COL.Detail] = why.slice(0, 250) + ' Trying again next run.'; res.waiting++; }
+        else { pmFail_(r, why); res.failed++; }
+      }
+      pmPut_(sh, i, r);
+    }
+    if (res.started || res.made || res.held || res.failed) kpLog_('PdfMake', '', res.failed || res.held ? 'Problem' : 'Changed', JSON.stringify(res));
+  } finally { cache.remove('pm_running'); }
+  return res;
+}
+// Download the exact version, put the font in, send to Adobe.
+async function pmBegin_(r, font) {
+  r[PM_COL.Tries] = Number(r[PM_COL.Tries] || 0) + 1;
+  if (Number(r[PM_COL.Size]) > PM.MAX_BYTES) throw new Error('Word file over 45 MB.');
+  const name = String(r[PM_COL['Word file']]).split('/').pop();
+  const bytes = pmDownload_(String(r[PM_COL.Version]));   // that exact saved version
+  const prep = pmPrepare_(bytes, name, font);
+  r[PM_COL['Word pages']] = prep.wordPages;
+  const job = pmAdobeStart_(prep.bytes);
+  r[PM_COL['Adobe job']] = job.loc; r[PM_COL['Adobe file']] = job.asset; r[PM_COL.Started] = new Date();
+  r[PM_COL.Status] = 'Converting';
+  r[PM_COL.Detail] = (prep.embedded ? 'Font added. ' : 'Font already in. ') + 'Sent to Adobe.';
+}
+// Polls until done or the run's time is up. Returns 'done' | 'held' | 'failed' | 'busy'.
+async function pmWait_(r, t0) {
+  while (Date.now() - t0 < PM.BUDGET_MS) {
+    let c = pmAdobeCheck_(String(r[PM_COL['Adobe job']]));
+    const started = r[PM_COL.Started] instanceof Date ? r[PM_COL.Started].getTime() : Date.parse(r[PM_COL.Started]) || Date.now();
+    if (c.state === 'busy' && Date.now() - started > PM.STUCK_MIN * 60000) c = { state: 'failed', why: 'Adobe had not finished after ' + (PM.STUCK_MIN / 60) + ' hours.' };
+    if (c.state === 'done') {
+      const gone = pmAdobeDelete_([r[PM_COL['Adobe file']], c.result]);
+      const out = await pmFinish_(r, c.bytes);
+      if (gone) r[PM_COL.Detail] = String(r[PM_COL.Detail]) + ' Adobe copies deleted.';
+      return out;
+    }
+    if (c.state === 'failed') {
+      pmAdobeDelete_([r[PM_COL['Adobe file']]]);
+      if (Number(r[PM_COL.Tries] || 0) < PM.TRIES) { r[PM_COL.Status] = 'Waiting'; r[PM_COL.Detail] = c.why + ' Trying again.'; return 'busy'; }
+      pmFail_(r, c.why); return 'failed';
+    }
+    Utilities.sleep(PM.POLL_MS);
+  }
+  return 'busy';
+}
+async function pmFinish_(r, pdf) {
+  const wordName = String(r[PM_COL['Word file']]).split('/').pop(), pdfName = pmPdfName_(wordName);
+  if (!pmIsPdf_(pdf)) { pmFail_(r, 'Adobe sent back something that is not a PDF.'); return 'failed'; }
+  let pages = 0;
+  try { pages = await pmPdfPages_(pdf); } catch (e) { pages = 0; }
+  r[PM_COL['PDF pages']] = pages || '';
+  const check = pmPageCheck_(r[PM_COL['Word pages']], pages);
+  let marks = '';
+  if (check.ok) { const rm = await pmRoomMarks_(r, pdf); pdf = rm.bytes; marks = ' ' + rm.note; }   // 4 Nov: a bookmark per room; never holds
+  const folder = DriveApp.getFolderById(prop_(check.ok ? 'RS_READY_ID' : 'RS_HELD_ID'));
+  const f = folder.createFile(Utilities.newBlob(pdf, 'application/pdf', pdfName));
+  r[PM_COL['PDF file']] = f.getId(); r[PM_COL.Done] = new Date();
+  if (check.ok) {
+    r[PM_COL.Status] = 'Done';
+    r[PM_COL.Detail] = String(r[PM_COL.Detail] || '').replace(/Sent to Adobe\.\s*/, '') + check.note + marks + ' Saved into WPS Ready to send as ' + pdfName + '.';
+    return 'done';
+  }
+  r[PM_COL.Status] = 'Held';
+  r[PM_COL.Detail] = check.why + ' PDF saved in Ready to send > Held.';
+  pmTell_('PDF held, not sent - ' + pdfName,
+    'The PDF for ' + wordName + ' was made but not sent.\n\nWhy: ' + check.why +
+    '\n\nIt is in Drive > WPS Ready to send > Held. Open it and compare with the Word file. If it is right, move it into WPS Ready to send and it goes within 15 minutes. If not, fix the Word file and save it into Dropbox > Reports > To PDF again.');
+  return 'held';
+}
+function pmFail_(r, why, status) {
+  r[PM_COL.Status] = status || 'Failed'; r[PM_COL.Detail] = why.slice(0, 300); r[PM_COL.Done] = new Date();
+  const wordName = String(r[PM_COL['Word file']]).split('/').pop();
+  pmTell_('PDF not made - ' + wordName, 'No PDF was made for ' + wordName + '.\n\nWhy: ' + why +
+    '\n\nNothing was sent. Fix the cause, then save the Word file into Dropbox > Reports > To PDF again (a new save makes a new try).');
+}
+
+// ================================================================
+// 6. EDITOR
+// ================================================================
+// Checks everything is in place and says what is missing. Changes nothing except storing the font's Drive id and
+// making the "PDF makes" tab.
+function pmSetup() {
+  wpsEditorOnly_();
+  const p = pmProps_();
+  Logger.log('Adobe keys: ' + (p.getProperty('ADOBE_CLIENT_ID') && p.getProperty('ADOBE_CLIENT_SECRET') ? 'present' : 'MISSING (add ADOBE_CLIENT_ID and ADOBE_CLIENT_SECRET in Script properties)'));
+  try { pmToken_(); Logger.log('Adobe: keys accepted (EU servers).'); } catch (e) { Logger.log('Adobe: ' + e.message); }
+  const it = DriveApp.getFilesByName(PM.FONT_FILE);
+  let font = null;
+  while (it.hasNext()) { const f = it.next(); if (!f.isTrashed()) { font = f; break; } }
+  if (font) { p.setProperty('PM_FONT_ID', font.getId()); Logger.log('Font: found ' + PM.FONT_FILE + ' in Drive (' + Math.round(font.getSize() / 1024) + ' KB).'); }
+  else Logger.log('Font: ' + PM.FONT_FILE + ' NOT FOUND in info@\'s Drive. Upload it (from Downloads\\Cormorant_Garamond\\static) and run pmSetup again.');
+  try { const n = pmList_().length; Logger.log('Dropbox: To PDF folder found (' + n + ' item(s) in it).'); } catch (e) { Logger.log('Dropbox: ' + e.message); }
+  Logger.log('Ready to send folder: ' + (prop_('RS_READY_ID') ? 'set' : 'MISSING') + '; Held folder: ' + (prop_('RS_HELD_ID') ? 'set' : 'MISSING') + '.');
+  pmSheet_();
+  Logger.log('Log tab "' + PM.TAB + '" ready. Next: pmTest.');
+}
+// Makes PDFs of the two test reports into Drive > WPS PDF tests. Never touches Ready to send, sends nothing.
+async function pmTest() {
+  wpsEditorOnly_();
+  const folder = kpFolder_(DriveApp.getRootFolder(), PM.TEST_FOLDER), font = pmFont_();
+  for (const path of PM.TEST_FILES) {
+    const name = path.split('/').pop(), t = Date.now();
+    try {
+      const prep = pmPrepare_(pmDownload_(path), name, font);
+      const job = pmAdobeStart_(prep.bytes);
+      let c = { state: 'busy' };
+      while (c.state === 'busy' && Date.now() - t < 4 * 60000) { Utilities.sleep(PM.POLL_MS); c = pmAdobeCheck_(job.loc); }
+      pmAdobeDelete_([job.asset, c.result]);
+      if (c.state !== 'done') { Logger.log(name + ': ' + (c.why || 'Adobe still working after 4 minutes')); continue; }
+      const pages = await pmPdfPages_(c.bytes);
+      const f = folder.createFile(Utilities.newBlob(c.bytes, 'application/pdf', 'TEST ' + pmPdfName_(name)));
+      Logger.log(name + ': ' + (prep.embedded ? 'font added' : 'font already in') + '; Word saved ' + (prep.wordPages || '?') + ' pages, PDF ' + pages +
+        ' pages; ' + Math.round(c.bytes.length / 1024) + ' KB; ' + Math.round((Date.now() - t) / 1000) + ' s. ' + f.getUrl());
+    } catch (e) { Logger.log(name + ': FAILED ' + e.message); }
+  }
+  Logger.log('Nothing was sent. Compare the PDFs in Drive > ' + PM.TEST_FOLDER + ' with the ones made on Adobe\'s site.');
+}
+function pmStart() {
+  wpsEditorOnly_();
+  pmStop_();
+  ScriptApp.newTrigger(typeof kpTimerPmRun === 'function' ? 'kpTimerPmRun' : 'pmRun').timeBased().everyMinutes(PM.EVERY_MIN).create();   // Keeper's wrapper when there (22 Oct)
+  Logger.log('PDF maker ON (every ' + PM.EVERY_MIN + ' minutes, Dropbox > Reports > To PDF).');
+}
+function pmStop() { wpsEditorOnly_(); pmStop_(); Logger.log('PDF maker OFF.'); }
+function pmIsTimer_(h) { return h === 'pmRun' || h === 'kpTimerPmRun'; }
+function pmStop_() { ScriptApp.getProjectTriggers().forEach(function (t) { if (pmIsTimer_(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); }); }
+async function pmRunNow() { wpsEditorOnly_(); Logger.log(JSON.stringify(await pmRun_())); }
+function pmStatus() {
+  wpsEditorOnly_();
+  const rows = pmRows_(pmSheet_()), n = {};
+  rows.forEach(function (r) { n[r[PM_COL.Status]] = (n[r[PM_COL.Status]] || 0) + 1; });
+  Logger.log(rows.length + ' file(s): ' + Object.keys(n).map(function (k) { return k + ' ' + n[k]; }).join(', ') + '. Timer: ' +
+    (ScriptApp.getProjectTriggers().some(function (t) { return pmIsTimer_(t.getHandlerFunction()); }) ? 'ON' : 'off') + '.');
+  rows.slice(-5).forEach(function (r) { Logger.log(r[PM_COL.Status] + ' | ' + String(r[PM_COL['Word file']]).split('/').pop() + ' | ' + r[PM_COL.Detail]); });
+}
+
+// =====================================================================
+// 7. ROOM BOOKMARKS (Lex, 4 Nov 2026)
+// =====================================================================
+// Word's PDF never bookmarks the rooms: the room titles (style "Heading 1a") sit inside the navy bar table and Word
+// skips headings in tables. After Adobe makes the PDF and the page check passes, this adds one bookmark per room.
+//  - Room names come from the Word file: the Contents entries (TOC paragraphs with a link to a _Toc bookmark), each
+//    matched to the heading paragraph holding that bookmark. A heading in style "Heading 1a" is a room.
+//  - Pages come from the PDF's own clickable Contents lines (Adobe keeps them): the n-th Contents link goes where the
+//    n-th Contents entry goes. Only used if the counts match, and every Contents line that has a bookmark already
+//    (Tenant Details, Disclaimer ...) lands on that bookmark's page. Otherwise nothing is added.
+//  - Existing bookmarks are never removed or changed; the room bookmarks go in among them in page order.
+//  - Any doubt or error: the PDF is used exactly as Adobe made it and the reason goes in the log. Never holds a report.
+
+// Word XML -> the Contents entries in order: [{ title, room }] ('' list if the file has no Contents).
+function pmRoomEntries_(docXml, stylesXml) {
+  const doc = String(docXml || ''), st = String(stylesXml || '');
+  const names = {};
+  st.replace(/<w:style\b[^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g, function (m, id, body) {
+    const n = /<w:name w:val="([^"]+)"/.exec(body); if (n) names[id] = n[1].toLowerCase(); return m;
+  });
+  const dec = function (s) { return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'); };
+  const text = function (p) { const out = []; p.replace(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g, function (m, t) { out.push(t); return m; }); return dec(out.join('')).replace(/[\s ]+/g, ' ').trim(); };
+  const paras = [];
+  doc.replace(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g, function (m, p) {
+    const s = /<w:pStyle w:val="([^"]+)"/.exec(p);
+    paras.push({ style: s ? (names[s[1]] || s[1].toLowerCase()) : '', xml: p });
+    return m;
+  });
+  const byMark = {};
+  paras.forEach(function (p) {
+    p.xml.replace(/<w:bookmarkStart\b[^>]*w:name="([^"]+)"/g, function (m, n) { if (!(n in byMark)) byMark[n] = p; return m; });
+  });
+  const out = [];
+  paras.forEach(function (p) {
+    if (!/^toc \d/.test(p.style)) return;
+    const a = /<w:hyperlink\b[^>]*w:anchor="([^"]+)"/.exec(p.xml);
+    if (!a) return;
+    const h = byMark[a[1]];
+    if (h) out.push({ title: text(h.xml), room: h.style === 'heading 1a' });
+    else out.push({ title: text(p.xml).replace(/\s*\d+$/, ''), room: false });
+  });
+  return out;
+}
+
+// Same compare rule for titles: case, spacing and "&"/"and" don't matter.
+function pmTitleKey_(s) { return String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim(); }
+
+// pdf (bytes, signed or not) + entries -> { bytes (Uint8Array, or null if nothing changed), added, note }
+async function pmAddRoomMarks_(pdfBytes, entries) {
+  const PL = PDFLib;
+  const none = function (note) { return { bytes: null, added: 0, note: note }; };
+  const rooms = (entries || []).filter(function (e) { return e.room && e.title; });
+  if (!rooms.length) return none('No room headings found in the Word file.');
+  const u8 = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(Array.prototype.map.call(pdfBytes, function (b) { return b & 255; }));
+  const doc = await PL.PDFDocument.load(u8, { ignoreEncryption: true, updateMetadata: false });
+  const ctx = doc.context, N = function (s) { return PL.PDFName.of(s); };
+  const pages = doc.getPages();
+  const pageIx = {};
+  pages.forEach(function (p, i) { pageIx[p.ref.toString()] = i; });
+  const look = function (o) { try { return ctx.lookup(o); } catch (e) { return undefined; } };
+  const str = function (o) { o = look(o); return o && o.decodeText ? o.decodeText() : (o instanceof PL.PDFName ? o.decodeText() : ''); };
+  // named destinations, if any (Adobe uses page destinations, but be safe)
+  const catalog = doc.catalog;
+  const named = function (name) {
+    const dests = look(catalog.get(N('Dests')));
+    if (dests instanceof PL.PDFDict) { const d = look(dests.get(N(name))); if (d) return d instanceof PL.PDFDict ? look(d.get(N('D'))) : d; }
+    const tree = look(catalog.get(N('Names'))); const root = tree instanceof PL.PDFDict ? look(tree.get(N('Dests'))) : null;
+    const walk = function (node, depth) {
+      if (!(node instanceof PL.PDFDict) || depth > 20) return undefined;
+      const ns = look(node.get(N('Names')));
+      if (ns instanceof PL.PDFArray) for (let i = 0; i + 1 < ns.size(); i += 2) if (str(ns.get(i)) === name) { const d = look(ns.get(i + 1)); return d instanceof PL.PDFDict ? look(d.get(N('D'))) : d; }
+      const kids = look(node.get(N('Kids')));
+      if (kids instanceof PL.PDFArray) for (let i = 0; i < kids.size(); i++) { const r = walk(look(kids.get(i)), depth + 1); if (r) return r; }
+      return undefined;
+    };
+    return walk(root, 0);
+  };
+  const destOf = function (holder) {   // a link or bookmark dict -> PDFArray destination (or undefined)
+    let d = look(holder.get(N('Dest')));
+    if (!d) { const a = look(holder.get(N('A'))); if (a instanceof PL.PDFDict && str(a.get(N('S'))) === 'GoTo') d = look(a.get(N('D'))); }
+    if (d && !(d instanceof PL.PDFArray)) d = named(str(d));
+    return d instanceof PL.PDFArray ? d : undefined;
+  };
+  const pageOf = function (dest) { const r = dest && dest.get(0); return r && pageIx[r.toString()] != null ? pageIx[r.toString()] : -1; };
+
+  // existing top-level bookmarks
+  let outlines = look(catalog.get(N('Outlines')));
+  const items = [];
+  if (outlines instanceof PL.PDFDict) {
+    let ref = outlines.get(N('First')), guard = 0;
+    while (ref && guard++ < 500) {
+      const it = look(ref); if (!(it instanceof PL.PDFDict)) break;
+      items.push({ ref: ref, dict: it, title: str(it.get(N('Title'))), page: pageOf(destOf(it)) });
+      ref = it.get(N('Next'));
+    }
+  }
+  const have = {};
+  items.forEach(function (it) { have[pmTitleKey_(it.title)] = it.page; });
+  const todo = rooms.filter(function (r) { return !(pmTitleKey_(r.title) in have); });
+  if (!todo.length) return none('Every room already has a bookmark.');
+
+  // Contents links: internal links on the pages before the first bookmarked section (or the first 4 pages)
+  const firstSection = items.reduce(function (m, it) { return it.page >= 0 && it.page < m ? it.page : m; }, Math.min(4, pages.length));
+  const links = [];
+  for (let pi = 0; pi < firstSection; pi++) {
+    const annots = look(pages[pi].node.get(N('Annots')));
+    if (!(annots instanceof PL.PDFArray)) continue;
+    for (let k = 0; k < annots.size(); k++) {
+      const a = look(annots.get(k));
+      if (!(a instanceof PL.PDFDict) || str(a.get(N('Subtype'))) !== 'Link') continue;
+      const d = destOf(a); if (!d) continue;
+      const rect = look(a.get(N('Rect')));
+      const top = rect instanceof PL.PDFArray ? Math.max(look(rect.get(1)).asNumber(), look(rect.get(3)).asNumber()) : 0;
+      links.push({ pi: pi, top: top, dest: d, page: pageOf(d) });
+    }
+  }
+  links.sort(function (a, b) { return a.pi - b.pi || b.top - a.top; });
+  if (links.length !== entries.length) return none('Contents links in the PDF (' + links.length + ') do not match the Contents in the Word file (' + entries.length + ').');
+  for (let i = 0; i < entries.length; i++) {
+    if (links[i].page < 0) return none('A Contents link goes nowhere (line ' + (i + 1) + ').');
+    const k = pmTitleKey_(entries[i].title);
+    if (k in have && have[k] >= 0 && have[k] !== links[i].page) return none('Contents line "' + entries[i].title + '" goes to page ' + (links[i].page + 1) + ' but its bookmark says page ' + (have[k] + 1) + '.');
+  }
+
+  // new bookmark dicts, then one list in page order (existing first on a tie, rooms in Contents order)
+  if (!(outlines instanceof PL.PDFDict)) { outlines = ctx.obj({ Type: 'Outlines' }); catalog.set(N('Outlines'), ctx.register(outlines)); }
+  const outRef = catalog.get(N('Outlines'));
+  const all = items.map(function (it, i) { return { ref: it.ref, dict: it.dict, page: it.page < 0 ? 1e6 : it.page, rank: 0, i: i }; });
+  entries.forEach(function (e, i) {
+    if (!e.room || !e.title || pmTitleKey_(e.title) in have) return;
+    const d = links[i].dest, copy = PL.PDFArray.withContext(ctx);
+    for (let j = 0; j < d.size(); j++) copy.push(d.get(j));
+    const dict = ctx.obj({}); dict.set(N('Title'), PL.PDFHexString.fromText(e.title)); dict.set(N('Parent'), outRef); dict.set(N('Dest'), copy);
+    all.push({ ref: ctx.register(dict), dict: dict, page: links[i].page, rank: 1, i: i });
+    have[pmTitleKey_(e.title)] = links[i].page;
+  });
+  all.sort(function (a, b) { return a.page - b.page || a.rank - b.rank || a.i - b.i; });
+  all.forEach(function (x, i) {
+    if (i) x.dict.set(N('Prev'), all[i - 1].ref); else x.dict.delete(N('Prev'));
+    if (i < all.length - 1) x.dict.set(N('Next'), all[i + 1].ref); else x.dict.delete(N('Next'));
+  });
+  outlines.set(N('First'), all[0].ref); outlines.set(N('Last'), all[all.length - 1].ref);
+  // Count = visible items: top level plus open children (a positive child Count means open)
+  let count = all.length;
+  all.forEach(function (x) { const c = look(x.dict.get(N('Count'))); if (c instanceof PL.PDFNumber && c.asNumber() > 0) count += c.asNumber(); });
+  outlines.set(N('Count'), PL.PDFNumber.of(count));
+  const added = all.filter(function (x) { return x.rank === 1; }).length;
+  const bytes = await doc.save({ updateFieldAppearances: false });
+  return { bytes: bytes, added: added, note: added + ' room bookmark' + (added === 1 ? '' : 's') + ' added.' };
+}
+
+// Apps Script side: Word file (exact Dropbox version) -> entries; PDF bytes (signed) -> PDF bytes (signed) with room
+// bookmarks, or the same bytes. Never throws.
+async function pmRoomMarks_(r, pdf) {
+  try {
+    const name = String(r[PM_COL['Word file']]).split('/').pop();
+    const parts = pmUnzip_(pmDownload_(String(r[PM_COL.Version])), name);
+    const t = function (n) { return parts[n] ? parts[n].getDataAsString('UTF-8') : ''; };
+    const res = await pmAddRoomMarks_(pdf, pmRoomEntries_(t('word/document.xml'), t('word/styles.xml')));
+    if (!res.bytes) return { bytes: pdf, note: 'No room bookmarks: ' + res.note };
+    const back = Array.prototype.map.call(res.bytes, function (b) { return b > 127 ? b - 256 : b; });
+    let pages = 0; try { pages = await pmPdfPages_(back); } catch (e) { pages = 0; }
+    const before = await pmPdfPages_(pdf);
+    if (!pmIsPdf_(back) || pages !== before) return { bytes: pdf, note: 'No room bookmarks: the re-saved PDF did not check out (' + pages + ' pages, was ' + before + ').' };
+    return { bytes: back, note: res.note };
+  } catch (e) {
+    return { bytes: pdf, note: 'No room bookmarks: ' + String(e && e.message || e).slice(0, 150).replace(/\.?$/, '.') };
+  }
+}
+
+// Editor: adds room bookmarks to a copy of one PDF already in Drive, using its Word file in Dropbox. Writes the copy
+// into Drive > WPS PDF tests as "BOOKMARKS <name>". Sends nothing, never touches Ready to send or the original.
+// Set the two paths below before running (Lex / Claude).
+const PM_BM_TEST = { pdfId: '', word: '' };
+async function pmBookmarkTest() {
+  wpsEditorOnly_();
+  if (!PM_BM_TEST.pdfId || !PM_BM_TEST.word) { Logger.log('Set PM_BM_TEST.pdfId (Drive id of a PDF) and PM_BM_TEST.word (Dropbox path of its Word file) first.'); return; }
+  const f = DriveApp.getFileById(PM_BM_TEST.pdfId);
+  const r = new Array(PM.HEAD.length).fill('');
+  r[PM_COL['Word file']] = PM_BM_TEST.word; r[PM_COL.Version] = PM_BM_TEST.word;
+  const out = await pmRoomMarks_(r, f.getBlob().getBytes());
+  const folder = kpFolder_(DriveApp.getRootFolder(), PM.TEST_FOLDER);
+  const c = folder.createFile(Utilities.newBlob(out.bytes, 'application/pdf', 'BOOKMARKS ' + f.getName()));
+  Logger.log(out.note + ' Copy: ' + c.getUrl() + ' (nothing sent)');
+}
