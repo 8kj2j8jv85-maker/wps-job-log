@@ -525,6 +525,13 @@
   .qwarn{ margin-top:6px; font-size:12.5px; color:var(--coral-dark); }
   .qsrc{ margin-top:6px; font-size:12px; color:var(--ink-soft); }
   .qactions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .qdo{ font-size:14.5px; font-weight:600; color:var(--ink); margin-bottom:8px; line-height:1.35; }
+  .qother{ margin-top:12px; border-top:1px solid var(--line); padding-top:8px; font-size:13px; color:var(--ink-soft); }
+  .qother summary{ cursor:pointer; padding:4px 0; }
+  .qo-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 0; border-top:1px dashed var(--line); }
+  .qo-txt{ min-width:0; overflow-wrap:anywhere; }
+  .qo-from{ color:var(--ink); }
+  .qo-act{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
   .qbadge{ display:inline-block; min-width:18px; padding:0 6px; margin-left:4px; border-radius:999px; background:var(--coral-dark); color:#fff; font-size:11px; line-height:18px; text-align:center; }
 
   /* ===== WPS look B (29 Sept): navy sidebar ===== */
@@ -3478,6 +3485,7 @@ async function dashQueue(quiet){
     const d = await dashCall("queue");
     if (!d.ok) throw new Error(d.error || "no answer");
     queueFromPayloads(d.payloads || [], quiet);
+    loadReviewThreads();   // 4 Nov: cards we've already answered on the thread go by themselves
   } catch(e){
     console.error(e);
     if (!quiet) state.queueMsg = "Couldn't read the booking queue: "+e.message;
@@ -3499,6 +3507,7 @@ function checkForBookings(quiet){
         catch(e){ console.warn("Skipped a queue draft", d.id, e); }
       }
       queueFromPayloads(payloads, false);
+      loadReviewThreads();
       if (!drafts.length) state.queueMsg = "No queue from Claude in your drafts yet.";
     } catch(e){
       console.error(e);
@@ -3513,7 +3522,6 @@ function checkForBookings(quiet){
 }
 const QUEUE_MAX_AGE_DAYS = 14;   // 13 Oct hardening: queue items older than this are not shown
 function queueItemAgeOk(i){ const g = Date.parse(i.generatedAt || ""); return isNaN(g) || (Date.now() - g) < QUEUE_MAX_AGE_DAYS*864e5; }
-function pendingQueue(){ return state.queue.filter(i=>!state.queueDone[i.id] && queueItemAgeOk(i) && !watchCovered(i) && !queueAlreadyDone(i)); }
 // 23 Oct (Lex): a card goes by itself once the job already shows what it asks for, wherever that was done
 // (Decisions page, job form, tenant email box). Example: Courtyard card "move to 12:00" after the job is at 12:00.
 // Only change/cancel cards with a date or time; new bookings, tenant-detail updates and the other kinds are left.
@@ -3544,17 +3552,202 @@ function watchCovered(it){
   if (watchAnswered(it)) return true;
   const keys = [it.msgId, it.threadId].map(x => String(x||"")).filter(x => /^[A-Za-z0-9]{6,}$/.test(x));
   if (!keys.length) return false;
-  return state.queue.some(o => o !== it && o.kind !== "watch" && keys.some(k => String(o.id||"").indexOf(k) === 0 || String(o.sourceUrl||"").indexOf(k) > -1));
+  // 4 Nov: a booking card from an EARLIER email on the same thread doesn't cover a newer reply (Lauren's 20:14
+  // "11:30 is fine" was hidden behind the 18:50 "09:00" change card). Same message, or a card at least as new, does.
+  const mine = String(it.msgId||""), at = rtAt(it);
+  return state.queue.some(o => o !== it && o.kind !== "watch" && keys.some(k => (String(o.id||"").indexOf(k) === 0 || String(o.sourceUrl||"").indexOf(k) > -1)
+    && (k === mine || !at || !rtAt(o) || rtAt(o) >= at)));
+}
+// ---- Review tidy (4 Nov, Lex 20:40: "this needs to be simpler"). A card only stays when Lex must decide something.
+// 1. Tide cards that are already resolved never show: already recorded on the job; no WPS number but the invoice
+//    number is already on a job (or it's a payment receipt for a job already Paid); or the job's notes say that
+//    Tide invoice was cancelled / sent in error.
+// 2. A booking, change, cancellation or booking-email card goes by itself when we have sent a later email on the same
+//    Gmail thread (from hello@ / info@ / reports@ / finance@; script file ReviewTidy, op reviewThreads), or when the
+//    matching job was changed in the Job Log after the email came in.
+// 3. Booking-watch emails from senders who aren't on any job, client or saved contact (renewals, alerts) and replies to
+//    the rebrand email go into one quiet "Other mail (n)" line with Open and Dismiss, not cards.
+// 4. Every card that stays starts with one plain line saying what Lex needs to do.
+// Nothing here writes anything: cards are just hidden while the rule holds. Dismiss / Clear still work as before.
+const RT_OURS = /^(hello|info|reports|finance)@(wellington-ps\.co\.uk|wellingtonparker\.com)$/i;
+const RT_MARKETING = /a familiar name, a new look|is now wellington property services/i;
+const RT_NOREPLY = /^(no-?reply|do-?not-?reply|mailer-daemon|notifications?|alerts?|billing|renewals?)[@.+-]/i;
+const RT_FREE_MAIL = /^(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|me|aol|btinternet|sky|msn|protonmail)\./i;
+function rtEmail(s){ return ((String(s||"").match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [""])[0]).toLowerCase(); }
+function rtAt(it){ const t = Date.parse(it && it.sourceDate || ""); return isNaN(t) ? 0 : t; }
+function rtMsgId(it){
+  if (!it) return "";
+  if (it.msgId && /^[0-9a-f]{10,24}$/i.test(String(it.msgId))) return String(it.msgId);
+  const h = String(it.id||"").replace(/^bw-/,"").split("-")[0];
+  if (/^[0-9a-f]{10,24}$/i.test(h)) return h;
+  const u = String(emailLink(it)||"").match(/[#/]([0-9a-f]{10,24})(?:$|[?&])/i);
+  return u ? u[1] : "";
+}
+const RT_BOOKING_KINDS = { new:1, update:1, cancel:1, watch:1 };
+// Every email address the Job Log knows: tenants and copy-to on jobs, saved contacts, client contacts.
+function rtKnownEmails(){
+  const set = new Set(), doms = new Set();
+  const add = (s, isAgent) => cleanEmails(s).split(", ").forEach(e => { e = e.toLowerCase(); if (!e) return; set.add(e); const d = e.split("@")[1]; if (isAgent && d && !RT_FREE_MAIL.test(d) && !/wellington/.test(d)) doms.add(d); });
+  (state.jobs||[]).forEach(j => { add(j.tenantEmails, false); add(j.agentEmail, true); (Array.isArray(j.tenantList)?j.tenantList:[]).forEach(t => add(t && t.email, false)); });
+  (state.contacts||[]).forEach(c => add(c && c.email, true));
+  (state.clients||[]).forEach(c => add(c && c.contactEmail, true));
+  return { set, doms };
+}
+function rtSenderKnown(it, known){
+  const e = rtEmail(it.sourceFrom); if (!e) return false;
+  if (RT_OURS.test(e)) return true;
+  if (RT_NOREPLY.test(e)) return false;
+  return known.set.has(e) || known.doms.has(e.split("@")[1]);
+}
+// Rule 3: which items go to "Other mail" instead of a card.
+function rtOtherMail(it, known){
+  if (!it || !RT_BOOKING_KINDS[it.kind]) return false;
+  if (it.kind !== "new" && RT_MARKETING.test(String(it.sourceSubject||""))) return true;   // a "new" Claude read as a booking still shows
+  return it.kind === "watch" && !rtSenderKnown(it, known || rtKnownEmails());
+}
+// The job an email is about: the matching job for a change/cancel, the duplicate for a new booking, and for a
+// booking-watch email the job whose tenants include the sender (or whose job number is in the subject).
+function rtJobFor(it){
+  if (it.kind === "update" || it.kind === "cancel") return findMatch(it);
+  if (it.kind === "new") return findDuplicate(it);
+  if (it.kind === "watch"){
+    const no = (String(it.sourceSubject||"").toUpperCase().match(/WPS\d{6,}/) || [""])[0];
+    if (no){ const h = state.jobs.filter(j => normJobNo(j.jobNo) === no); if (h.length === 1) return h[0]; }
+    const e = rtEmail(it.sourceFrom); if (!e || RT_NOREPLY.test(e)) return null;
+    const h = state.jobs.filter(j => j.status !== "archived" && cleanEmails(j.tenantEmails).toLowerCase().split(", ").indexOf(e) > -1);
+    if (!h.length) return null;
+    const ref = new Date(rtAt(it) || Date.now()).toISOString().slice(0,10);
+    return h.sort((a,b) => daysApart(a.date,ref) - daysApart(b.date,ref))[0];
+  }
+  return null;
+}
+// Rule 2a: we replied later on the same thread. state.reviewThreads[msgId] = { oursAt, msgAt } from the script.
+function rtRepliedLater(it){
+  const t = (state.reviewThreads||{})[rtMsgId(it)];
+  if (!t || !t.oursAt) return false;
+  const ours = Date.parse(t.oursAt), at = Date.parse(t.msgAt||"") || rtAt(it);
+  return !!at && !isNaN(ours) && ours > at;
+}
+// Rule 2b: the job was changed in the Job Log after the email came in.
+function rtJobChangedAfter(it){
+  const at = rtAt(it); if (!at) return false;
+  const j = rtJobFor(it); if (!j) return false;
+  const u = Date.parse(j.updatedAt || ""); return !isNaN(u) && u > at;
+}
+// Rule 1 (+ Lex 20:43): Tide card already sorted.
+function rtJobsWithInvoice(no){ const n = String(no||"").trim().toUpperCase(); return n ? state.jobs.filter(j => String(j.invoiceNo||"").trim().toUpperCase() === n) : []; }
+function rtInvoiceCancelledInNotes(no){
+  const n = String(no||"").trim().toUpperCase(); if (!n) return false;
+  return state.jobs.some(j => { const t = String(j.notes||"").toUpperCase(); const i = t.indexOf(n); if (i < 0) return false;
+    return /CANCEL|IN ERROR|VOID|CREDIT(ED)? NOTE|WRITTEN OFF/.test(t.slice(Math.max(0,i-80), i+n.length+80)); });
+}
+function invoiceResolved(it){
+  if (!it || it.kind !== "invoice") return false;
+  const r = invoiceState(it);
+  if (r.st === "done") return true;
+  if (rtInvoiceCancelledInNotes(it.invoiceNo)) return true;            // that Tide invoice was cancelled / sent in error
+  if (r.st === "nojob" || r.st === "notfound"){
+    const hits = rtJobsWithInvoice(it.invoiceNo);
+    if (hits.length === 1){
+      const receipt = /\bpaid\b|payment|receipt/i.test(String(it.summary||"")+" "+String(it.sourceSubject||""));
+      return !receipt || hits[0].invoice === "paid";   // a payment receipt only clears once the job is Paid
+    }
+  }
+  return false;
+}
+// Why a card is hidden (or "" when it should show). Used for the tray count and the tests.
+function rtHiddenWhy(it){
+  if (!it) return "";
+  if (it.kind === "invoice") return invoiceResolved(it) ? "invoice-resolved" : "";
+  if (!RT_BOOKING_KINDS[it.kind]) return "";
+  if (rtRepliedLater(it)) return "replied-later";
+  if (rtJobChangedAfter(it)) return "job-changed";
+  return "";
+}
+function queueBase(){ return state.queue.filter(i=>!state.queueDone[i.id] && queueItemAgeOk(i) && !watchCovered(i) && !queueAlreadyDone(i)); }
+function otherMailQueue(){ const k = rtKnownEmails(); return queueBase().filter(i => !rtHiddenWhy(i) && rtOtherMail(i, k)); }
+function pendingQueue(){ const k = rtKnownEmails(); return queueBase().filter(i => !rtHiddenWhy(i) && !rtOtherMail(i, k)); }
+function rtClearedCount(){ return queueBase().filter(i => !!rtHiddenWhy(i)).length; }
+// Reads, for each booking/booking-email card, the time of our latest email on its Gmail thread.
+// Device key: script op reviewThreads (file ReviewTidy). Google sign-in: Gmail API (read-only), same answer.
+async function loadReviewThreads(){
+  const ids = [...new Set(queueBase().filter(i => RT_BOOKING_KINDS[i.kind]).map(rtMsgId).filter(Boolean))];
+  if (!ids.length) return;
+  state.reviewThreads = state.reviewThreads || {};
+  try {
+    if (keyMode()){
+      const d = await dashCall("reviewThreads", { ids: ids.slice(0, 40) });
+      if (d && d.ok && d.threads) Object.assign(state.reviewThreads, d.threads);
+    } else if (state.gcalToken && state.gmailOk){
+      for (const id of ids.slice(0, 40)){
+        try {
+          const m = await gmailGet("messages/"+encodeURIComponent(id)+"?format=minimal");
+          const t = await gmailGet("threads/"+encodeURIComponent(m.threadId)+"?format=metadata&metadataHeaders=From");
+          let ours = 0;
+          (t.messages||[]).forEach(x => { const f = ((x.payload||{}).headers||[]).find(h => /^from$/i.test(h.name)); const e = rtEmail(f && f.value); if (RT_OURS.test(e) && (x.labelIds||[]).indexOf("DRAFT") < 0) ours = Math.max(ours, Number(x.internalDate)||0); });
+          state.reviewThreads[id] = { threadId: m.threadId, msgAt: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : "", oursAt: ours ? new Date(ours).toISOString() : "" };
+        } catch(e){ /* one email not readable: its card just stays */ }
+      }
+    }
+  } catch(e){ console.log("[WPS] review threads read failed", e); }   // script file not pasted yet: cards stay as before
+  safeRender();
+}
+// Rule 4: one plain line saying what Lex needs to do.
+function rtShort(s, n){ s = String(s||"").replace(/\s+/g," ").trim(); return s.length > n ? s.slice(0, n-1).replace(/\s+\S*$/,"")+"…" : s; }
+function rtWho(it, j){
+  const e = rtEmail(it.sourceFrom);
+  if (j && e && cleanEmails(j.tenantEmails).toLowerCase().split(", ").indexOf(e) > -1) return "Tenant";
+  return it.client ? it.client : "Agent";
+}
+function qDoLine(it){
+  const j = it.kind === "invoice" || it.kind === "sent" ? null : rtJobFor(it);
+  const no = j && j.jobNo ? j.jobNo : "";
+  const when = [it.date ? formatDate(it.date) : "", it.time||""].filter(Boolean).join(" at ");
+  if (it.kind === "watch"){
+    const what = rtShort(it.summary || it.sourceSubject, 90);
+    const who = rtWho(it, j);
+    return (who === "Tenant" ? "Tenant replied" : who+" emailed")+(what ? ": "+what : "")+" — "+(no ? "read it, then update "+no+" or reply" : "read it and decide if it's a booking");
+  }
+  if (it.kind === "new"){
+    if (j) return "Looks like it's already booked as "+no+" — check, then Dismiss if so";
+    const ciWay = it.type === "ICI" && it.client ? checkinWay(it.client) : null;
+    return "New booking from "+(it.client||"an agent")+(when ? " for "+when : "")+" — check it, then "+(ciWay === "ask" && it.date && !it.time ? "Add to log + send to tenants" : "Add to log");
+  }
+  if (it.kind === "update"){
+    if (!j) return "A change for a job that isn't in the log — check it, then Edit & add or Dismiss";
+    return (it.client||"Agent")+" wants "+no+(when ? " moved to "+when : " changed")+" — check it, then Apply change";
+  }
+  if (it.kind === "cancel") return j ? (it.client||"Agent")+" cancelled "+no+" — check it, then Delete cancelled job" : "Cancellation for a job that isn't in the log — check it, then Dismiss";
+  if (it.kind === "invoice"){
+    const r = invoiceState(it), inv = it.invoiceNo || "an invoice";
+    if (r.st === "nojob") return "Tide invoice "+inv+" has no WPS job number — find the job and set it by hand, or Dismiss";
+    if (r.st === "notfound") return "Tide invoice "+inv+" is for "+it.jobNo+", which isn't in the log — check the number";
+    if (r.st === "dup") return it.jobNo+" is on more than one job — sort the duplicate, then set the invoice by hand";
+    if (r.other) return "Tide says "+inv+" but "+r.j.jobNo+" has "+r.other+" — check which is right, then Mark invoiced or Dismiss";
+    return "Tide invoice "+inv+" for "+r.j.jobNo+" — Mark invoiced";
+  }
+  if (it.kind === "sent") return "A report went out but couldn't be marked Sent — set the stage by hand";
+  return "Check it, then use the buttons or Dismiss";
+}
+function qDoHtml(it){ return `<div class="qdo">${esc(qDoLine(it))}</div>`; }
+function renderOtherMail(list){
+  if (!list.length) return "";
+  const rows = list.map(it => {
+    const link = emailLink(Object.assign({}, it, it.kind === "watch" ? { id: String(it.msgId||"") } : {}));
+    return `<div class="qo-row"><span class="qo-txt"><span class="qo-from">${esc(rtEmail(it.sourceFrom) || it.sourceFrom || "unknown")}</span> · ${esc(rtShort(it.sourceSubject||"(no subject)", 70))}</span>
+      <span class="qo-act">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Open</a>` : ""}<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears it. Nothing changes.")}>Dismiss</button></span></div>`;
+  }).join("");
+  return `<details class="qother"${state.otherMailOpen ? " open" : ""} ontoggle="state.otherMailOpen=this.open"><summary>Other mail (${list.length})</summary><div class="qo-list">${rows}</div></details>`;
 }
 function renderWatchCard(it){
   const d = it.sourceDate && !isNaN(new Date(it.sourceDate)) ? new Date(it.sourceDate).toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "";
   const link = emailLink(Object.assign({}, it, { id: String(it.msgId||"") }));   // fallback link uses the Gmail message id, not "bw"
   return `<div class="qcard">
+    ${qDoHtml(it)}
     <div class="qtop"><span class="qkind qk-watch">New booking email</span>${it.client ? `<span>${esc(it.client)}</span>` : ""}${d ? `<span>${esc(d)}</span>` : ""}</div>
     <div class="qaddr">${esc(it.sourceSubject)||"(no subject)"}</div>
     <div class="qmeta">From ${esc(it.sourceFrom)||"unknown sender"}</div>
     ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
-    <div class="qline">Heads-up only. Claude's hourly inbox check turns it into a booking card, and this card then goes by itself.</div>
     <div class="qsrc">Booking watch${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">Open email</a>` : ""}</div>
     <div class="qactions"><button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing in the log changes.")}>Dismiss</button></div>
   </div>`;
@@ -3799,6 +3992,7 @@ function renderInvoiceCard(it){
     ? `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Clears the card. Nothing changes.")}>Clear</button>`
     : `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
   return `<div class="qcard">
+    ${qDoHtml(it)}
     <div class="qtop"><span class="qkind qk-invoice">Invoice sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span><span>${esc(it.invoiceNo)||"No INV no."}</span>${it.amount ? `<span>${esc(it.amount)}</span>` : ""}${(() => { const jj = state.jobs.find(x => x.jobNo && x.jobNo === it.jobNo), e = jj ? expectedFee(jj) : null, a = moneyAmount(it.amount);
       return e == null ? "" : `<span${a != null && Math.abs(a-e) > 0.005 ? ' style="color:var(--coral);font-weight:600"' : ""}>Price list ${gbp(e)}${a != null && Math.abs(a-e) > 0.005 ? " (doesn't match)" : ""}</span>`; })()}<span>${esc(it.client)||"Client not clear"}</span></div>
     ${jobLine}
@@ -3911,6 +4105,7 @@ async function loadSignings(){
 function renderSentCard(it){
   const r = sentItemState(it);
   return `<div class="qcard">
+    ${qDoHtml(it)}
     <div class="qtop"><span class="qkind qk-update">Report sent</span><span class="mono">${esc(it.jobNo)||"No job no."}</span>${it.type ? `<span class="type-badge">${esc(typeMeta(it.type).label)}</span>` : ""}</div>
     ${it.summary ? `<div class="qwhy">${esc(it.summary)}</div>` : ""}
     <div class="qwarn">Couldn't mark it Sent: ${esc(r.why||"")} Set the stage by hand if the report did go out.</div>
@@ -3924,7 +4119,7 @@ function qCloseTray(){ state.queueChecked=false; state.queueMsg=""; state.autoSe
 
 function renderQueueTray(){
   if (!state.queueChecked && !state.queueBusy && !state.queueMsg) return "";
-  const items = pendingQueue();
+  const items = pendingQueue(), other = otherMailQueue(), cleared = rtClearedCount();
   const when = state.queueCheckedAt ? state.queueCheckedAt.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}) : "";
   const KIND = { new:["New booking","qk-new"], update:["Change to a booking","qk-update"], cancel:["Cancellation","qk-cancel"] };
   const cards = items.map(it=>{
@@ -3963,6 +4158,7 @@ function renderQueueTray(){
     }
     actions += `<button class="btn btn-text btn-sm" onclick="qGo(this)" data-qa="qReject" data-qid="${esc(it.id)}"${hint("Ignore it. Nothing in the log changes.")}>Dismiss</button>`;
     return `<div class="qcard">
+      ${qDoHtml(it)}
       <div class="qtop"><span class="qkind ${k[1]}">${k[0]}</span><span class="type-badge">${esc(tm.label)}</span><span>${esc(it.client)||"Client not clear"}</span></div>
       <div class="qaddr">${esc(addr)||"Address not clear"}</div>
       <div class="qmeta">${it.date ? formatDate(it.date) : (it.kind==="update" ? "Date unchanged" : "No date yet")}${it.time ? " · "+esc(it.time) : (it.date ? " · time TBC" : "")}</div>
@@ -3979,15 +4175,16 @@ function renderQueueTray(){
     <div class="tray-head">
       <div>
         <h3>To review${items.length ? " ("+items.length+")" : ""}</h3>
-        <div class="tray-sub">${state.queueBusy ? "Checking Gmail…" : ("Bookings and Tide invoices Claude found in your inbox"+(when ? " · checked "+when : ""))}</div>
+        <div class="tray-sub">${state.queueBusy ? "Checking Gmail…" : ("Only what needs you"+(when ? " · checked "+when : "")+(cleared ? " · "+cleared+" sorted already, hidden" : ""))}</div>
       </div>
       <span>${ciToggleHtml()} <button class="btn btn-text btn-sm" onclick="qCloseTray()"${tip("Hide this tray. Anything not handled shows again next check.")}>Hide</button></span>
     </div>
-    ${helpBox(`Each card is an email Claude read as a <b>new booking</b>, a <b>change</b>, a <b>cancellation</b> or an <b>invoice sent</b> from Tide. A <b>New booking email</b> card is a heads-up from the 5-minute booking watch: open the email; Claude's hourly check then turns it into a booking card. Check it against the email (Open email), then use the buttons. Nothing goes in the log until you click. The exceptions: reports the auto-send script has emailed are marked <b>Sent</b>, and check-ins everyone has signed on the signing page are marked <b>Signed</b>, by themselves, listed here; a <b>Report sent</b> card only shows if one couldn't be marked. With a device key this is checked every 3 minutes.`)}
+    ${helpBox(`A card only shows when you need to decide something. The first line of each card says what to do. Nothing goes in the log until you click. Cards go by themselves once they're sorted: we've replied later on the same email thread, the job was changed after the email came in, or a Tide invoice is already on the job (or was cancelled). Emails from people who aren't on any job, and replies to the rebrand email, sit in <b>Other mail</b> at the bottom: tap to open the list.`)}
     ${state.queueMsg ? `<div class="qwarn" style="margin-top:10px;">${esc(state.queueMsg)}</div>` : ""}
     ${state.autoSentMsg ? `<div class="qline" style="margin-top:10px;">${esc(state.autoSentMsg)} ✓</div>` : ""}
-    ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing new to review ✓</div>` : ""}
+    ${!state.queueBusy && state.queueChecked && !items.length && !state.queueMsg ? `<div class="qline" style="margin-top:10px;">Nothing needs you ✓</div>` : ""}
     ${cards}
+    ${renderOtherMail(other)}
   </div>`;
 }
 
@@ -6310,7 +6507,7 @@ function renderToday(){
           + `<div class="d-sect" style="margin-top:14px">Reports to write (${due.length})</div>` : "")
         + rows(due, x => cRow(x.j, {due:true}), "No reports waiting to be written."); break;   // 18 Oct: Rearrange only while still at Booked
     case "book": title = "New bookings";
-      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" item"+(queueN===1?"":"s")+" (bookings or Tide invoices) waiting in the To review tray above." : "Nothing new.") : "Not checked yet."}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
+      body = `<div class="t-empty" style="color:var(--ink)">${state.queueChecked ? (queueN ? queueN+" item"+(queueN===1?"":"s")+" need"+(queueN===1?"s":"")+" you in the To review tray above." : "Nothing needs you.") : "Not checked yet."}${otherMailQueue().length ? " Other mail: "+otherMailQueue().length+" (in the tray)." : ""}</div><button class="btn btn-sm" style="margin-top:6px" onclick="checkForBookings()"${hint("Shows bookings Claude found in Gmail")}>Check for new bookings</button>`; break;
     case "sig": title = "Out for signature"; body = rows(awaitingSig, j => cRow(j), "No check-in reports waiting for signatures.") + note("Inventory & check-ins at Sent. Move to Signed when Acrobat's signed copy comes back."); break;
     case "win": title = "Comment windows (7 days from sent)"; body = rows(windows, x => windowRow(x, now), "No inventory & check-in windows open.")
       + (am.loaded ? "" : note("Load amendments so closed windows can move to Deemed agreed."))
@@ -6561,7 +6758,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "5 Nov 2026 (Accounts 2)";
+const BUILD = "5 Nov 2026 (Review tidy)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
