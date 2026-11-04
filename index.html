@@ -6561,7 +6561,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "5 Nov 2026 (Accounts)";
+const BUILD = "5 Nov 2026 (Accounts 2)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -8651,7 +8651,7 @@ function acRowHtml(r){
     <span class="ac-cl">${esc(r.customer || "–")}</span>
     <span class="ac-job">${esc(r.jobNo || "–")}</span>
     <span class="ac-prop">${esc(r.property || (r.x && r.x.jobLine) || "")}${r.state === "needs" && r.x ? `<span class="ac-why">${esc((r.x.problems||[])[0] || "")}</span>` : ""}${r.state === "void" && r.x && r.x.voidWhy ? `<span class="ac-why">${esc(r.x.voidWhy)}</span>` : ""}</span>
-    <span class="ac-amt">${r.total != null ? ivMoney(r.total) : "–"}</span>
+    <span class="ac-amt"${r.total == null ? tip("No amount recorded on the job (made in Tide). Edit brings it in with its amount.") : ""}>${r.total != null ? ivMoney(r.total) : "–"}</span>
     <span class="ac-due">${esc(r.due ? acShort(r.due) : "")}</span>
     <span class="ac-st">${acChip(r.state, r)}</span>
     <span class="ac-acts">${acActions(r)}</span>
@@ -8669,7 +8669,7 @@ function acChart(rows){
   const top = Math.max(1, ...ms.map(m => Math.max(m.inv, m.paid)));
   const desc = ms.map(m => m.lbl+": invoiced "+ivMoney(m.inv)+", paid "+ivMoney(m.paid)).join("; ");
   return `<div class="ac-chart" role="img" aria-label="${esc("Invoiced and paid by month. "+desc)}">${ms.map(m => `<div class="ac-mon"${tip(m.lbl+": invoiced "+ivMoney(m.inv)+", paid "+ivMoney(m.paid))}><div class="ac-bars"><div class="ac-bar ac-bi" style="height:${Math.max(2, Math.round(m.inv/top*150))}px"></div><div class="ac-bar ac-bp" style="height:${Math.max(2, Math.round(m.paid/top*150))}px"></div></div><div class="ac-ml">${esc(m.lbl)}</div></div>`).join("")}</div>
-    <div class="ac-key"><span class="ac-dot ac-bi"></span>Invoiced <span class="ac-dot ac-bp"></span>Paid</div>`;
+    <div class="ac-key"><span class="ac-dot ac-bi"></span>Invoiced <span class="ac-dot ac-bp"></span>Paid${rows.some(r => r.total == null && (acCounted(r))) ? ` <span class="ac-dim">· invoices with no amount recorded aren't in the bars</span>` : ""}</div>`;
 }
 function renderAccounts(){
   const d = state.acData, a = acState();
@@ -8681,7 +8681,8 @@ function renderAccounts(){
   const sum = l => l.reduce((s,r) => s + (r.total || 0), 0);
   const invM = live.filter(r => acCounted(r) && (r.date||"").slice(0,7) === month), invY = live.filter(r => acCounted(r) && (r.date||"").slice(0,4) === year);
   const paidM = live.filter(r => r.state === "paid" && (r.paidDate||"").slice(0,7) === month), paidL = live.filter(r => r.state === "paid" && (r.paidDate||"").slice(0,7) === lastM);
-  const clients = {}; open.forEach(r => { const c = clients[r.customer || "–"] || (clients[r.customer || "–"] = { n:0, sum:0, oldest:0, over:0 }); c.n++; c.sum += r.total || 0; if (r.date) c.oldest = Math.max(c.oldest, acDays(r.date, today)); if (r.state === "overdue") c.over++; });
+  const noAmt = l => l.filter(r => r.total == null).length, na = n => n ? " · "+n+" with no amount recorded" : "";
+  const clients = {}; open.forEach(r => { const c = clients[r.customer || "–"] || (clients[r.customer || "–"] = { n:0, sum:0, oldest:0, over:0, miss:0 }); c.n++; c.sum += r.total || 0; if (r.total == null) c.miss++; if (r.date) c.oldest = Math.max(c.oldest, acDays(r.date, today)); if (r.state === "overdue") c.over++; });
   const owe = Object.keys(clients).sort((x,y) => clients[y].sum - clients[x].sum);
   const oldestOver = over.reduce((m,r) => Math.max(m, r.due ? acDays(r.due, today) : 0), 0);
   const needs = live.filter(r => r.state === "needs").length, ready = live.filter(r => r.state === "ready"), chase = live.filter(r => r.x && r.x.chase).length, um = d.unmatched || [];
@@ -8700,16 +8701,16 @@ function renderAccounts(){
     ${warn.map(w => `<div class="ro-res bad">${esc(w)}</div>`).join("")}
     <div class="ac-top2">
       <section class="ac-card"><h2 class="ac-h2">Who owes what</h2>
-        ${owe.length ? `<div class="ac-owe ac-owe-h"><span>CLIENT</span><span>UNPAID</span><span>OWED</span><span>OLDEST</span></div>${owe.map(k => { const c = clients[k]; return `<button class="ac-owe" onclick="acPickClient('${esc(k)}')"${tip("Show only "+k+"'s unpaid invoices")}><span class="ac-owe-n">${esc(k)}</span><span>${c.n}</span><span class="ac-b">${ivMoney(c.sum)}</span><span class="${c.over ? "ac-bad" : ""}">${c.oldest} day${c.oldest===1?"":"s"}${c.over ? " · "+c.over+" overdue" : ""}</span></button>`; }).join("")}
+        ${owe.length ? `<div class="ac-owe ac-owe-h"><span>CLIENT</span><span>UNPAID</span><span>OWED</span><span>OLDEST</span></div>${owe.map(k => { const c = clients[k]; return `<button class="ac-owe" onclick="acPickClient('${esc(k)}')"${tip("Show only "+k+"'s unpaid invoices")}><span class="ac-owe-n">${esc(k)}${c.miss ? `<span class="ac-why">${c.miss} with no amount recorded</span>` : ""}</span><span>${c.n}</span><span class="ac-b">${ivMoney(c.sum)}</span><span class="${c.over ? "ac-bad" : ""}">${c.oldest} day${c.oldest===1?"":"s"}${c.over ? " · "+c.over+" overdue" : ""}</span></button>`; }).join("")}
           <div class="ac-owe ac-owe-t"><span>Total</span><span>${open.length}</span><span class="ac-b">${ivMoney(sum(open))}</span><span></span></div>` : `<div class="t-empty">Nobody owes anything. Everything sent has been paid.</div>`}
       </section>
       <section class="ac-card"><h2 class="ac-h2">Invoiced and paid, by month</h2>${acChart(live)}</section>
     </div>
     <div class="ac-tiles">
-      <div class="ac-tile"><div class="ac-tl">INVOICED IN ${esc(acMonthName(month).split(" ")[0].toUpperCase())}</div><div class="ac-tv">${ivMoney(sum(invM))}</div><div class="ac-ts">${invM.length} invoice${invM.length===1?"":"s"} · ${ivMoney(sum(invY))} this year</div></div>
+      <div class="ac-tile"><div class="ac-tl">INVOICED IN ${esc(acMonthName(month).split(" ")[0].toUpperCase())}</div><div class="ac-tv">${ivMoney(sum(invM))}</div><div class="ac-ts">${invM.length} invoice${invM.length===1?"":"s"} · ${ivMoney(sum(invY))} this year${na(noAmt(invM))}</div></div>
       <div class="ac-tile"><div class="ac-tl">PAID IN ${esc(acMonthName(month).split(" ")[0].toUpperCase())}</div><div class="ac-tv ac-good">${ivMoney(sum(paidM))}</div><div class="ac-ts">${ivMoney(sum(paidL))} paid in ${esc(acMonthName(lastM).split(" ")[0])}</div></div>
-      <div class="ac-tile"><div class="ac-tl">OUTSTANDING</div><div class="ac-tv">${ivMoney(sum(open))}</div><div class="ac-ts">${open.length} invoice${open.length===1?"":"s"} · ${owe.length} client${owe.length===1?"":"s"}</div></div>
-      <div class="ac-tile${over.length ? " ac-tile-bad" : ""}"><div class="ac-tl">OVERDUE</div><div class="ac-tv">${ivMoney(sum(over))}</div><div class="ac-ts">${over.length} invoice${over.length===1?"":"s"}${over.length ? " · oldest "+oldestOver+" days late" : ""}</div></div>
+      <div class="ac-tile"><div class="ac-tl">OUTSTANDING</div><div class="ac-tv">${ivMoney(sum(open))}</div><div class="ac-ts">${open.length} invoice${open.length===1?"":"s"} · ${owe.length} client${owe.length===1?"":"s"}${na(noAmt(open))}</div></div>
+      <div class="ac-tile${over.length ? " ac-tile-bad" : ""}"><div class="ac-tl">OVERDUE</div><div class="ac-tv">${ivMoney(sum(over))}</div><div class="ac-ts">${over.length} invoice${over.length===1?"":"s"}${over.length ? " · oldest "+oldestOver+" days late" : ""}${na(noAmt(over))}</div></div>
     </div>
     <div class="ac-counts">
       <button class="ac-count" onclick="acSetFilter('draft')">Needs info <b>${needs}</b></button>
