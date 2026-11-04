@@ -787,7 +787,7 @@
     .wk-isfree{ display:none; }
     .wk-freeline{ display:flex; }
     .dn-row{ flex-wrap:wrap; row-gap:3px; }
-    .dn-what{ min-width:0; white-space:normal; }
+    .dn-what{ min-width:0; white-space:normal; max-width:100%; }   /* 4 Nov: a long line (e.g. Report held: ...) no longer widens the phone page */
     .dn-row .c-job{ flex:1 1 100%; order:3; white-space:normal; }
   }
   @media (max-width:900px) and (min-width:601px){ .d-tiles{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
@@ -1008,6 +1008,38 @@
   .mt-sub{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:4px; }
   .mt-small{ font-size:12px; margin-top:4px; }
   .mt-msg{ margin:10px 0 4px; font-size:13px; color:var(--ink-soft); }
+  /* Reports out (Lex, 4 Nov): held, waiting and recently sent reports, with the fix buttons */
+  .ro-banner{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--red-bg); border:1px solid var(--red); color:var(--red); border-radius:10px; padding:10px 14px; margin:0 0 12px; font-size:14px; }
+  .ro-banner b{ font-weight:700; }
+  .ro-banner .ro-bt{ flex:1 1 260px; min-width:0; }
+  .ro-banner .d-mv{ border-color:var(--red); color:var(--red); }
+  .ro-card h3 .count{ font-weight:400; }
+  .ro-sect{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:14px 0 6px; }
+  .ro-sect:first-of-type{ margin-top:4px; }
+  .ro-sect.ro-bad{ color:var(--red); }
+  .ro-item{ border:1px solid var(--line); border-left:4px solid var(--red); border-radius:8px; padding:10px 12px; margin:0 0 8px; background:var(--card); min-width:0; }
+  .ro-top{ display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; }
+  .ro-name{ font-weight:600; overflow-wrap:anywhere; min-width:0; }
+  .ro-why{ margin:6px 0 2px; font-size:13.5px; color:var(--ink); }
+  .ro-why .ro-src{ font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--red); margin-right:6px; }
+  .ro-fix{ font-size:13px; color:var(--ink-soft); margin:2px 0 4px; }
+  .ro-word{ font-size:12.5px; color:var(--ink-soft); margin:2px 0; overflow-wrap:anywhere; }
+  .ro-acts{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .ro-acts .d-mv{ text-decoration:none; display:inline-block; }
+  .ro-acts .ro-danger{ border-color:var(--red); color:var(--red); }
+  .ro-res{ margin-top:6px; font-size:13px; padding:6px 8px; border-radius:6px; background:var(--green-bg); color:var(--green); }
+  .ro-res.bad{ background:var(--red-bg); color:var(--red); }
+  .ro-line{ display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; padding:6px 0; border-top:1px solid var(--line); font-size:13px; min-width:0; }
+  .ro-line:first-child{ border-top:0; }
+  .ro-line .ro-when{ color:var(--ink-soft); white-space:nowrap; min-width:92px; }
+  .ro-line .ro-what{ flex:1 1 200px; min-width:0; word-break:break-word; }
+  .ro-st{ font-size:11.5px; font-weight:600; padding:1px 7px; border-radius:10px; background:var(--sky); color:var(--brand-text); white-space:nowrap; }
+  .ro-st.wait{ background:var(--amber-bg); color:var(--amber); }
+  .ro-st.test{ background:var(--stone-bg); color:var(--stone); }
+  .ro-hl{ outline:3px solid var(--red) !important; outline-offset:2px; border-radius:6px; }
+  .ro-ask{ min-width:0; overflow-wrap:anywhere; }
+  .ro-ask p{ margin:6px 0; font-size:14px; overflow-wrap:anywhere; }
+  @media (max-width:640px){ .ro-line .ro-when{ min-width:0; } .ro-acts .d-mv{ padding:6px 10px; font-size:13px; } }
   .mt-msg.bad{ color:var(--red); }
   .mt-who{ margin:10px 0 6px; font-size:13px; display:grid; gap:2px; word-break:break-word; }
   .ci-edit{ margin:10px 0 4px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
@@ -5377,6 +5409,7 @@ function renderInner(app){
     ${renderMtBox()}
     ${renderMsBox()}
     ${renderCiBox()}
+    ${renderRoAsk()}
   `;
 }
 
@@ -6045,7 +6078,10 @@ function renderToday(){
   else if (hs && hs.warns) dnAdd(88, "", "System check: "+hs.warns+" thing"+(hs.warns===1?"":"s")+" to look at", null, `<button class="d-mv" onclick="openHealth()">See</button>`);
   if (amN) dnAdd(10, "late", amN+" job"+(amN===1?"":"s")+" with tenant comments", null, `<button class="d-mv" onclick="setDashPanel('amend')">Review</button>`);
   // 20 Oct (Keeper): a report the auto-send script held back (latest Report sends line for it is Held)
-  ((state.kp && state.kp.held) || []).forEach(h => { const hj = state.jobs.find(x => normJobNo(x.jobNo) === normJobNo(h.job)) || null;
+  // 4 Nov (Reports out): once the ReportsOut read is in, held items come from there (PDF maker holds too, e.g. City Gate)
+  if (state.ro) state.ro.held.forEach(h => { const hj = roJob(h.job);
+    dnAdd(15, "late", "Report held"+(hj ? "" : " ("+(h.job || h.name)+")")+": "+((h.why||"").length > 48 ? h.why.slice(0, 46)+"…" : (h.why||"")), hj, `<button class="d-mv" onclick="roScroll()"${tip("Not sent: "+(h.why||"")+". The Reports out list has the fix buttons.")}>Fix</button>`); });
+  else ((state.kp && state.kp.held) || []).forEach(h => { const hj = state.jobs.find(x => normJobNo(x.jobNo) === normJobNo(h.job)) || null;
     dnAdd(15, "late", "Report held"+(hj ? "" : " ("+(h.job || h.file)+")")+": "+(h.why.length > 48 ? h.why.slice(0, 46)+"…" : h.why), hj, `<a class="d-mv" href="${HELD_FOLDER_URL}" target="_blank" rel="noopener"${tip("Not sent: "+h.why+". Fix it, then move the PDF from Held back into WPS Ready to send. It goes within 15 minutes.")}>Held folder</a>`); });
   due.filter(x => x.d.late).forEach(x => dnAdd(20, "late", x.d.text, x.j));   // 18 Oct: no Rearrange once visited (Processing)
   midPicked.forEach(j => { const r = slotFor(j); dnAdd(25, "warn", "Tenant picked "+r.slotText, j, `<button class="d-mv sl-ok" onclick="slotApprove('${j.id}')">Approve</button><button class="d-mv" onclick="slotDecline('${j.id}')">Decline</button>`); });
@@ -6140,7 +6176,7 @@ function renderToday(){
           <div class="wk-t">${esc(j.time||"Any time")} · ${esc(typeMeta(j.type).code)}</div><div class="wk-c">${esc(j.postcode||j.address||"")}</div></button>`; }).join("") : `<div class="wk-free">Free</div>`}
     </div>`; }).join("");
 
-  return `${helpBox(`The dashboard updates itself (on open, every 3 minutes and when you come back to it); the top-right button says when it last did. Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
+  return `${renderRoBanner()}${helpBox(`The dashboard updates itself (on open, every 3 minutes and when you come back to it); the top-right button says when it last did. Then work down <b>Do next</b>: it lists what needs doing, most urgent first, with one button for each. Not ready to deal with one? Press <b>Park</b> and it leaves Do next until you <b>Un-park</b> it. The <b>tiles</b> at the top count everything; <b>click a tile</b> to open its full list just below the tiles (click it again, or Close, to shut it). <b>Click a job</b> to open it. <b>Plan my day</b> (on Today) and <b>Route</b> (on a day below) show the order, the map and the drive times. The moving line under the date shows a message and the latest industry news; <b>tap a headline</b> to read it. Stuck? Open the <b>Manual</b> in the sidebar.`)}<div class="d-tiles">${tileHtml}</div>
     ${panel ? `<div class="t-card d-card d-panel d-panel-top" id="dashPanel">
       <h3>${esc(title)} <button class="d-x" onclick="setDashPanel(null)"${tip("Close this list")}>✕ Close</button></h3>
       ${body}
@@ -6153,6 +6189,7 @@ function renderToday(){
         ${todays.length ? todays.map(j => cRow(j, {timeOnly:true}) + todayInfo(j)).join("") : `<div class="t-empty">Nothing booked for today.</div>`}
       </div>
     </div>
+    ${renderReportsOut()}
     <div class="t-card d-card d-week">
       <h3>${state.weekMode === "map" ? "Map" : "Next 7 days"} <span class="count"><span class="view-toggle wm-toggle"><button class="${state.weekMode!=='map'?'active':''}" onclick="setWeekMode('days')"${tip("Day by day")}>Days</button><button class="${state.weekMode==='map'?'active':''}" onclick="setWeekMode('map')"${tip("Upcoming jobs on a map, to see which visits are near each other")}>Map</button></span>${state.weekMode === "map" ? "" : coming.length+" job"+(coming.length===1?"":"s")}${timesToAgree.some(j => !j.date) ? ` · <button class="t-link wk-nodate" onclick="setDashPanel('times')"${tip("Booked jobs with no date yet. Click to see them.")}>${timesToAgree.filter(j => !j.date).length} with no date</button>` : ""}</span></h3>
       ${state.weekMode === "map" ? renderWeekMapBox() : `<div class="wk-strip">${week}</div>${freeLine}`}
@@ -6339,7 +6376,7 @@ function renderUtilityRow(){
 }
 // Build label and update check (Lex, 20 Oct). BUILD is changed in every PR that touches this page.
 // The check fetches the live page fresh (no cache), reads its BUILD line and compares it with this copy.
-const BUILD = "4 Nov 2026 (#130)";
+const BUILD = "4 Nov 2026 (#131 Reports out)";
 let buildCheckAt = 0;
 async function liveBuild(){
   const r = await fetch(location.pathname + "?bc=" + Date.now(), { cache: "no-store" });
@@ -7886,6 +7923,7 @@ async function dashCycle(opt){
     await dashQueue(true);
     loadAmendments(true);
     loadKp();
+    loadRo();
     loadDecisionCount();
     if (!light) autoDeem();
     state.lastCycleOk = new Date();
@@ -7897,6 +7935,158 @@ async function loadKp(){
   if (!keyMode()) return;
   try { const d = await dashCall("kpRead"); if (d && d.ok){ state.kp = { at: new Date(), held: d.held || [], reminders: d.reminders || [], keeper: d.keeper || {} }; safeRender(); } }
   catch(e){ console.log("[WPS] keeper read failed", e); }
+}
+// ---- Reports out (Lex, 4 Nov 2026, after City Gate sat in Held with no way back from the dashboard): every report on
+// its way out, live. Held (Drive > WPS Ready to send > Held, with the reason and the fix buttons), waiting (PDFs in
+// Ready to send, Word files in To PDF being made) and recently sent (Report sends tab, 14 days). Script file
+// ReportsOut: read op reportsOut, write ops roRelease / roBin / roRemake (device key). Every change asks first in the
+// page, shows the result and goes in the job's change history.
+const RO_ACT = {
+  release: { label:"Release", tip:"Move this PDF back into WPS Ready to send. The auto-send picks it up within 15 minutes and runs all its checks again." },
+  bin: { label:"Bin", tip:"Move this held PDF to the Drive Bin (restorable for 30 days). Nothing is sent." },
+  remake: { label:"Make PDF again", tip:"Copy the job's newest Word file into To PDF again (any older copy there is removed). The new PDF is made in about 10 minutes. This held copy stays until you bin it." },
+  edit: { label:"Edit job", tip:"Open the job form with the field to fix highlighted. Save it, then Release." },
+  word: { label:"Open Word file", tip:"Opens the job's Word file in Dropbox (Reports > Word Docs)." },
+  open: { label:"Open PDF", tip:"Opens the held PDF in Google Drive." }
+};
+const RO_FIELD_SEL = { photoLink:"#f_photoLink", notes:"#f_notes", address:"#f_address", postcode:"#f_postcode", type:"#f_type", agentEmail:".copyto-block", tenants:".tenant-block" };
+const RO_FIELD_NAME = { photoLink:"Photo link", notes:"Notes", address:"Address", postcode:"Postcode", type:"Type", agentEmail:"Copy to", tenants:"Tenants" };
+async function loadRo(){
+  if (!keyMode() || state.roBusy) return;
+  state.roBusy = true;
+  try {
+    const d = await dashCall("reportsOut");
+    if (d && d.ok){ state.ro = { at: new Date(), held: d.held || [], ready: d.ready || [], making: d.making || [], sent: d.sent || [], folders: d.folders || {} }; state.roErr = ""; }
+    else state.roErr = (d && d.error === "Unknown request.") ? "The script hasn't got the Reports out part yet (paste ReportsOut and deploy)." : ((d && d.error) || "No answer");
+  } catch(e){ state.roErr = String(e && e.message || e); }
+  finally { state.roBusy = false; }
+  if (!state.roAsk || !state.roAsk.busy) safeRender();
+}
+function roJob(no){ const k = normJobNo(no||""); return k ? state.jobs.find(j => normJobNo(j.jobNo) === k) || null : null; }
+function roWhen(iso){ if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("en-GB",{ weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }); }
+function roShortWhen(iso){ if (!iso) return ""; const d = new Date(iso); if (isNaN(d)) return ""; const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}) : d.toLocaleString("en-GB",{ day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }); }
+function roWhoLine(no){ const j = roJob(no); return no ? esc(no) + (j ? " · " + esc(fullAddress(j) || "") : "") : ""; }
+function roHeldOf(id){ return ((state.ro && state.ro.held) || []).find(h => h.id === id) || null; }
+function roScroll(){ const el = document.getElementById("reportsOut"); if (el) el.scrollIntoView({ behavior:"smooth", block:"start" }); }
+function renderRoBanner(){
+  const h = (state.ro && state.ro.held) || []; if (!h.length) return "";
+  const first = h[0];
+  return `<div class="ro-banner" role="alert"><span class="ro-bt"><b>${h.length} report${h.length===1?"":"s"} held, not sent.</b> ${esc(first.job || first.name)}${roJob(first.job) ? " ("+esc(roJob(first.job).postcode || "")+")" : ""}: ${esc((first.why||"").length > 90 ? first.why.slice(0, 88)+"…" : first.why)}${h.length > 1 ? " and "+(h.length-1)+" more" : ""}</span><button class="d-mv" onclick="roScroll()">See held</button></div>`;
+}
+function roActBtn(h, a){
+  const t = RO_ACT[a]; if (!t) return "";
+  if (a === "open") return `<a class="d-mv" href="${esc(h.url)}" target="_blank" rel="noopener"${tip(t.tip)}>${t.label}</a>`;
+  if (a === "word") return h.word ? `<a class="d-mv" href="${esc(h.word.url)}" target="_blank" rel="noopener"${tip(t.tip)}>${t.label}</a>` : "";
+  if (a === "edit"){ const j = roJob(h.job); return j ? `<button class="d-mv" onclick="roEdit('${esc(h.id)}')"${tip(t.tip)}>${t.label}${h.field ? ": "+esc(RO_FIELD_NAME[h.field]||h.field) : ""}</button>` : ""; }
+  return `<button class="d-mv${a === "bin" ? " ro-danger" : ""}" onclick="roAsk('${a}','${esc(h.id)}')"${tip(t.tip)}>${t.label}</button>`;
+}
+function renderRoHeld(h){
+  const res = (state.roRes || {})[h.id];
+  const pages = h.wordPages && h.pdfPages ? ` (Word ${h.wordPages} pages, PDF ${h.pdfPages})` : "";
+  return `<div class="ro-item" data-ro="${esc(h.id)}">
+    <div class="ro-top"><span class="ro-name">${esc(h.name)}</span><span class="c-dim">${roWhoLine(h.job)}</span></div>
+    <div class="ro-why"><span class="ro-src">${esc(h.source || "Held")}</span>${esc(h.why || "")}${esc(pages && !/Word saved/.test(h.why||"") ? pages : "")}</div>
+    <div class="ro-fix">${esc(h.fix || "")}</div>
+    <div class="ro-word">Held ${esc(roWhen(h.heldAt || h.at))}${h.word ? " · Word file: "+esc(h.word.name)+", saved "+esc(roWhen(h.word.modified)) : (h.actions.includes("remake") || h.kind === "word" || h.kind === "pages" ? " · No Word file found for this job in Word Docs" : "")}</div>
+    <div class="ro-acts">${h.actions.map(a => roActBtn(h, a)).join("")}</div>
+    ${res ? `<div class="ro-res${res.ok ? "" : " bad"}">${esc(res.text)}</div>` : ""}
+  </div>`;
+}
+function renderReportsOut(){
+  const r = state.ro;
+  const head = `<h3>Reports out <span class="count">${r ? "updated "+esc(roShortWhen(r.at.toISOString())) : ""} <button class="d-mv" onclick="loadRo()"${state.roBusy ? " disabled" : ""}${tip("Read the folders and logs again now (it also updates itself every few minutes)")}>${state.roBusy ? "Loading…" : "Refresh"}</button></span></h3>`;
+  if (!r) return `<div class="t-card d-card ro-card" id="reportsOut">${head}<div class="t-empty">${state.roErr ? esc(state.roErr) : keyMode() ? "Loading…" : "Needs the device key (More > Device key)."}</div></div>`;
+  const held = r.held, ready = r.ready, making = r.making, sent = r.sent;
+  const sentShown = state.roAllSent ? sent : sent.slice(0, 8);
+  const stCls = s => s === "Test" ? " test" : "";
+  return `<div class="t-card d-card ro-card" id="reportsOut">${head}
+    ${state.roErr ? `<div class="ro-res bad">Last refresh failed: ${esc(state.roErr)}</div>` : ""}
+    <div class="ro-sect${held.length ? " ro-bad" : ""}">Held, not sent (${held.length})</div>
+    ${held.length ? held.map(renderRoHeld).join("") : `<div class="t-empty">Nothing held.</div>`}
+    <div class="ro-sect">Waiting to go (${ready.length + making.length})</div>
+    ${ready.length || making.length ? `<div>${ready.map(x => `<div class="ro-line"><span class="ro-when">${esc(roShortWhen(x.at))}</span><span class="ro-what"><a class="t-link" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a> <span class="c-dim">${roWhoLine(x.job)}</span></span><span class="ro-st wait"${tip("In WPS Ready to send: the auto-send checks it and sends it within 15 minutes")}>Ready to send</span></div>`).join("")}
+      ${making.map(x => `<div class="ro-line"><span class="ro-when">${esc(roShortWhen(x.at))}</span><span class="ro-what">${esc(x.word)} <span class="c-dim">${roWhoLine(x.job)}</span>${x.detail && x.detail !== "Sent to Adobe." ? `<div class="c-dim">${esc(x.detail)}</div>` : ""}</span><span class="ro-st wait"${tip("Word file in Dropbox > Reports > To PDF: the PDF maker runs every 10 minutes")}>${x.status === "Converting" ? "Making PDF" : "In To PDF"}</span></div>`).join("")}</div>`
+      : `<div class="t-empty">Nothing waiting.</div>`}
+    <div class="ro-sect">Recently sent, last 14 days (${sent.length})</div>
+    ${sent.length ? `<div>${sentShown.map(x => `<div class="ro-line"><span class="ro-when">${esc(roShortWhen(x.at))}</span><span class="ro-what"><b>${esc(x.job)}</b> ${esc(x.type)}${roJob(x.job) ? ` <span class="c-dim">${esc(fullAddress(roJob(x.job)))}</span>` : ""}<div class="c-dim">To ${esc(x.to || "–")}${x.cc ? " · CC "+esc(x.cc) : ""}</div></span><span class="ro-st${stCls(x.status)}">${esc(x.status)}</span>${x.fileId ? `<a class="d-mv" href="https://drive.google.com/file/d/${esc(x.fileId)}/view" target="_blank" rel="noopener"${tip("The PDF that went out (Ready to send > Sent)")}>Open PDF</a>` : ""}</div>`).join("")}</div>
+      ${sent.length > 8 ? `<button class="t-link d-more" onclick="state.roAllSent=!state.roAllSent;render()">${state.roAllSent ? "Show fewer" : "Show all "+sent.length}</button>` : ""}`
+      : `<div class="t-empty">Nothing sent by the script in the last 14 days.</div>`}
+    <div class="ro-fix" style="margin-top:10px">From Drive (WPS Ready to send, its Held and Sent folders) and the script's PDF makes and Report sends logs.${r.folders && r.folders.held ? ` <a class="t-link" href="${esc(r.folders.held)}" target="_blank" rel="noopener">Held folder</a>` : ""}</div>
+  </div>`;
+}
+// Confirm in the page (no browser pop-ups), then the result in the same box and on the item.
+function roAsk(act, id){
+  const h = roHeldOf(id); if (!h) return;
+  state.roAsk = { act, id, busy:false, done:false, msg:"", ok:false };
+  render();
+  setTimeout(() => { const b = document.getElementById("ro_box"); if (b) b.focus(); }, 0);
+}
+function roAskText(s, h){
+  const j = roJob(h.job), who = esc(h.job || "") + (j ? " · " + esc(fullAddress(j)) : "");
+  if (s.act === "release") return `<p>Move <b>${esc(h.name)}</b> back into WPS Ready to send?</p><p class="c-dim">${who}</p><p>The auto-send checks it again and sends it within 15 minutes${h.job && /ICI/i.test(h.name) ? " (check-ins go to the signing page)" : ""}. Only do this if the PDF and the job are right now.</p>`;
+  if (s.act === "bin") return `<p>Move <b>${esc(h.name)}</b> to the Drive Bin?</p><p class="c-dim">${who}</p><p>Nothing is sent. It can be restored from the Drive Bin for 30 days.</p>`;
+  if (s.act === "remake") return `<p>Make the PDF again for <b>${esc(h.job)}</b>?</p><p class="c-dim">${who}</p><p>Copies <b>${esc(h.word ? h.word.name : "the newest Word file")}</b>${h.word ? " (saved "+esc(roWhen(h.word.modified))+")" : ""} into Dropbox > Reports > To PDF. Any older copy of this job in To PDF is removed first (Dropbox Deleted files). The new PDF goes to Ready to send in about 10 minutes and then out, unless it's held again.</p><p>This held copy stays where it is: bin it once the new one is made.</p>`;
+  return "";
+}
+function renderRoAsk(){
+  const s = state.roAsk; if (!s) return "";
+  const h = roHeldOf(s.id) || s.h; if (!h){ state.roAsk = null; return ""; }
+  s.h = h;
+  const t = RO_ACT[s.act] || { label: s.act };
+  const dis = s.busy ? " disabled" : "";
+  return `<div class="mt-back" onclick="if(event.target===this)roAskClose()"><div class="mt-box ro-ask" id="ro_box" tabindex="-1" role="dialog" aria-label="${esc(t.label)}">
+    <div class="mt-h"><div><b>${esc(t.label)}</b></div><button class="undo-x" onclick="roAskClose()" aria-label="Close"${dis}>✕</button></div>
+    ${s.done ? `<div class="ro-res${s.ok ? "" : " bad"}">${esc(s.msg)}</div>` : roAskText(s, h)}
+    ${s.busy ? `<div class="mt-msg">Working…</div>` : ""}
+    <div class="rr-b mt-b">
+      ${s.done ? `<button class="btn btn-ghost btn-sm" onclick="roAskClose()">Close</button>`
+        : `<button class="btn btn-coral btn-sm" id="ro_go" onclick="roGo()"${dis}>${esc(t.label)}</button><button class="btn btn-ghost btn-sm" onclick="roAskClose()"${dis}>Cancel</button>`}
+    </div>
+  </div></div>`;
+}
+function roAskClose(){ if (state.roAsk && state.roAsk.busy) return; state.roAsk = null; render(); }
+async function roGo(){
+  const s = state.roAsk; if (!s || s.busy || s.done) return;
+  const h = s.h; s.busy = true; render();
+  const op = { release:"roRelease", bin:"roBin", remake:"roRemake" }[s.act];
+  const body = s.act === "remake" ? { job: h.job, modified: h.word ? h.word.modified : "" } : { fileId: h.id };
+  let d = null;
+  try { d = await dashCall(op, body); } catch(e){ d = { ok:false, error: String(e && e.message || e) }; }
+  if (d && d.error === "Unknown request.") d.error = "The script hasn't got the Reports out part yet (paste ReportsOut and deploy).";
+  const ok = !!(d && d.ok);
+  const now = new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+  let msg;
+  if (s.act === "release") msg = ok ? "Released at "+now+": "+h.name+" is back in WPS Ready to send. The auto-send takes it within 15 minutes." : "Not released: "+((d && d.error) || "no answer");
+  else if (s.act === "bin") msg = ok ? "Binned at "+now+": "+h.name+" is in the Drive Bin (restorable for 30 days)." : "Not binned: "+((d && d.error) || "no answer");
+  else msg = ok ? "Copied into To PDF at "+now+": "+d.file+(d.removed && d.removed.length ? " (older copy removed: "+d.removed.join(", ")+")" : "")+". The new PDF arrives in about 10 minutes. Bin this held copy once it has." : "Not copied: "+((d && d.error) || "no answer");
+  if (!ok && d && d.changed && d.word){ const hh = roHeldOf(h.id); if (hh) hh.word = d.word; }
+  if (ok){
+    const jj = roJob(h.job);
+    if (jj){
+      logChange(jj, s.act === "release" ? "Held PDF released into Ready to send: "+h.name : s.act === "bin" ? "Held PDF binned: "+h.name : "Make PDF again (from Held): "+d.file+" copied into To PDF");
+      if (s.act === "remake") jj.pdfQueuedAt = new Date().toISOString();
+      saveJobs();
+    }
+  }
+  state.roRes = state.roRes || {}; state.roRes[h.id] = { ok, text: msg };
+  s.busy = false; s.done = true; s.ok = ok; s.msg = msg;
+  render();
+  if (ok && s.act !== "remake") setTimeout(loadRo, 1500);
+}
+// Edit job: the existing job form, with the field the hold names highlighted.
+function roEdit(id){
+  const h = roHeldOf(id); if (!h) return; const j = roJob(h.job); if (!j) return;
+  openEdit(j.id);
+  const sel = RO_FIELD_SEL[h.field];
+  if (!sel) return;
+  setTimeout(() => {
+    const el = document.querySelector(".form-card " + sel) || document.querySelector(sel); if (!el) return;
+    const box = el.closest(".field") || el;
+    box.classList.add("ro-hl");
+    box.scrollIntoView({ behavior:"smooth", block:"center" });
+    if (el.focus && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) el.focus({ preventScroll:true });
+  }, 120);
 }
 function vrRowsFor(jobNo){ const k = normJobNo(jobNo||""); return ((state.kp && state.kp.reminders) || []).filter(r => k && normJobNo(r.job) === k); }
 function renderVrBox(f){
