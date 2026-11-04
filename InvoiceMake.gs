@@ -37,6 +37,7 @@
 const IV = {
   TZ: 'Europe/London',
   FIRST_NO: 32,                       // Tide used INV-0006..0031 (4 Nov); the dashboard starts at INV-0032
+  OLD_SERIES: 1000,                    // old QuickBooks numbers (e.g. INV-2878 on WPS260916) are history, not our series
   PROP_NEXT: 'iv_next_no',
   PROP_SET: 'iv_settings',            // {"autoSend":false,"autoChase":false}
   PROP_DAY: 'iv_day_marks',           // what ran today (pushes, pack)
@@ -100,7 +101,7 @@ function ivNormNo_(s) { const n = ivNoNum_(s); return n ? ivNoStr_(n) : ''; }
 // Next number: never below the stored next, the first dashboard number, or one past any number already on a job or row.
 function ivNextNo_(stored, used) {
   let n = Math.max(IV.FIRST_NO, parseInt(stored, 10) || 0);
-  (used || []).forEach(function (u) { const k = ivNoNum_(u); if (k >= n) n = k + 1; });
+  (used || []).forEach(function (u) { const k = ivNoNum_(u); if (k >= n && k < IV.OLD_SERIES) n = k + 1; });
   return n;
 }
 function ivCustomer_(client) { return String(client || '').replace(/\s+-\s+/g, ' ').replace(/\s{2,}/g, ' ').trim(); }
@@ -270,7 +271,8 @@ function ivParseRemit_(text) {
   const total = ivAmount_((/£\s?([\d,]+\.\d{2})\s+has been paid/i.exec(t) || [])[1]);
   const acct = (/account number\s+(\d{6,10})(?:\s+at\s+([A-Za-z ]{2,30}?))?[:.\n]/i.exec(t) || []);
   const items = [], seen = {};
-  const re = /(\d{2}\/\d{2}\/\d{4})\s+Payment:\s*INV\s*-\s*(\d{3,6})\s*\(£\s?([\d,]+\.\d{2})\)/gi;
+  // "Payment: INV - 0017 (£140.00)" and "Partial Payment: INV - 2846 (CHECK IN) (£29.60)" (TLP, seen 21 and 27 Oct)
+  const re = /(\d{2}\/\d{2}\/\d{4})\s+(?:Partial\s+)?Payment:\s*INV\s*-\s*(\d{3,6})\s*(?:\([A-Za-z &\/-]{2,40}\)\s*)?\(£\s?([\d,]+\.\d{2})\)/gi;
   let m;
   while ((m = re.exec(t))) {
     const no = ivNoStr_(parseInt(m[2], 10));
@@ -743,12 +745,12 @@ function ivRemits_(ss) {
       const r = kpReadJobs_(ss), invs = ivReadInvs_(ss), open = ivOpen_(r, invs);
       rm.items.forEach(function (it) {
         const o = open.filter(function (x) { return x.no === it.no; })[0];
-        if (!o) { out.push(it.no + ' on remittance ' + rm.ref + ': not an open invoice here (already paid, or a Wellington Parker number)'); return; }
+        if (!o) { out.push(it.no + ' on remittance ' + rm.ref + ': not an open invoice here (already paid, or an old Wellington Parker / QuickBooks number)'); return; }
         if (Math.abs(o.total - it.amount) > 0.005) { ivUnmatched_([{ date: it.date, amount: it.amount, text: 'Winkworth remittance ' + rm.ref + ' ' + it.no, key: 'remit|' + id + '|' + it.no, why: it.no + ' is ' + ivMoney_(o.total) + ', remittance says ' + ivMoney_(it.amount) }]); out.push(it.no + ' amount differs'); return; }
         ivMarkOpenPaid_(ss, o, it.date, 'Remittance ' + rm.ref, 'Winkworth remittance');
         out.push(it.no + ' paid ' + it.date);
       });
-      if (!rm.items.length) ivUnmatched_([{ date: Utilities.formatDate(m.getDate(), IV.TZ, 'yyyy-MM-dd'), amount: rm.total || 0, text: 'Remittance email with no invoice lines read: ' + m.getSubject(), key: 'remit|' + id, why: 'Couldn\'t read the remittance PDF' }]);
+      if (!rm.items.length) ivUnmatched_([{ date: Utilities.formatDate(m.getDate(), IV.TZ, 'yyyy-MM-dd'), amount: rm.total || 0, text: 'Remittance email with no invoice lines read: ' + m.getSubject(), key: 'remit|' + id, why: text.trim() ? 'No invoice numbers found in the remittance PDF' : 'Couldn\'t read the remittance PDF' }]);
       if (rm.account && rm.account !== IV.BANK.number) out.push('Remittance ' + rm.ref + ' says paid to account ' + rm.account + (rm.bank ? ' at ' + rm.bank : '') + ', not the Tide account');
       seen.push(id);
     });
