@@ -1494,6 +1494,11 @@ function mergeJobNoHigh(extra){
   try { localStorage.setItem(LS_JOBNO_HIGH, JSON.stringify(high)); } catch(e){}
   return high;
 }
+// Frozen 5 Nov 2026 (Lex: portal trial week): the Job Log is look-only. Jobs are booked and changed in the WPS portal.
+// To unfreeze: set JL_FROZEN to false.
+const JL_FROZEN = true;
+const JL_PORTAL = "https://wps-portal-a52.pages.dev/";
+function jlFrozenStop(){ if (!JL_FROZEN) return false; alert("The Job Log is look-only now. Book and change jobs in the WPS portal."); return true; }
 function saveJobs(){ mergeJobNoHigh(); stampChanged(); localStorage.setItem(LS_JOBS, JSON.stringify(state.jobs)); markLocalChange(); }
 // Each job remembers if it was changed on this device since the last sync, so loading another device's copy merges
 // job by job instead of throwing this device's changes away (19 Oct: the Cornell re-issue date was lost that way).
@@ -1579,6 +1584,7 @@ let cloudSaveTimer = null;
 function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
 function lsSet(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
 function markLocalChange(){
+  if (JL_FROZEN) return;   // look-only: nothing is sent to the Sheet
   lsSet(LS_LOCAL_SAVED_AT, new Date().toISOString());
   const dd = dirtyGet(); dd.any = true; dd.seq++; dirtySet(dd);
   if (keyMode()){ scheduleCloudSave(); return; }   // device key: no sign-in needed, save straight away
@@ -1591,6 +1597,7 @@ function markLocalChange(){
   scheduleCloudSave();
 }
 function scheduleCloudSave(){
+  if (JL_FROZEN) return;
   clearTimeout(cloudSaveTimer);
   setCloud("saving");
   cloudSaveTimer = setTimeout(cloudSave, 1500);
@@ -1684,6 +1691,7 @@ function clientsToRows(){
     state.clients.map(c=>[c.name, c.contactName||"", c.contactPhone||"", c.contactEmail||"", JSON.stringify(c)]));
 }
 async function cloudSave(){
+  if (JL_FROZEN) return;
   if (keyMode()) return dashSave();
   if (!state.gcalToken){ setCloud("error","Google sign-in needed"); return; }
   try {
@@ -2193,6 +2201,7 @@ function calNav(delta){
 function calToday(){ state.calYear = TODAY.getFullYear(); state.calMonth = TODAY.getMonth()+1; render(); }
 function calCellClick(iso){ openNewOnDate(iso); }
 function openNewOnDate(dateIso){
+  if (jlFrozenStop()) return;
   if (!confirmLeaveForm()) return;
   navRememberPlace(null);
   state.editing = emptyJob();
@@ -2452,7 +2461,7 @@ function captureFormValues(){
 }
 
 // ---------------------------------------------------------------- CRUD
-function openNew(){ if (!confirmLeaveForm()) return; navRememberPlace(null); state.editing = emptyJob(); state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm(); }
+function openNew(){ if (jlFrozenStop()) return; if (!confirmLeaveForm()) return; navRememberPlace(null); state.editing = emptyJob(); state.addingClient = false; state.editingAgentContact = false; render(); scrollToForm(); }
 function openEdit(id){ const j = state.jobs.find(x=>x.id===id); if (!j) return; if (state.editing && state.editing.id===id){ scrollToForm(); return; } if (!confirmLeaveForm()) return; navRememberPlace(id); state.editing = Object.assign({}, j); state.addingClient=false; state.editingAgentContact=false; render(); scrollToForm(); }
 function closeForm(){ dropForm(); render(); navBackToPlace(); }
 function dropForm(){ state.fromQueueId = null; state.editing = null; state.addingClient = false; state.editingAgentContact = false; }
@@ -2505,6 +2514,7 @@ function keysFromChange(el){
   if (el.value === "tenant") b.value = "none"; else if (KEYS_BACK.some(k => k[0] === el.value)) b.value = el.value;
 }
 function submitForm(){
+  if (jlFrozenStop()) return;
   const g = id => document.getElementById(id);
   const date = g("f_date").value;
   const jobNoInput = g("f_jobNo").value.trim();
@@ -2569,6 +2579,7 @@ function submitForm(){
 }
 
 function deleteJob(id){
+  if (jlFrozenStop()) return false;
   const job = state.jobs.find(j=>j.id===id);
   if (!job) return false;
   if (!confirm("Delete "+(job.jobNo||"this job")+(job.address ? " ("+job.address+")" : "")+"?\n\nIt's removed from the Job Log, the Google Sheet and the calendar. Undo shows for a few seconds after. Archive keeps it instead.")) return false;
@@ -5553,7 +5564,7 @@ function renderInner(app){
   app.innerHTML = `
     <div class="shell">
     ${renderSidebar()}
-    <main class="main">
+    <main class="main">${JL_FROZEN ? `<div class="jl-frozen" role="status" style="background:#e8735a;color:#fff;font-weight:600;text-align:center;padding:10px 14px;font-size:15px;line-height:1.35">Look only. Jobs are booked and changed in the <a href="${JL_PORTAL}" style="color:#fff;text-decoration:underline">WPS portal</a> now.</div>` : ""}
     <div class="wrap${state.view === "today" ? " wrap-dash" : state.view === "reports" || state.view === "processing" || state.view === "growth" || state.view === "accounts" ? " wrap-wide" : ""}">
       ${renderBackToDecisions()}
       ${renderPageHead()}
@@ -7626,6 +7637,7 @@ function removeContact(email){
   render();
 }
 function deleteJobFromForm(){
+  if (jlFrozenStop()) return;
   const id = state.editing && state.editing.id;
   if (!id) return;
   if (deleteJob(id)){ state.fromQueueId = null; state.editing = null; navReturn.id = null; render(); navBackToPlace(); }
@@ -8046,6 +8058,7 @@ function safeRender(){
   const y = window.scrollY; render(); window.scrollTo(0, y);
 }
 async function dashSave(){
+  if (JL_FROZEN) return;
   if (state.dashSaving){ state.dashSaveAgain = true; return; }
   state.dashSaving = true;
   try {
